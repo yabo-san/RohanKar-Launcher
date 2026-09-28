@@ -5,10 +5,10 @@ const globals = require('globals');
 // Baseline: rules the existing code fails are switched off per file group so
 // CI starts green. Remove an override once the code it covers is fixed.
 module.exports = [
-  { ignores: ['dist/', 'node_modules/'] },
+  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
   {
-    files: ['src/main/**/*.js', 'test/**/*.js', 'eslint.config.js'],
+    files: ['src/main/**/*.js', 'test/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
@@ -41,5 +41,10 @@ module.exports = [
     // module.exports is guarded by typeof, for the node:test suite
     files: ['src/renderer/sources.js'],
     languageOptions: { globals: { module: 'writable' } },
+  },
+  {
+    // page.evaluate callbacks run in the renderer and read its top-level state
+    files: ['e2e/**/*.e2e.js'],
+    languageOptions: { globals: { allGames: 'readonly', allVersions: 'readonly' } },
   },
 ];

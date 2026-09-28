@@ -3,3 +3,5 @@
 *.log
 dist/
 release-notes.md
+test-results/
+playwright-report/
