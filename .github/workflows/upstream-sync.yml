@@ -1,0 +1,46 @@
+name: Upstream sync
+
+# Weekly: merge Kilted-Kraken/-RohanKar-Launcher main into a branch and open a
+# PR. Does nothing when upstream has no new commits. A merge conflict fails the
+# job on purpose; resolve it by hand on the branch it names.
+#
+# Repo setting required: Actions > General > "Allow GitHub Actions to create
+# and approve pull requests".
+on:
+  schedule:
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream https://github.com/Kilted-Kraken/-RohanKar-Launcher.git
+          git fetch upstream main
+          echo "count=$(git rev-list --count main..upstream/main)" >> "$GITHUB_ENV"
+
+      - name: Merge and open PR
+        if: env.count != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          branch="upstream-sync/$(date +%Y-%m-%d)"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git merge --no-edit upstream/main
+          git push -u origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "chore: sync ${count} upstream commit(s)" \
+            --body "$(git log --oneline main..upstream/main)"
