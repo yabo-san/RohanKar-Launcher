@@ -1,0 +1,175 @@
+name: CI
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Syntax check
+        run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      # Runs the unit tests; fails if sources.js drops below 80% lines/branches/functions
+      - name: Tests with coverage
+        id: coverage
+        shell: bash
+        run: npm run test:coverage --silent | tee test-output.txt
+
+      # Turn node's coverage table into markdown for the PR comment.
+      # test:coverage pins the spec reporter, whose report lines start with "ℹ ".
+      - name: Coverage summary
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.coverage.outcome }}
+        run: |
+          {
+            if [ "$OUTCOME" = "success" ]; then
+              echo "Thresholds (80% lines, branches, functions): **passed**"
+            else
+              echo "Thresholds (80% lines, branches, functions): **failed**, see the \`check\` job"
+            fi
+            echo
+            echo "| File | Line % | Branch % | Funcs % |"
+            echo "|---|---:|---:|---:|"
+            sed -n '/start of coverage report/,/end of coverage report/p' test-output.txt \
+              | grep -E '^ℹ .*\|' | sed 's/^ℹ //' \
+              | awk -F'|' '$2 ~ /[0-9]/ { for (i = 1; i <= 4; i++) gsub(/^ +| +$/, "", $i); print "| " $1 " | " $2 " | " $3 " | " $4 " |" }'
+          } > coverage.md
+
+      - name: Upload coverage summary
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage.md
+
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Unpacked build only: proves the app still packages, no installer or upload
+      - name: Build unpacked app
+        run: npx electron-builder --win --dir --publish never
+
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    outputs:
+      critical: ${{ steps.count.outputs.critical }}
+      high: ${{ steps.count.outputs.high }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan dependencies
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-results.sarif
+          # Non-blocking while we look at the baseline; set to '1' once it's clean
+          exit-code: '0'
+
+      - name: Upload to code scanning
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      # SARIF has no severity field on results; it's a tag on the matching rule
+      - name: Count findings
+        id: count
+        run: |
+          jq -r '
+            (.runs[0].tool.driver.rules // []) as $rules
+            | ($rules | map({key: .id, value: ([(.properties.tags // [])[] | select(. == "CRITICAL" or . == "HIGH")][0] // "OTHER")}) | from_entries) as $sev
+            | [.runs[0].results[]? | $sev[.ruleId]] as $all
+            | "critical=\([$all[] | select(. == "CRITICAL")] | length)",
+              "high=\([$all[] | select(. == "HIGH")] | length)"
+          ' trivy-results.sarif >> "$GITHUB_OUTPUT"
+
+  report:
+    needs: [check, trivy]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download coverage summary
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-summary
+
+      - name: Compose report
+        env:
+          TRIVY_RESULT: ${{ needs.trivy.result }}
+          CRITICAL: ${{ needs.trivy.outputs.critical }}
+          HIGH: ${{ needs.trivy.outputs.high }}
+        run: |
+          {
+            echo "## CI report"
+            echo
+            echo "### Coverage: src/renderer/sources.js"
+            echo
+            if [ -f coverage.md ]; then
+              cat coverage.md
+            else
+              echo "No coverage summary; the \`check\` job stopped before the tests ran."
+            fi
+            echo
+            echo "### Trivy: dependency vulnerabilities (HIGH/CRITICAL, non-blocking)"
+            echo
+            if [ "$TRIVY_RESULT" = "success" ] && [ -n "$HIGH" ]; then
+              echo "| Critical | High | Total |"
+              echo "|---:|---:|---:|"
+              echo "| $CRITICAL | $HIGH | $((CRITICAL + HIGH)) |"
+              echo
+              echo "Details are under **Security → Code scanning** (category \`trivy\`)."
+            else
+              echo "Trivy scan did not complete (\`$TRIVY_RESULT\`); see the \`trivy\` job."
+            fi
+          } > report.md
+
+      - name: Post sticky comment
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
+        with:
+          header: ci-report
+          path: report.md

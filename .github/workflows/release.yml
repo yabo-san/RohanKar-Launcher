@@ -1,97 +1,69 @@
-name: Build & Draft Release
+name: Release
 
-# Triggers when you push a version tag: git tag v1.0.1 && git push origin v1.0.1
+# Every push to main updates a release PR with the next version and changelog,
+# worked out from conventional commit messages (feat:, fix:, feat!: ...).
+# Merging that PR tags the version and opens a draft release; the Windows
+# installer is then built and attached to it. Publish the draft by hand.
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
 
 jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          # A PAT or app token lets CI run on the release PR; GITHUB_TOKEN does not
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
   build:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
     runs-on: windows-latest
 
     steps:
-      # ── Checkout ────────────────────────────────────────────────────────────
-      - name: Checkout repository
+      - name: Checkout release tag
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history so we can generate commit-based notes
+          ref: ${{ needs.release-please.outputs.tag_name }}
 
-      # ── Node.js ─────────────────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: 'npm'
 
-      # ── Dependencies ─────────────────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
       - name: Rebuild native modules
         run: npx electron-builder install-app-deps
 
-      # ── Build installer ──────────────────────────────────────────────────────
+      # Build only; the upload step below is the single uploader
       - name: Build Windows installer
+        run: npm run build -- --publish never
+
+      - name: Attach installer to draft release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
-
-      # ── Generate commit-based changelog ─────────────────────────────────────
-      # Collects all commits since the previous tag and groups them into a
-      # draft changelog. You (or Claude) can then edit this before publishing.
-      - name: Generate draft changelog
-        id: changelog
-        shell: pwsh
+          TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
-          # Get the previous tag
-          $prevTag = git describe --tags --abbrev=0 HEAD^ 2>$null
-          if (-not $prevTag) { $prevTag = "" }
-
-          # Collect commits since last tag
-          if ($prevTag) {
-            $commits = git log "$prevTag..HEAD" --pretty=format:"- %s (%h)" --no-merges
-          } else {
-            $commits = git log --pretty=format:"- %s (%h)" --no-merges
-          }
-
-          # Build the draft body
-          $version = "${{ github.ref_name }}"
-          $date    = Get-Date -Format "yyyy-MM-dd"
-
-          $body = @"
-          ## RohanKar Launcher $version
-
-          > ✏️ **This is an auto-generated draft.** Edit the notes below before publishing.
-
-          ---
-
-          ## What's New
-          <!-- Claude will fill this in each release -->
-
-          ## Changes since $prevTag
-
-          $($commits -join "`n")
-
-          ---
-          *Released $date*
-          "@
-
-          # Write to file so the next step can read it (avoids multiline env issues)
-          $body | Out-File -FilePath release_notes.md -Encoding utf8
-          echo "notes_file=release_notes.md" >> $env:GITHUB_OUTPUT
-
-      # ── Create GitHub Draft Release ──────────────────────────────────────────
-      - name: Create draft release
-        uses: softprops/action-gh-release@v2
-        with:
-          draft: true           # DRAFT — you review & publish manually
-          prerelease: false
-          name: RohanKar Launcher ${{ github.ref_name }}
-          body_path: release_notes.md
-          files: |
-            dist/*.exe
-            dist/*.blockmap
-            dist/latest.yml
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          gh release upload "$TAG" \
+            dist/*-Setup-*.exe \
+            dist/*-Setup-*.exe.blockmap \
+            dist/latest.yml \
+            --clobber

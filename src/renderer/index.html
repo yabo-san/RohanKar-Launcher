@@ -331,6 +331,16 @@
         <input id="setting-show-installed-badge" type="checkbox" />
       </div>
 
+      <div class="settings-row settings-check-row">
+        <label for="setting-check-updates">Check for updates on launch (takes effect after restart)</label>
+        <input id="setting-check-updates" type="checkbox" />
+      </div>
+
+      <div class="settings-row">
+        <label for="setting-sources">Sources (one archive.org uploader per line, optional label after a comma, # to disable)</label>
+        <textarea id="setting-sources" rows="4" spellcheck="false" placeholder="uploader@example.com, Label"></textarea>
+      </div>
+
       <div class="settings-row">
         <label>Detect pre-installed games</label>
         <div class="settings-path-row">
@@ -470,6 +480,7 @@
   <!-- Gamepad hint bar — hidden until a controller is connected -->
   <div id="gamepad-hint-bar" class="hidden"></div>
 
+  <script src="sources.js"></script>
   <script src="renderer.js"></script>
 </body>
 </html>

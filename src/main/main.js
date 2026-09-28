@@ -116,7 +116,8 @@ function loadSettings() {
 }
 
 function saveSettings(data) {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
+  // Merge so keys the settings UI doesn't manage survive a save
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify({ ...loadSettings(), ...data }, null, 2));
 }
 
 // ─── Window ───────────────────────────────────────────────────────────────────
@@ -286,10 +287,72 @@ ipcMain.handle('collections-remove-game', (_, { collectionId, identifier }) => {
   return { ok: true };
 });
 
+// ─── archive.org response log ─────────────────────────────────────────────────
+//
+// One JSON line per archive.org response in userData/archive-net.log, so real
+// status codes and rate-limit headers can be read after the fact. Non-2xx
+// responses log every header; 2xx keep only the ones useful for throttling.
+
+const NET_LOG_PATH = path.join(USER_DATA, 'archive-net.log');
+const NET_LOG_MAX  = 2 * 1024 * 1024;
+const NET_LOG_KEEP = ['date', 'server', 'retry-after', 'x-ratelimit-limit', 'x-ratelimit-remaining', 'x-ratelimit-reset'];
+
+try {
+  if (fs.existsSync(NET_LOG_PATH) && fs.statSync(NET_LOG_PATH).size > NET_LOG_MAX) {
+    fs.renameSync(NET_LOG_PATH, NET_LOG_PATH + '.old');
+  }
+} catch {}
+
+function logArchiveResponse(kind, url, status, headers = {}, error = null) {
+  const ok = status >= 200 && status < 300;
+  const logged = ok
+    ? Object.fromEntries(NET_LOG_KEEP.filter(k => headers[k] != null).map(k => [k, headers[k]]))
+    : headers;
+  const line = JSON.stringify({ t: new Date().toISOString(), kind, status, url, headers: logged, ...(error ? { error } : {}) });
+  fs.appendFile(NET_LOG_PATH, line + '\n', () => {});
+}
+
+// GET an archive.org URL as text with a hard timeout. Never rejects:
+// network errors and timeouts come back as status 0.
+function archiveGetText(url, kind, timeoutMs = 30000) {
+  return new Promise((resolve) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'RohanKar-Launcher' } }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', c => body += c);
+      res.on('end', () => {
+        logArchiveResponse(kind, url, res.statusCode, res.headers);
+        resolve({ status: res.statusCode, headers: res.headers, body });
+      });
+      res.on('error', (e) => {
+        logArchiveResponse(kind, url, 0, {}, e.message);
+        resolve({ status: 0, headers: {}, body: '', error: e.message });
+      });
+    });
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('timed out')));
+    req.on('error', (e) => {
+      logArchiveResponse(kind, url, 0, {}, e.message);
+      resolve({ status: 0, headers: {}, body: '', error: e.message });
+    });
+  });
+}
+
+// Advanced search runs here rather than in the renderer so Retry-After and
+// other response headers are visible (cross-origin fetch hides them).
+ipcMain.handle('archive-search', async (_, { params }) => {
+  const url = `https://archive.org/advancedsearch.php?${new URLSearchParams(params)}`;
+  const r   = await archiveGetText(url, 'search');
+  let json  = null;
+  if (r.status === 200) { try { json = JSON.parse(r.body); } catch {} }
+  const retryAfter = Number(r.headers['retry-after']);
+  return { status: r.status, json, retryAfter: retryAfter > 0 ? retryAfter : null, error: r.error || null };
+});
+
 // ─── Thumbnail cache ──────────────────────────────────────────────────────────
 
 // Returns a file:// URL from disk cache, downloading from archive.org if not
-// yet cached. Falls back to the live URL on any error so UI always shows something.
+// yet cached. Returns null on any failure: the renderer keeps its placeholder
+// rather than hitting archive.org a second time for the live image.
 ipcMain.handle('get-thumb', async (_, { identifier }) => {
   const liveUrl   = `https://archive.org/services/img/${identifier}`;
   const cachePath = path.join(THUMB_CACHE_DIR, `${identifier}.jpg`);
@@ -302,9 +365,10 @@ ipcMain.handle('get-thumb', async (_, { identifier }) => {
 
   return new Promise((resolve) => {
     const doRequest = (url, redirects) => {
-      if (redirects > 5) return resolve(liveUrl);
-      https.get(url, { headers: { 'User-Agent': 'RohanKar-Launcher/1.1' } }, (res) => {
+      if (redirects > 5) return resolve(null);
+      const req = https.get(url, { headers: { 'User-Agent': 'RohanKar-Launcher/1.1' } }, (res) => {
         const { statusCode, headers: resHeaders } = res;
+        logArchiveResponse('thumb', url, statusCode, resHeaders);
 
         if ([301,302,303,307,308].includes(statusCode) && resHeaders.location) {
           res.resume();
@@ -320,7 +384,7 @@ ipcMain.handle('get-thumb', async (_, { identifier }) => {
         const ct = resHeaders['content-type'] || '';
         if (statusCode !== 200 || !ct.startsWith('image/')) {
           res.resume();
-          return resolve(liveUrl);
+          return resolve(null);
         }
 
         const file = fs.createWriteStream(cachePath);
@@ -330,13 +394,24 @@ ipcMain.handle('get-thumb', async (_, { identifier }) => {
           try {
             if (fs.statSync(cachePath).size > 1024) return resolve(cacheUrl);
           } catch {}
-          resolve(liveUrl);
+          resolve(null);
         });
         file.on('error', () => {
           try { fs.unlinkSync(cachePath); } catch {}
-          resolve(liveUrl);
+          resolve(null);
         });
-      }).on('error', () => resolve(liveUrl));
+        // Aborted mid-body (e.g. timeout): drop the partial file
+        res.on('error', () => {
+          file.destroy();
+          try { fs.unlinkSync(cachePath); } catch {}
+          resolve(null);
+        });
+      });
+      req.setTimeout(30000, () => req.destroy(new Error('timed out')));
+      req.on('error', (e) => {
+        logArchiveResponse('thumb', url, 0, {}, e.message);
+        resolve(null);
+      });
     };
     doRequest(liveUrl, 0);
   });
@@ -617,10 +692,10 @@ function unblockDirectory(dir) {
   return Promise.resolve();
 }
 
-ipcMain.handle('launch-game', (_, { identifier, exePath }) => {
-  return new Promise(async (resolve) => {
-    if (!fs.existsSync(exePath)) return resolve({ ok: false, error: 'Executable not found: ' + exePath });
+ipcMain.handle('launch-game', async (_, { identifier, exePath }) => {
+  if (!fs.existsSync(exePath)) return { ok: false, error: 'Executable not found: ' + exePath };
 
+  try {
     // Unblock the install directory on every launch — covers both freshly installed
     // games and games that were installed before this fix was added.
     const gameRow     = db?.prepare('SELECT install_dir FROM games WHERE identifier = ?').get(identifier);
@@ -631,16 +706,15 @@ ipcMain.handle('launch-game', (_, { identifier, exePath }) => {
 
     // shell.openPath uses Windows ShellExecute — handles UAC elevation prompts
     // correctly, unlike execFile which just gets EACCES on elevated exes.
-    shell.openPath(exePath).then((errMsg) => {
-      if (errMsg) {
-        resolve({ ok: false, error: errMsg });
-      } else {
-        // Track playtime roughly — we can't watch the process directly with openPath
-        // so we record a start time and write it when the launcher is next focused.
-        resolve({ ok: true });
-      }
-    });
-  });
+    const errMsg = await shell.openPath(exePath);
+    if (errMsg) return { ok: false, error: errMsg };
+
+    // Track playtime roughly — we can't watch the process directly with openPath
+    // so we record a start time and write it when the launcher is next focused.
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 // ─── Open game location in Explorer ──────────────────────────────────────────
@@ -926,9 +1000,17 @@ ipcMain.handle('delete-game', async (_, { identifier, installDir }) => {
 // In development (app.isPackaged === false) we skip the update check entirely
 // so you don't get errors about missing release files.
 
+// Releases for this build live on the fork, not upstream
+const RELEASES_REPO = 'yabo-san/RohanKar-Launcher';
+
 function setupAutoUpdater() {
   if (!app.isPackaged) {
     console.log('[updater] Dev mode — skipping update check');
+    return;
+  }
+  // Off unless turned on in Settings
+  if (!loadSettings().checkForUpdates) {
+    console.log('[updater] Update check disabled in settings');
     return;
   }
 
@@ -951,7 +1033,7 @@ function setupAutoUpdater() {
     console.log('[updater] Update available:', info.version);
 
     // Fetch release notes from GitHub API
-    const releaseUrl = `https://api.github.com/repos/Kilted-Kraken/-RohanKar-Launcher/releases/tags/v${info.version}`;
+    const releaseUrl = `https://api.github.com/repos/${RELEASES_REPO}/releases/tags/v${info.version}`;
     const fetchNotes = () => new Promise((resolve) => {
       https.get(releaseUrl, {
         headers: {
@@ -1011,7 +1093,7 @@ function setupAutoUpdater() {
 // IPC: renderer asks to download update — always registered, opens GitHub releases page
 ipcMain.removeHandler('updater-install');
 ipcMain.handle('updater-install', () => {
-  shell.openExternal('https://github.com/Kilted-Kraken/-RohanKar-Launcher/releases/latest');
+  shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/latest`);
 });
 
 // ─── Add to Steam ───────────────────────────────────────────────────────────

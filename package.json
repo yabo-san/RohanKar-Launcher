@@ -1,17 +1,23 @@
 {
   "name": "rohankar-launcher",
-  "version": "1.4.1",
+  "version": "1.4.1-fork.2",
   "description": "RohanKar Game Launcher",
   "author": "Kilted-Kraken",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
+    "lint": "eslint .",
+    "test": "node --test",
+    "test:coverage": "node --test --test-reporter=spec --experimental-test-coverage --test-coverage-include=src/renderer/sources.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
     "build": "electron-builder",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "electron": "latest",
-    "electron-builder": "latest"
+    "electron-builder": "latest",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0"
   },
   "dependencies": {
     "axios": "^1.0.0",
@@ -36,6 +42,9 @@
       "target": "nsis",
       "icon": "assets/icons/rk-logo.ico"
     },
+    "nsis": {
+      "artifactName": "RohanKar-Launcher-Setup-${version}.${ext}"
+    },
     "mac": {
       "icon": "assets/icons/rk-logo.icns"
     },
@@ -44,8 +53,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Kilted-Kraken",
-      "repo": "-RohanKar-Launcher"
+      "owner": "yabo-san",
+      "repo": "RohanKar-Launcher"
     }
   }
 }

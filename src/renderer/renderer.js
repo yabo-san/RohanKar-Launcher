@@ -15,12 +15,18 @@
 
 // ─── Archive.org API ──────────────────────────────────────────────────────────
 
-const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
-const UPLOADER       = 'rohanjackson071@gmail.com';
+// Used when settings.json has no `sources` key
+const DEFAULT_SOURCES = [
+  { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
+  { uploader: 'frankiemiqueli1@gmail.com', label: 'pstriple',        enabled: true },
+  { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
+];
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let allGames      = [];
+let allGames      = [];   // one entry per title (first version of each group)
+let allVersions   = [];   // every fetched item, across all sources
+let sources       = DEFAULT_SOURCES;
 let library       = {};
 let collections   = [];
 let selectedGame  = null;
@@ -151,9 +157,12 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getTitle(game) {
-  const t = Array.isArray(game.title) ? game.title[0] : game.title;
-  return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
+
+// ─── Sources ──────────────────────────────────────────────────────────────────
+// getTitle, parseSources, formatSources, titleKey, preferredVersion and
+// versionLabel live in sources.js (loaded before this file).
+function loadSourcesSetting(s) {
+  return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
 }
 
 function getThumb(game) {
@@ -162,20 +171,62 @@ function getThumb(game) {
 
 const thumbUrlCache = {};
 
-async function resolveThumb(identifier) {
-  if (thumbUrlCache[identifier]) return thumbUrlCache[identifier];
-  try {
-    const url = await window.electronAPI.getThumb({ identifier });
-    thumbUrlCache[identifier] = url;
-    return url;
-  } catch {
-    return `https://archive.org/services/img/${identifier}`;
-  }
+// Cap concurrent thumbnail cache fetches so a big grid doesn't flood archive.org
+const THUMB_CONCURRENCY = 4;
+let thumbActive = 0;
+const thumbQueue = [];
+function withThumbSlot(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      thumbActive++;
+      fn().then(resolve, reject).finally(() => {
+        thumbActive--;
+        thumbQueue.shift()?.();
+      });
+    };
+    thumbActive < THUMB_CONCURRENCY ? run() : thumbQueue.push(run);
+  });
 }
 
+const thumbInFlight = {};
+const thumbFailed   = new Set();  // not retried this session, so a 429 isn't hammered
+
+// Disk-cached cover (file:// URL) for an item, or null if it couldn't be fetched.
+// Each cover is downloaded from archive.org at most once.
+async function resolveThumb(identifier) {
+  if (thumbUrlCache[identifier]) return thumbUrlCache[identifier];
+  if (thumbFailed.has(identifier)) return null;
+  // Re-renders reuse the pending request instead of queueing another
+  thumbInFlight[identifier] ??= withThumbSlot(() => window.electronAPI.getThumb({ identifier }))
+    .catch(() => null)
+    .finally(() => { delete thumbInFlight[identifier]; });
+  const url = await thumbInFlight[identifier];
+  if (url) thumbUrlCache[identifier] = url;
+  else     thumbFailed.add(identifier);
+  return url;
+}
+
+const THUMB_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// Covers are only fetched once their card is near the viewport
+const thumbObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const imgEl = entry.target;
+    thumbObserver.unobserve(imgEl);
+    const id = imgEl.dataset.thumbId;
+    resolveThumb(id).then(url => { if (url && imgEl.dataset.thumbId === id) imgEl.src = url; });
+  }
+}, { rootMargin: '200px' });
+
 function applyThumb(imgEl, identifier) {
-  imgEl.src = thumbUrlCache[identifier] || `https://archive.org/services/img/${identifier}`;
-  resolveThumb(identifier).then(url => { if (imgEl.src !== url) imgEl.src = url; });
+  imgEl.dataset.thumbId = identifier;
+  if (thumbUrlCache[identifier]) {
+    imgEl.src = thumbUrlCache[identifier];
+    return;
+  }
+  imgEl.src = THUMB_PLACEHOLDER;
+  if (!thumbFailed.has(identifier)) thumbObserver.observe(imgEl);
 }
 
 function getLocalHero(identifier) {
@@ -307,6 +358,7 @@ function closeAbout() {
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
 function getSortedGames(games) {
+  games = games.map(g => preferredVersion(g, library));
   const query = searchInput.value.toLowerCase().trim();
   let filtered = query
     ? games.filter(g => getTitle(g).toLowerCase().includes(query))
@@ -464,6 +516,7 @@ async function init() {
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
 
   const initSettings = await window.electronAPI.getSettings();
+  sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
   applyInstalledBadgeSetting();
@@ -651,6 +704,8 @@ async function openSettings() {
   deleteAfterInstallCheck.checked   = !!s.deleteAfterInstall;
   installedFirstCheck.checked       = !!s.installedFirst;
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
+  document.getElementById('setting-check-updates').checked = !!s.checkForUpdates;
+  document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
   settingsModal.classList.remove('hidden');
 }
 
@@ -659,18 +714,27 @@ function closeSettings() {
 }
 
 async function saveSettings() {
+  const newSources     = parseSources(document.getElementById('setting-sources').value);
+  const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
   await window.electronAPI.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),
     deleteAfterInstall:  deleteAfterInstallCheck.checked,
     installedFirst:      installedFirstCheck.checked,
     showInstalledBadge:  showInstalledBadgeCheck.checked,
+    sources:             newSources,
+    checkForUpdates:     document.getElementById('setting-check-updates').checked,
   });
   installedFirst     = installedFirstCheck.checked;
   showInstalledBadge = showInstalledBadgeCheck.checked;
   applyInstalledBadgeSetting();
-  renderLibraryGrid();
   closeSettings();
+  if (sourcesChanged) {
+    sources = newSources;
+    fetchGames();
+  } else {
+    renderLibraryGrid();
+  }
 }
 
 function applyInstalledBadgeSetting() {
@@ -681,7 +745,7 @@ function applyInstalledBadgeSetting() {
 async function onScanForGames() {
   const resultEl = document.getElementById('scan-result');
   const btn      = document.getElementById('btn-scan-games');
-  if (!allGames.length) {
+  if (!allVersions.length) {
     resultEl.textContent = 'Games not loaded yet — try again in a moment.';
     resultEl.className   = 'none';
     return;
@@ -701,12 +765,12 @@ async function onScanForGames() {
   resultEl.textContent = '';
   resultEl.className   = '';
 
-  const knownIdentifiers = allGames.map(g => g.identifier);
+  const knownIdentifiers = allVersions.map(g => g.identifier);
 
   // Build title → identifier map for matching folders named after game titles
   // (e.g. "Zoo Tycoon - Complete Collection" downloaded directly from archive.org)
   const titleMap = {};
-  for (const game of allGames) {
+  for (const game of allVersions) {
     const t = Array.isArray(game.title) ? game.title[0] : game.title;
     if (t && String(t).trim()) titleMap[String(t).trim()] = game.identifier;
   }
@@ -732,26 +796,86 @@ async function onScanForGames() {
 }
 
 // ─── Fetch games from archive.org ─────────────────────────────────────────────
+const SEARCH_PAGE_SIZE = 500;
+const SEARCH_MAX_ITEMS = 10000;  // advancedsearch won't page past this
+const SEARCH_RETRIES   = 3;
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Advanced search via the main process (30s timeout, responses logged to
+// archive-net.log). Retries 429/5xx/network errors, waiting Retry-After when
+// archive.org sends it and backing off 2s/4s/8s when it doesn't.
+async function searchWithRetry(params) {
+  let lastErr;
+  for (let attempt = 0; attempt <= SEARCH_RETRIES; attempt++) {
+    const r = await window.electronAPI.archiveSearch({ params });
+    if (r.status === 200 && r.json) return r.json;
+    lastErr = new Error(
+      r.status === 429 ? 'rate limited by archive.org (HTTP 429)'
+      : r.status        ? `HTTP ${r.status}`
+      :                   (r.error || 'network error'));
+    const retryable = r.status === 0 || r.status === 429 || r.status >= 500 || r.status === 200;
+    if (!retryable) throw lastErr;
+    if (attempt < SEARCH_RETRIES) await sleep(r.retryAfter ? r.retryAfter * 1000 : 2000 * 2 ** attempt);
+  }
+  throw lastErr;
+}
+
+// All items for one uploader, paging past the per-request row limit
+async function fetchSource(src) {
+  const docs = [];
+  for (let page = 1; docs.length < SEARCH_MAX_ITEMS; page++) {
+    const json  = await searchWithRetry({
+      q:      `uploader:${src.uploader} mediatype:software`,
+      fl:     'identifier,title,description,date,addeddate,downloads,subject',
+      rows:   String(SEARCH_PAGE_SIZE),
+      page:   String(page),
+      output: 'json',
+    });
+    const batch = json?.response?.docs || [];
+    docs.push(...batch);
+    if (batch.length < SEARCH_PAGE_SIZE || docs.length >= (json?.response?.numFound || 0)) break;
+  }
+  return docs.map(d => ({ ...d, _sourceLabel: src.label || src.uploader }));
+}
+
 async function fetchGames() {
   renderSkeletonCards(8);
   try {
-    const params = new URLSearchParams({
-      q:      `uploader:${UPLOADER} mediatype:software`,
-      fl:     'identifier,title,description,date,addeddate,downloads,subject',
-      rows:   '500',
-      start:  '0',
-      output: 'json',
-    });
-    const res  = await fetch(`${ARCHIVE_SEARCH}?${params}`);
-    const json = await res.json();
-    const docs = json?.response?.docs || [];
+    // One source at a time so archive.org sees a trickle, not a burst
+    const enabled = sources.filter(s => s.enabled !== false);
+    const results = [];
+    for (const src of enabled) {
+      try {
+        results.push({ status: 'fulfilled', value: await fetchSource(src) });
+      } catch (e) {
+        console.warn(`Source ${src.uploader} failed:`, e);
+        results.push({ status: 'rejected', reason: e, src });
+      }
+    }
+    const failed = results.filter(r => r.status === 'rejected');
+    if (enabled.length && failed.length === enabled.length) throw failed[0].reason;
+    if (failed.length) {
+      showToast(`Couldn't load ${failed.map(r => r.src.label || r.src.uploader).join(', ')}: ${failed[0].reason.message}`, 8000);
+    }
 
+    // Flatten in source order, drop repeated identifiers, then group by title
     const seen = new Set();
-    allGames = docs.filter(g => {
+    allVersions = results.flatMap(r => r.status === 'fulfilled' ? r.value : []).filter(g => {
       if (seen.has(g.identifier)) return false;
       seen.add(g.identifier);
       return true;
     });
+
+    const groups = new Map();
+    for (const g of allVersions) {
+      const key = titleKey(g) || g.identifier;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(g);
+      g._groupKey = key;
+      g._versions = groups.get(key);
+    }
+    allGames = [...groups.values()].map(versions => versions[0]);
 
     library = await window.electronAPI.getLibrary();
     renderLibraryGrid();
@@ -792,7 +916,7 @@ function renderLibraryGrid() {
   sorted.forEach(game => {
     const card  = document.createElement('div');
     card.className = 'game-card';
-    if (selectedGame?.identifier === game.identifier) card.classList.add('selected');
+    if (selectedGame && selectedGame._groupKey === game._groupKey) card.classList.add('selected');
 
     const libEntry  = library[game.identifier];
     const isFav      = !!libEntry?.is_favorite;
@@ -1004,7 +1128,7 @@ function renderDownloadsModal() {
 }
 
 function makeDmItem(entry, isActive) {
-  const game = allGames.find(g => g.identifier === entry.identifier);
+  const game = allVersions.find(g => g.identifier === entry.identifier);
   const item = document.createElement('div');
   item.className = 'dm-item'
     + (entry.status === 'done'  ? ' done'  : '')
@@ -1140,8 +1264,10 @@ async function selectGame(game) {
   }
   heroTitle.textContent = title;
 
-  resolveThumb(game.identifier).then(url => setDetailCover(url));
-  setDetailCover(thumbUrl);
+  setDetailCover(thumbUrlCache[game.identifier] || null);
+  resolveThumb(game.identifier).then(url => {
+    if (url && selectedGame?.identifier === game.identifier) setDetailCover(url);
+  });
   detailTitle.textContent = title;
 
   const date      = game.date ? new Date(game.date).getFullYear() : '-';
@@ -1150,6 +1276,31 @@ async function selectGame(game) {
     `<span>Year: <strong>${date}</strong></span>` +
     `<span>Downloads: <strong>${downloads}</strong></span>` +
     `<span id="detail-size"></span>`;
+  const versions = game._versions || [game];
+  if (versions.length > 1) {
+    const sel = document.createElement('select');
+    sel.id = 'detail-version-select';
+    versions.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value       = v.identifier;
+      opt.textContent = versionLabel(v) + (library[v.identifier]?.install_dir ? ' (installed)' : '');
+      opt.selected    = v.identifier === game.identifier;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      const v = versions.find(x => x.identifier === sel.value);
+      if (v) selectGame(v);
+    });
+    const wrap = document.createElement('span');
+    wrap.append('Version: ', sel);
+    detailMeta.prepend(wrap);
+  } else if (game._sourceLabel) {
+    const wrap = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = game._sourceLabel;
+    wrap.append('Source: ', strong);
+    detailMeta.prepend(wrap);
+  }
 
   btnDownload.textContent = 'Install';
   const updateSize = (sizeStr) => {
@@ -2446,7 +2597,7 @@ function renderHomePlayedRow() {
     .filter(([, e]) => e.playtime_secs > 0)
     .sort(([, a], [, b]) => (b.last_played_at || 0) - (a.last_played_at || 0))
     .slice(0, 20)
-    .map(([id]) => allGames.find(g => g.identifier === id))
+    .map(([id]) => allVersions.find(g => g.identifier === id))
     .filter(Boolean);
 
   if (!played.length) {
