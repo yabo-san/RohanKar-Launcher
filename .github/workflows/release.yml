@@ -38,7 +38,8 @@ jobs:
       - name: Build Windows installer
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run build
+        # Build only; the draft-release step below is the single uploader
+        run: npm run build -- --publish never
 
       # ── Generate commit-based changelog ─────────────────────────────────────
       # Collects all commits since the previous tag and groups them into a
@@ -93,8 +94,8 @@ jobs:
           name: RohanKar Launcher ${{ github.ref_name }}
           body_path: release_notes.md
           files: |
-            dist/*.exe
-            dist/*.blockmap
+            dist/*-Setup-*.exe
+            dist/*-Setup-*.exe.blockmap
             dist/latest.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

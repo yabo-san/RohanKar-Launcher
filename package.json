@@ -36,6 +36,9 @@
       "target": "nsis",
       "icon": "assets/icons/rk-logo.ico"
     },
+    "nsis": {
+      "artifactName": "RohanKar-Launcher-Setup-${version}.${ext}"
+    },
     "mac": {
       "icon": "assets/icons/rk-logo.icns"
     },
