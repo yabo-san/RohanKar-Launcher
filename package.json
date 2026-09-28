@@ -51,6 +51,7 @@
     "linux": {
       "icon": "assets/icons/rk-logo.png"
     },
+    "detectUpdateChannel": false,
     "publish": {
       "provider": "generic",
       "url": "https://yabo-san.github.io/RohanKar-Launcher/stable/"
