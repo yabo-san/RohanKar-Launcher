@@ -81,6 +81,13 @@ checks for updates against a `latest.yml` on the `gh-pages` branch, served at
    `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`. Stable
    never moves automatically.
 
+Each installer and its `latest.yml` carry a build provenance attestation. To
+check that a download was built by this repo's Release workflow:
+
+```sh
+gh attestation verify RohanKar-Launcher-Setup-1.6.0-fork.0.exe --repo yabo-san/RohanKar-Launcher
+```
+
 ---
 
 ## Requirements
