@@ -157,49 +157,12 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getTitle(game) {
-  const t = Array.isArray(game.title) ? game.title[0] : game.title;
-  return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
-}
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
-// Settings text format: one uploader per line, optional ", label", leading # disables.
-function parseSources(text) {
-  return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
-    const enabled = !line.startsWith('#');
-    const [uploader, ...rest] = line.replace(/^#\s*/, '').split(',');
-    const label = rest.join(',').trim();
-    return { uploader: uploader.trim(), label: label || uploader.trim().split('@')[0], enabled };
-  }).filter(s => s.uploader);
-}
-
-function formatSources(list) {
-  return list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`).join('\n');
-}
-
+// getTitle, parseSources, formatSources, titleKey, preferredVersion and
+// versionLabel live in sources.js (loaded before this file).
 function loadSourcesSetting(s) {
   return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
-}
-
-// ─── Duplicate grouping ───────────────────────────────────────────────────────
-// Same game from different uploaders → one entry. Key is the title with case,
-// punctuation, "the", and trailing bracketed tags like "(v1.2)" removed.
-function titleKey(game) {
-  return getTitle(game).toLowerCase()
-    .replace(/[\(\[][^\)\]]*[\)\]]/g, ' ')
-    .replace(/^the\s+/, '')
-    .replace(/[^a-z0-9]+/g, '');
-}
-
-// The version to show for a grouped entry: the installed one if any, else the entry itself
-function preferredVersion(game) {
-  const versions = game._versions || [game];
-  return versions.find(v => library[v.identifier]?.install_dir) || game;
-}
-
-function versionLabel(v) {
-  const date = v.addeddate ? new Date(v.addeddate).toISOString().slice(0, 10) : '';
-  return [v._sourceLabel, date].filter(Boolean).join(' — ');
 }
 
 function getThumb(game) {
@@ -395,7 +358,7 @@ function closeAbout() {
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
 function getSortedGames(games) {
-  games = games.map(preferredVersion);
+  games = games.map(g => preferredVersion(g, library));
   const query = searchInput.value.toLowerCase().trim();
   let filtered = query
     ? games.filter(g => getTitle(g).toLowerCase().includes(query))
