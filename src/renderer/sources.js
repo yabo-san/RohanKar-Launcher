@@ -5,6 +5,13 @@
  * before renderer.js, and required as CommonJS by the node:test suite.
  */
 
+// Shipped sources, used when settings.json has no `sources` key
+const DEFAULT_SOURCES = [
+  { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
+  { uploader: 'frankiemiqueli1@gmail.com', label: 'pstriple',        enabled: true },
+  { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
+];
+
 function getTitle(game) {
   const t = Array.isArray(game.title) ? game.title[0] : game.title;
   return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
@@ -45,5 +52,5 @@ function versionLabel(v) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getTitle, parseSources, formatSources, titleKey, preferredVersion, versionLabel };
+  module.exports = { DEFAULT_SOURCES, getTitle, parseSources, formatSources, titleKey, preferredVersion, versionLabel };
 }
