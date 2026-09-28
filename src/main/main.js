@@ -927,9 +927,17 @@ ipcMain.handle('delete-game', async (_, { identifier, installDir }) => {
 // In development (app.isPackaged === false) we skip the update check entirely
 // so you don't get errors about missing release files.
 
+// Releases for this build live on the fork, not upstream
+const RELEASES_REPO = 'yabo-san/RohanKar-Launcher';
+
 function setupAutoUpdater() {
   if (!app.isPackaged) {
     console.log('[updater] Dev mode — skipping update check');
+    return;
+  }
+  // Off unless turned on in Settings
+  if (!loadSettings().checkForUpdates) {
+    console.log('[updater] Update check disabled in settings');
     return;
   }
 
@@ -952,7 +960,7 @@ function setupAutoUpdater() {
     console.log('[updater] Update available:', info.version);
 
     // Fetch release notes from GitHub API
-    const releaseUrl = `https://api.github.com/repos/Kilted-Kraken/-RohanKar-Launcher/releases/tags/v${info.version}`;
+    const releaseUrl = `https://api.github.com/repos/${RELEASES_REPO}/releases/tags/v${info.version}`;
     const fetchNotes = () => new Promise((resolve) => {
       https.get(releaseUrl, {
         headers: {
@@ -1012,7 +1020,7 @@ function setupAutoUpdater() {
 // IPC: renderer asks to download update — always registered, opens GitHub releases page
 ipcMain.removeHandler('updater-install');
 ipcMain.handle('updater-install', () => {
-  shell.openExternal('https://github.com/Kilted-Kraken/-RohanKar-Launcher/releases/latest');
+  shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/latest`);
 });
 
 // ─── Add to Steam ───────────────────────────────────────────────────────────

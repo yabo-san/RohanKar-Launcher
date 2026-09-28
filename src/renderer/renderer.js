@@ -696,6 +696,7 @@ async function openSettings() {
   deleteAfterInstallCheck.checked   = !!s.deleteAfterInstall;
   installedFirstCheck.checked       = !!s.installedFirst;
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
+  document.getElementById('setting-check-updates').checked = !!s.checkForUpdates;
   document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
   settingsModal.classList.remove('hidden');
 }
@@ -714,6 +715,7 @@ async function saveSettings() {
     installedFirst:      installedFirstCheck.checked,
     showInstalledBadge:  showInstalledBadgeCheck.checked,
     sources:             newSources,
+    checkForUpdates:     document.getElementById('setting-check-updates').checked,
   });
   installedFirst     = installedFirstCheck.checked;
   showInstalledBadge = showInstalledBadgeCheck.checked;

@@ -44,8 +44,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Kilted-Kraken",
-      "repo": "-RohanKar-Launcher"
+      "owner": "yabo-san",
+      "repo": "RohanKar-Launcher"
     }
   }
 }
