@@ -2538,6 +2538,12 @@ function renderHomeBanner(game) {
   const localHero   = getLocalHero(game.identifier);
   const bannerBg    = document.getElementById('home-banner-bg');
   const bannerLocal = document.getElementById('home-banner-local');
+  // Same rule as the detail hero: cached cover only, no live archive.org fetch
+  const bannerFromCover = () => {
+    const cached = thumbUrlCache[game.identifier];
+    bannerBg.style.backgroundImage = cached ? `url("${cached}")` : 'none';
+    resolveThumb(game.identifier).then(url => { if (url) bannerBg.style.backgroundImage = `url("${url}")`; });
+  };
 
   if (localHero) {
     const testImg = new Image();
@@ -2548,12 +2554,12 @@ function renderHomeBanner(game) {
     };
     testImg.onerror = () => {
       bannerLocal.classList.add('hidden');
-      bannerBg.style.backgroundImage = `url("${getThumb(game)}")`;
+      bannerFromCover();
     };
     testImg.src = localHero;
   } else {
     bannerLocal.classList.add('hidden');
-    bannerBg.style.backgroundImage = `url("${getThumb(game)}")`;
+    bannerFromCover();
   }
 
   const btnView = document.getElementById('home-banner-btn');
