@@ -4,6 +4,8 @@ name: Release
 # worked out from conventional commit messages (feat:, fix:, feat!: ...).
 # Merging that PR tags the version and opens a draft release; the Windows
 # installer is then built and attached to it. Publish the draft by hand.
+# Last, a PR against gh-pages moves the beta update channel to the new version;
+# stable only moves by a hand-made PR (see README, Releases).
 on:
   push:
     branches:
@@ -33,6 +35,10 @@ jobs:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
     runs-on: windows-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout release tag
@@ -56,6 +62,15 @@ jobs:
       - name: Build Windows installer
         run: npm run build -- --publish never
 
+      # Signed record that these files came from this workflow run;
+      # check with `gh attestation verify` (see README, Releases)
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/*-Setup-*.exe
+            dist/latest.yml
+
       - name: Attach installer to draft release
         shell: bash
         env:
@@ -67,3 +82,51 @@ jobs:
             dist/*-Setup-*.exe.blockmap \
             dist/latest.yml \
             --clobber
+
+      - name: Keep latest.yml for the beta channel PR
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-yml
+          path: dist/latest.yml
+
+  beta-channel:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Download latest.yml
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-yml
+          path: beta
+
+      # electron-builder writes bare file names; the channel lives on Pages, so
+      # point url/path at the release assets instead
+      - name: Use absolute installer URLs
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          sed -i -E "s#^(\s*-?\s*(url|path): )([^/]+)\$#\1$BASE/\3#" beta/latest.yml
+          cat beta/latest.yml
+
+      - name: Open PR updating beta/latest.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          BRANCH="channel/beta-$TAG"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add beta/latest.yml
+          git commit -m "chore: beta channel to $TAG"
+          git push -u origin "$BRANCH"
+          gh pr create --base gh-pages --head "$BRANCH" \
+            --title "chore: beta channel to $TAG" \
+            --body "Points beta/latest.yml at $TAG. Merge once the $TAG release is published. Stable stays where it is until a promotion PR copies beta/latest.yml to stable/latest.yml."

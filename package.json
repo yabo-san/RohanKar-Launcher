@@ -1,6 +1,6 @@
 {
   "name": "rohankar-launcher",
-  "version": "1.5.0",
+  "version": "1.6.0-fork.0",
   "description": "RohanKar Game Launcher",
   "author": "Kilted-Kraken",
   "main": "src/main/main.js",
@@ -9,15 +9,15 @@
     "lint": "eslint .",
     "test": "node --test",
     "test:coverage": "node --test --test-reporter=spec --experimental-test-coverage --test-coverage-include=src/renderer/sources.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
+    "test:e2e": "playwright test",
     "build": "electron-builder",
-    "postinstall": "electron-builder install-app-deps",
-    "test:e2e": "playwright test"
+    "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
-    "electron": "latest",
-    "electron-builder": "latest",
+    "electron": "^40.8.0",
+    "electron-builder": "^26.8.1",
     "eslint": "^10.11.0",
     "globals": "^17.12.0"
   },
@@ -53,10 +53,10 @@
     "linux": {
       "icon": "assets/icons/rk-logo.png"
     },
+    "detectUpdateChannel": false,
     "publish": {
-      "provider": "github",
-      "owner": "yabo-san",
-      "repo": "RohanKar-Launcher"
+      "provider": "generic",
+      "url": "https://yabo-san.github.io/RohanKar-Launcher/stable/"
     }
   }
 }
