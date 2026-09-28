@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.0](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.5.0...v1.6.0-fork.0) (2026-09-28)
+
+
+### Features
+
+* stable and beta update channels served from gh-pages ([c90ebbc](https://github.com/yabo-san/RohanKar-Launcher/commit/c90ebbc3a3bf34ac6fc953a060bcb4c024c56230))
+* stable and beta update channels served from gh-pages ([69fbd9b](https://github.com/yabo-san/RohanKar-Launcher/commit/69fbd9bb1f67ed8b62e0a35af88daeadb39ab29b))
+
 ## [1.5.0](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.4.1...v1.5.0) (2026-09-28)
 
 
