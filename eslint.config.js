@@ -16,7 +16,6 @@ module.exports = [
     rules: {
       'no-unused-vars': 'off',            // baseline: unused imports/locals in main.js (spawn, start)
       'no-empty': 'off',                  // baseline: 13 intentional empty catch blocks in main.js
-      'no-async-promise-executor': 'off', // baseline: async executor in main.js download code
     },
   },
   {

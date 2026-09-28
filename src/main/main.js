@@ -692,10 +692,10 @@ function unblockDirectory(dir) {
   return Promise.resolve();
 }
 
-ipcMain.handle('launch-game', (_, { identifier, exePath }) => {
-  return new Promise(async (resolve) => {
-    if (!fs.existsSync(exePath)) return resolve({ ok: false, error: 'Executable not found: ' + exePath });
+ipcMain.handle('launch-game', async (_, { identifier, exePath }) => {
+  if (!fs.existsSync(exePath)) return { ok: false, error: 'Executable not found: ' + exePath };
 
+  try {
     // Unblock the install directory on every launch — covers both freshly installed
     // games and games that were installed before this fix was added.
     const gameRow     = db?.prepare('SELECT install_dir FROM games WHERE identifier = ?').get(identifier);
@@ -706,16 +706,15 @@ ipcMain.handle('launch-game', (_, { identifier, exePath }) => {
 
     // shell.openPath uses Windows ShellExecute — handles UAC elevation prompts
     // correctly, unlike execFile which just gets EACCES on elevated exes.
-    shell.openPath(exePath).then((errMsg) => {
-      if (errMsg) {
-        resolve({ ok: false, error: errMsg });
-      } else {
-        // Track playtime roughly — we can't watch the process directly with openPath
-        // so we record a start time and write it when the launcher is next focused.
-        resolve({ ok: true });
-      }
-    });
-  });
+    const errMsg = await shell.openPath(exePath);
+    if (errMsg) return { ok: false, error: errMsg };
+
+    // Track playtime roughly — we can't watch the process directly with openPath
+    // so we record a start time and write it when the launcher is next focused.
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 
 // ─── Open game location in Explorer ──────────────────────────────────────────
