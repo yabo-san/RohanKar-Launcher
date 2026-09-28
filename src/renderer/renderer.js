@@ -17,7 +17,11 @@
 
 const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
 // Used when settings.json has no `sources` key
-const DEFAULT_SOURCES = [{ uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true }];
+const DEFAULT_SOURCES = [
+  { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
+  { uploader: 'frankiemiqueli1@gmail.com', label: 'pstriple',        enabled: true },
+  { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
+];
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
