@@ -86,9 +86,17 @@ async function launchPackaged(userData) {
   const browser = await chromium.connectOverCDP(`http://${await devtools}`);
   const context = browser.contexts()[0];
   const page = context.pages()[0] || await context.waitForEvent('page');
+  // Quit through Chromium and wait for the exit, so Windows releases the temp dir's files
+  const exited = new Promise(resolve => proc.once('exit', resolve));
   return {
     page,
-    close: async () => { await browser.close().catch(() => {}); proc.kill(); },
+    close: async () => {
+      // Closing the only window quits the app (window-all-closed)
+      await page.evaluate(() => globalThis.close()).catch(() => {});
+      const timer = setTimeout(() => proc.kill(), 10_000);
+      await exited;
+      clearTimeout(timer);
+    },
   };
 }
 
@@ -122,6 +130,6 @@ test('packaged app: launches, shows default sources, downloads a stub item', asy
       .toBe(fs.statSync(path.join(__dirname, 'fixtures', 'tiny.zip')).size);
   } finally {
     await app.close();
-    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });
   }
 });
