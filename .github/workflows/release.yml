@@ -92,6 +92,16 @@ jobs:
           name: latest-yml
           path: beta
 
+      # electron-builder writes bare file names; the channel lives on Pages, so
+      # point url/path at the release assets instead
+      - name: Use absolute installer URLs
+        env:
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          BASE="https://github.com/${{ github.repository }}/releases/download/$TAG"
+          sed -i -E "s#^(\s*-?\s*(url|path): )([^/]+)\$#\1$BASE/\3#" beta/latest.yml
+          cat beta/latest.yml
+
       - name: Open PR updating beta/latest.yml
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
