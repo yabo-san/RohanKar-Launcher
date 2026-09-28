@@ -322,6 +322,11 @@ input:focus, select:focus { border-color: var(--accent); }
   color: var(--text-dim);
 }
 #detail-meta strong { color: var(--text); }
+#detail-version-select {
+  width: auto;
+  padding: 2px 6px;
+  font-size: 12px;
+}
 #detail-extra {
   font-size: 12px;
   color: var(--text-dim);
@@ -542,6 +547,11 @@ input:focus, select:focus { border-color: var(--accent); }
 .settings-check-row input[type="checkbox"] {
   width: auto;
   accent-color: var(--accent);
+}
+#setting-sources {
+  resize: vertical;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
 }
 #btn-save-settings {
   background: var(--accent);

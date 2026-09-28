@@ -116,7 +116,8 @@ function loadSettings() {
 }
 
 function saveSettings(data) {
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
+  // Merge so keys the settings UI doesn't manage survive a save
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify({ ...loadSettings(), ...data }, null, 2));
 }
 
 // ─── Window ───────────────────────────────────────────────────────────────────

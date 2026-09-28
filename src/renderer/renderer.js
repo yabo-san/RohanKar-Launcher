@@ -16,11 +16,14 @@
 // ─── Archive.org API ──────────────────────────────────────────────────────────
 
 const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
-const UPLOADER       = 'rohanjackson071@gmail.com';
+// Used when settings.json has no `sources` key
+const DEFAULT_SOURCES = [{ uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true }];
 
 // ─── State ────────────────────────────────────────────────────────────────────
 
-let allGames      = [];
+let allGames      = [];   // one entry per title (first version of each group)
+let allVersions   = [];   // every fetched item, across all sources
+let sources       = DEFAULT_SOURCES;
 let library       = {};
 let collections   = [];
 let selectedGame  = null;
@@ -154,6 +157,46 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 function getTitle(game) {
   const t = Array.isArray(game.title) ? game.title[0] : game.title;
   return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
+}
+
+// ─── Sources ──────────────────────────────────────────────────────────────────
+// Settings text format: one uploader per line, optional ", label", leading # disables.
+function parseSources(text) {
+  return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+    const enabled = !line.startsWith('#');
+    const [uploader, ...rest] = line.replace(/^#\s*/, '').split(',');
+    const label = rest.join(',').trim();
+    return { uploader: uploader.trim(), label: label || uploader.trim().split('@')[0], enabled };
+  }).filter(s => s.uploader);
+}
+
+function formatSources(list) {
+  return list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`).join('\n');
+}
+
+function loadSourcesSetting(s) {
+  return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
+}
+
+// ─── Duplicate grouping ───────────────────────────────────────────────────────
+// Same game from different uploaders → one entry. Key is the title with case,
+// punctuation, "the", and trailing bracketed tags like "(v1.2)" removed.
+function titleKey(game) {
+  return getTitle(game).toLowerCase()
+    .replace(/[\(\[][^\)\]]*[\)\]]/g, ' ')
+    .replace(/^the\s+/, '')
+    .replace(/[^a-z0-9]+/g, '');
+}
+
+// The version to show for a grouped entry: the installed one if any, else the entry itself
+function preferredVersion(game) {
+  const versions = game._versions || [game];
+  return versions.find(v => library[v.identifier]?.install_dir) || game;
+}
+
+function versionLabel(v) {
+  const date = v.addeddate ? new Date(v.addeddate).toISOString().slice(0, 10) : '';
+  return [v._sourceLabel, date].filter(Boolean).join(' — ');
 }
 
 function getThumb(game) {
@@ -307,6 +350,7 @@ function closeAbout() {
 
 // ─── Sort helpers ─────────────────────────────────────────────────────────────
 function getSortedGames(games) {
+  games = games.map(preferredVersion);
   const query = searchInput.value.toLowerCase().trim();
   let filtered = query
     ? games.filter(g => getTitle(g).toLowerCase().includes(query))
@@ -464,6 +508,7 @@ async function init() {
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
 
   const initSettings = await window.electronAPI.getSettings();
+  sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
   applyInstalledBadgeSetting();
@@ -651,6 +696,7 @@ async function openSettings() {
   deleteAfterInstallCheck.checked   = !!s.deleteAfterInstall;
   installedFirstCheck.checked       = !!s.installedFirst;
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
+  document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
   settingsModal.classList.remove('hidden');
 }
 
@@ -659,18 +705,26 @@ function closeSettings() {
 }
 
 async function saveSettings() {
+  const newSources     = parseSources(document.getElementById('setting-sources').value);
+  const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
   await window.electronAPI.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),
     deleteAfterInstall:  deleteAfterInstallCheck.checked,
     installedFirst:      installedFirstCheck.checked,
     showInstalledBadge:  showInstalledBadgeCheck.checked,
+    sources:             newSources,
   });
   installedFirst     = installedFirstCheck.checked;
   showInstalledBadge = showInstalledBadgeCheck.checked;
   applyInstalledBadgeSetting();
-  renderLibraryGrid();
   closeSettings();
+  if (sourcesChanged) {
+    sources = newSources;
+    fetchGames();
+  } else {
+    renderLibraryGrid();
+  }
 }
 
 function applyInstalledBadgeSetting() {
@@ -681,7 +735,7 @@ function applyInstalledBadgeSetting() {
 async function onScanForGames() {
   const resultEl = document.getElementById('scan-result');
   const btn      = document.getElementById('btn-scan-games');
-  if (!allGames.length) {
+  if (!allVersions.length) {
     resultEl.textContent = 'Games not loaded yet — try again in a moment.';
     resultEl.className   = 'none';
     return;
@@ -701,12 +755,12 @@ async function onScanForGames() {
   resultEl.textContent = '';
   resultEl.className   = '';
 
-  const knownIdentifiers = allGames.map(g => g.identifier);
+  const knownIdentifiers = allVersions.map(g => g.identifier);
 
   // Build title → identifier map for matching folders named after game titles
   // (e.g. "Zoo Tycoon - Complete Collection" downloaded directly from archive.org)
   const titleMap = {};
-  for (const game of allGames) {
+  for (const game of allVersions) {
     const t = Array.isArray(game.title) ? game.title[0] : game.title;
     if (t && String(t).trim()) titleMap[String(t).trim()] = game.identifier;
   }
@@ -735,23 +789,41 @@ async function onScanForGames() {
 async function fetchGames() {
   renderSkeletonCards(8);
   try {
-    const params = new URLSearchParams({
-      q:      `uploader:${UPLOADER} mediatype:software`,
-      fl:     'identifier,title,description,date,addeddate,downloads,subject',
-      rows:   '500',
-      start:  '0',
-      output: 'json',
+    const enabled = sources.filter(s => s.enabled !== false);
+    const results = await Promise.allSettled(enabled.map(async src => {
+      const params = new URLSearchParams({
+        q:      `uploader:${src.uploader} mediatype:software`,
+        fl:     'identifier,title,description,date,addeddate,downloads,subject',
+        rows:   '500',
+        start:  '0',
+        output: 'json',
+      });
+      const res  = await fetch(`${ARCHIVE_SEARCH}?${params}`);
+      const json = await res.json();
+      return (json?.response?.docs || []).map(d => ({ ...d, _sourceLabel: src.label || src.uploader }));
+    }));
+    if (enabled.length && results.every(r => r.status === 'rejected')) throw results[0].reason;
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') console.warn(`Source ${enabled[i].uploader} failed:`, r.reason);
     });
-    const res  = await fetch(`${ARCHIVE_SEARCH}?${params}`);
-    const json = await res.json();
-    const docs = json?.response?.docs || [];
 
+    // Flatten in source order, drop repeated identifiers, then group by title
     const seen = new Set();
-    allGames = docs.filter(g => {
+    allVersions = results.flatMap(r => r.status === 'fulfilled' ? r.value : []).filter(g => {
       if (seen.has(g.identifier)) return false;
       seen.add(g.identifier);
       return true;
     });
+
+    const groups = new Map();
+    for (const g of allVersions) {
+      const key = titleKey(g) || g.identifier;
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(g);
+      g._groupKey = key;
+      g._versions = groups.get(key);
+    }
+    allGames = [...groups.values()].map(versions => versions[0]);
 
     library = await window.electronAPI.getLibrary();
     renderLibraryGrid();
@@ -792,7 +864,7 @@ function renderLibraryGrid() {
   sorted.forEach(game => {
     const card  = document.createElement('div');
     card.className = 'game-card';
-    if (selectedGame?.identifier === game.identifier) card.classList.add('selected');
+    if (selectedGame && selectedGame._groupKey === game._groupKey) card.classList.add('selected');
 
     const libEntry  = library[game.identifier];
     const isFav      = !!libEntry?.is_favorite;
@@ -1004,7 +1076,7 @@ function renderDownloadsModal() {
 }
 
 function makeDmItem(entry, isActive) {
-  const game = allGames.find(g => g.identifier === entry.identifier);
+  const game = allVersions.find(g => g.identifier === entry.identifier);
   const item = document.createElement('div');
   item.className = 'dm-item'
     + (entry.status === 'done'  ? ' done'  : '')
@@ -1150,6 +1222,31 @@ async function selectGame(game) {
     `<span>Year: <strong>${date}</strong></span>` +
     `<span>Downloads: <strong>${downloads}</strong></span>` +
     `<span id="detail-size"></span>`;
+  const versions = game._versions || [game];
+  if (versions.length > 1) {
+    const sel = document.createElement('select');
+    sel.id = 'detail-version-select';
+    versions.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value       = v.identifier;
+      opt.textContent = versionLabel(v) + (library[v.identifier]?.install_dir ? ' (installed)' : '');
+      opt.selected    = v.identifier === game.identifier;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener('change', () => {
+      const v = versions.find(x => x.identifier === sel.value);
+      if (v) selectGame(v);
+    });
+    const wrap = document.createElement('span');
+    wrap.append('Version: ', sel);
+    detailMeta.prepend(wrap);
+  } else if (game._sourceLabel) {
+    const wrap = document.createElement('span');
+    const strong = document.createElement('strong');
+    strong.textContent = game._sourceLabel;
+    wrap.append('Source: ', strong);
+    detailMeta.prepend(wrap);
+  }
 
   btnDownload.textContent = 'Install';
   const updateSize = (sizeStr) => {
@@ -2446,7 +2543,7 @@ function renderHomePlayedRow() {
     .filter(([, e]) => e.playtime_secs > 0)
     .sort(([, a], [, b]) => (b.last_played_at || 0) - (a.last_played_at || 0))
     .slice(0, 20)
-    .map(([id]) => allGames.find(g => g.identifier === id))
+    .map(([id]) => allVersions.find(g => g.identifier === id))
     .filter(Boolean);
 
   if (!played.length) {
