@@ -52,9 +52,8 @@
       "icon": "assets/icons/rk-logo.png"
     },
     "publish": {
-      "provider": "github",
-      "owner": "yabo-san",
-      "repo": "RohanKar-Launcher"
+      "provider": "generic",
+      "url": "https://yabo-san.github.io/RohanKar-Launcher/stable/"
     }
   }
 }

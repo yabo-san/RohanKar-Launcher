@@ -65,6 +65,24 @@ A desktop game launcher for the classic PC game collection uploaded to [Archive.
 
 ---
 
+## Releases
+
+Versions follow the fork line (`1.6.0-fork.0`, `1.6.0-fork.1`, …). The launcher
+checks for updates against a `latest.yml` on the `gh-pages` branch, served at
+`https://yabo-san.github.io/RohanKar-Launcher/stable/` (or `/beta/` with
+**Settings → Beta updates** on). Two steps are done by hand:
+
+1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
+   open on `main`. Merging it tags the version, builds the Windows installer
+   onto a draft release, and opens a PR against `gh-pages` that moves
+   `beta/latest.yml` to the new version. Publish the draft release, then merge
+   that beta PR.
+2. **Merge a promotion PR.** When a beta has proven itself, open a PR against
+   `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`. Stable
+   never moves automatically.
+
+---
+
 ## Requirements
 
 - Windows 10 or later
