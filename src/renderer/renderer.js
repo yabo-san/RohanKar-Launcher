@@ -943,6 +943,7 @@ function renderSkeletonCards(count) {
 // ─── Library grid ─────────────────────────────────────────────────────────────
 function renderLibraryGrid() {
   const sorted = getSortedGames(allGames);
+  thumbObserver.disconnect();   // cards are about to be replaced; stop watching the old ones
   libraryGrid.innerHTML = '';
 
   if (!sorted.length) {
@@ -1280,7 +1281,13 @@ async function selectGame(game) {
   const title     = getTitle(game);
   const rawDesc   = Array.isArray(game.description) ? game.description[0] : game.description;
   const desc      = rawDesc ? String(rawDesc) : '';
-  const thumbUrl  = getThumb(game);
+  // Hero falls back to the disk-cached cover, never a second live archive.org fetch
+  const heroFromCover = () => {
+    setHeroImage(thumbUrlCache[game.identifier] || null);
+    resolveThumb(game.identifier).then(url => {
+      if (url && selectedGame?.identifier === game.identifier) setHeroImage(url);
+    });
+  };
   const localHero = getLocalHero(game.identifier);
 
   const libEntry   = library[game.identifier];
@@ -1294,10 +1301,10 @@ async function selectGame(game) {
   } else if (localHero) {
     const testImg = new Image();
     testImg.onload  = () => setHeroLocal(localHero);
-    testImg.onerror = () => setHeroImage(thumbUrl);
+    testImg.onerror = heroFromCover;
     testImg.src = localHero;
   } else {
-    setHeroImage(thumbUrl);
+    heroFromCover();
   }
   heroTitle.textContent = title;
 
