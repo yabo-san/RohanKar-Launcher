@@ -1,8 +1,8 @@
 version: 1.5.0
 files:
-  - url: RohanKar-Launcher-Setup-1.5.0.exe
+  - url: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.5.0/RohanKar-Launcher-Setup-1.5.0.exe
     sha512: J7qdofq71bE/nk4dQmAoWHplshRxVK8SOSLJuudpMvz4SLJvwsnOd/enoXD5fvad9GWhlyX7ijHMm7gCfaRWcw==
     size: 100147418
-path: RohanKar-Launcher-Setup-1.5.0.exe
+path: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.5.0/RohanKar-Launcher-Setup-1.5.0.exe
 sha512: J7qdofq71bE/nk4dQmAoWHplshRxVK8SOSLJuudpMvz4SLJvwsnOd/enoXD5fvad9GWhlyX7ijHMm7gCfaRWcw==
 releaseDate: '2026-09-28T16:44:45.070Z'
