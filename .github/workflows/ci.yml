@@ -31,7 +31,7 @@ jobs:
       - name: Syntax check
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
 
-      # Runs the unit tests; fails if sources.js drops below 80% lines/branches/functions
+      # Runs the unit tests; fails if sources.js or overrides.js drops below 80% lines/branches/functions
       - name: Tests with coverage
         id: coverage
         shell: bash
@@ -150,7 +150,7 @@ jobs:
           {
             echo "## CI report"
             echo
-            echo "### Coverage: src/renderer/sources.js"
+            echo "### Coverage: sources.js, overrides.js"
             echo
             if [ -f coverage.md ]; then
               cat coverage.md

@@ -8,7 +8,7 @@
     "start": "electron .",
     "lint": "eslint .",
     "test": "node --test",
-    "test:coverage": "node --test --test-reporter=spec --experimental-test-coverage --test-coverage-include=src/renderer/sources.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
+    "test:coverage": "node --test --test-reporter=spec --experimental-test-coverage --test-coverage-include=src/renderer/sources.js --test-coverage-include=src/main/overrides.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
     "build": "electron-builder",
     "postinstall": "electron-builder install-app-deps"
   },
@@ -30,7 +30,8 @@
     "productName": "RohanKar Launcher",
     "files": [
       "src/**/*",
-      "assets/**/*"
+      "assets/**/*",
+      "overrides.json"
     ],
     "extraResources": [
       {

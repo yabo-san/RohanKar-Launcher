@@ -5,7 +5,9 @@
  * before renderer.js, and required as CommonJS by the node:test suite.
  */
 
+// An overrides.json title (attached as _override) replaces the archive.org one
 function getTitle(game) {
+  if (game._override?.title) return game._override.title;
   const t = Array.isArray(game.title) ? game.title[0] : game.title;
   return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
 }
