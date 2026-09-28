@@ -205,10 +205,32 @@ function getThumb(game) {
 
 const thumbUrlCache = {};
 
+// Cap concurrent thumbnail cache fetches so a big grid doesn't flood archive.org
+const THUMB_CONCURRENCY = 4;
+let thumbActive = 0;
+const thumbQueue = [];
+function withThumbSlot(fn) {
+  return new Promise((resolve, reject) => {
+    const run = () => {
+      thumbActive++;
+      fn().then(resolve, reject).finally(() => {
+        thumbActive--;
+        thumbQueue.shift()?.();
+      });
+    };
+    thumbActive < THUMB_CONCURRENCY ? run() : thumbQueue.push(run);
+  });
+}
+
+const thumbInFlight = {};
+
 async function resolveThumb(identifier) {
   if (thumbUrlCache[identifier]) return thumbUrlCache[identifier];
+  // Re-renders reuse the pending request instead of queueing another
+  thumbInFlight[identifier] ??= withThumbSlot(() => window.electronAPI.getThumb({ identifier }))
+    .finally(() => { delete thumbInFlight[identifier]; });
   try {
-    const url = await window.electronAPI.getThumb({ identifier });
+    const url = await thumbInFlight[identifier];
     thumbUrlCache[identifier] = url;
     return url;
   } catch {
@@ -217,6 +239,7 @@ async function resolveThumb(identifier) {
 }
 
 function applyThumb(imgEl, identifier) {
+  imgEl.loading = 'lazy';
   imgEl.src = thumbUrlCache[identifier] || `https://archive.org/services/img/${identifier}`;
   resolveThumb(identifier).then(url => { if (imgEl.src !== url) imgEl.src = url; });
 }
@@ -788,26 +811,76 @@ async function onScanForGames() {
 }
 
 // ─── Fetch games from archive.org ─────────────────────────────────────────────
+const SEARCH_PAGE_SIZE = 500;
+const SEARCH_MAX_ITEMS = 10000;  // advancedsearch won't page past this
+const SEARCH_TIMEOUT   = 30000;
+const SEARCH_RETRIES   = 3;
+
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// GET JSON with a timeout; retries 429/5xx/network errors with backoff,
+// honouring Retry-After when archive.org sends one.
+async function fetchJsonWithRetry(url) {
+  let lastErr;
+  for (let attempt = 0; attempt <= SEARCH_RETRIES; attempt++) {
+    const ctrl  = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT);
+    try {
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (res.ok) return await res.json();
+      lastErr = new Error(res.status === 429 ? 'rate limited by archive.org (HTTP 429)' : `HTTP ${res.status}`);
+      if (res.status !== 429 && res.status < 500) throw lastErr;
+      const retryAfter = Number(res.headers.get('Retry-After'));
+      if (attempt < SEARCH_RETRIES) await sleep(retryAfter > 0 ? retryAfter * 1000 : 2000 * 2 ** attempt);
+    } catch (e) {
+      if (e === lastErr) throw e;
+      lastErr = e.name === 'AbortError' ? new Error('archive.org timed out') : e;
+      if (attempt < SEARCH_RETRIES) await sleep(2000 * 2 ** attempt);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastErr;
+}
+
+// All items for one uploader, paging past the per-request row limit
+async function fetchSource(src) {
+  const docs = [];
+  for (let page = 1; docs.length < SEARCH_MAX_ITEMS; page++) {
+    const params = new URLSearchParams({
+      q:      `uploader:${src.uploader} mediatype:software`,
+      fl:     'identifier,title,description,date,addeddate,downloads,subject',
+      rows:   String(SEARCH_PAGE_SIZE),
+      page:   String(page),
+      output: 'json',
+    });
+    const json  = await fetchJsonWithRetry(`${ARCHIVE_SEARCH}?${params}`);
+    const batch = json?.response?.docs || [];
+    docs.push(...batch);
+    if (batch.length < SEARCH_PAGE_SIZE || docs.length >= (json?.response?.numFound || 0)) break;
+  }
+  return docs.map(d => ({ ...d, _sourceLabel: src.label || src.uploader }));
+}
+
 async function fetchGames() {
   renderSkeletonCards(8);
   try {
+    // One source at a time so archive.org sees a trickle, not a burst
     const enabled = sources.filter(s => s.enabled !== false);
-    const results = await Promise.allSettled(enabled.map(async src => {
-      const params = new URLSearchParams({
-        q:      `uploader:${src.uploader} mediatype:software`,
-        fl:     'identifier,title,description,date,addeddate,downloads,subject',
-        rows:   '500',
-        start:  '0',
-        output: 'json',
-      });
-      const res  = await fetch(`${ARCHIVE_SEARCH}?${params}`);
-      const json = await res.json();
-      return (json?.response?.docs || []).map(d => ({ ...d, _sourceLabel: src.label || src.uploader }));
-    }));
-    if (enabled.length && results.every(r => r.status === 'rejected')) throw results[0].reason;
-    results.forEach((r, i) => {
-      if (r.status === 'rejected') console.warn(`Source ${enabled[i].uploader} failed:`, r.reason);
-    });
+    const results = [];
+    for (const src of enabled) {
+      try {
+        results.push({ status: 'fulfilled', value: await fetchSource(src) });
+      } catch (e) {
+        console.warn(`Source ${src.uploader} failed:`, e);
+        results.push({ status: 'rejected', reason: e, src });
+      }
+    }
+    const failed = results.filter(r => r.status === 'rejected');
+    if (enabled.length && failed.length === enabled.length) throw failed[0].reason;
+    if (failed.length) {
+      showToast(`Couldn't load ${failed.map(r => r.src.label || r.src.uploader).join(', ')}: ${failed[0].reason.message}`, 8000);
+    }
 
     // Flatten in source order, drop repeated identifiers, then group by title
     const seen = new Set();
