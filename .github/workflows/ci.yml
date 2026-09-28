@@ -97,7 +97,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Launches the app with e2e/sources.txt seeded into settings.json;
+      # Launches the app with the shipped DEFAULT_SOURCES and with a # line;
       # archive.org is served from e2e/fixtures, so no network flakiness
       - name: Sources end-to-end test
         run: xvfb-run -a npm run test:e2e

@@ -26,13 +26,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # E2E_SOURCES holds the full list (emails included) as pasted into
-      # Settings; when the secret is unset the test uses e2e/sources.txt
       - name: Sources end-to-end test (live archive.org)
         run: xvfb-run -a npm run test:e2e
         env:
           E2E_LIVE: '1'
-          E2E_SOURCES: ${{ secrets.E2E_SOURCES }}
 
       - name: Upload Playwright report
         if: ${{ failure() }}
