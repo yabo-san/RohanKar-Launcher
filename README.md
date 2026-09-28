@@ -81,6 +81,10 @@ checks for updates against a `latest.yml` on the `gh-pages` branch, served at
    `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`. Stable
    never moves automatically.
 
+To roll a channel back, revert the `gh-pages` PR that moved it. Installed
+copies stop being offered the bad version on their next check. Copies that
+already updated stay on it, since the updater doesn't downgrade.
+
 Each installer and its `latest.yml` carry a build provenance attestation. To
 check that a download was built by this repo's Release workflow:
 
