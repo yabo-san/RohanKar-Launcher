@@ -28,6 +28,41 @@ jobs:
       - name: Syntax check
         run: find src -name '*.js' -print0 | xargs -0 -n1 node --check
 
+      # Runs the unit tests; fails if sources.js drops below 80% lines/branches/functions
+      - name: Tests with coverage
+        id: coverage
+        shell: bash
+        run: npm run test:coverage --silent | tee test-output.txt
+
+      # Turn node's coverage table into markdown for the PR comment.
+      # test:coverage pins the spec reporter, whose report lines start with "ℹ ".
+      - name: Coverage summary
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        shell: bash
+        env:
+          OUTCOME: ${{ steps.coverage.outcome }}
+        run: |
+          {
+            if [ "$OUTCOME" = "success" ]; then
+              echo "Thresholds (80% lines, branches, functions): **passed**"
+            else
+              echo "Thresholds (80% lines, branches, functions): **failed**, see the \`check\` job"
+            fi
+            echo
+            echo "| File | Line % | Branch % | Funcs % |"
+            echo "|---|---:|---:|---:|"
+            sed -n '/start of coverage report/,/end of coverage report/p' test-output.txt \
+              | grep -E '^ℹ .*\|' | sed 's/^ℹ //' \
+              | awk -F'|' '$2 ~ /[0-9]/ { for (i = 1; i <= 4; i++) gsub(/^ +| +$/, "", $i); print "| " $1 " | " $2 " | " $3 " | " $4 " |" }'
+          } > coverage.md
+
+      - name: Upload coverage summary
+        if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-summary
+          path: coverage.md
+
   build:
     runs-on: windows-latest
     steps:
@@ -91,12 +126,18 @@ jobs:
           ' trivy-results.sarif >> "$GITHUB_OUTPUT"
 
   report:
-    needs: [trivy]
+    needs: [check, trivy]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
     steps:
+      - name: Download coverage summary
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-summary
+
       - name: Compose report
         env:
           TRIVY_RESULT: ${{ needs.trivy.result }}
@@ -105,6 +146,14 @@ jobs:
         run: |
           {
             echo "## CI report"
+            echo
+            echo "### Coverage: src/renderer/sources.js"
+            echo
+            if [ -f coverage.md ]; then
+              cat coverage.md
+            else
+              echo "No coverage summary; the \`check\` job stopped before the tests ran."
+            fi
             echo
             echo "### Trivy: dependency vulnerabilities (HIGH/CRITICAL, non-blocking)"
             echo
