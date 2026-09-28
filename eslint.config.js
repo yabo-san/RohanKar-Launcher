@@ -28,4 +28,19 @@ module.exports = [
       'no-useless-assignment': 'off',     // baseline: dead initial value for hints in renderer.js
     },
   },
+  {
+    // Defined in sources.js, which index.html loads before renderer.js
+    files: ['src/renderer/renderer.js'],
+    languageOptions: {
+      globals: {
+        getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        titleKey: 'readonly', preferredVersion: 'readonly', versionLabel: 'readonly',
+      },
+    },
+  },
+  {
+    // module.exports is guarded by typeof, for the node:test suite
+    files: ['src/renderer/sources.js'],
+    languageOptions: { globals: { module: 'writable' } },
+  },
 ];
