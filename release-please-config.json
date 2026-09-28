@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "98f8eda009113927fcbb063dd7a2327475023d1d",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "rohankar-launcher",
+      "include-component-in-tag": false,
+      "draft": true,
+      "force-tag-creation": true
+    }
+  }
+}
