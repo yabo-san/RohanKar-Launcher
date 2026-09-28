@@ -6,8 +6,7 @@
  *   are the ones queried, and each of them loads its games.
  * - Saved list with a # line: the disabled uploader is never queried.
  *
- * Fixture mode (default) serves archive.org from fixtures/search.json.
- * Live mode (E2E_LIVE=1) hits the real archive.org.
+ * archive.org is served from fixtures/search.json by archive-stub.js.
  */
 
 const { test, expect, _electron: electron } = require('@playwright/test');
@@ -15,8 +14,6 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { DEFAULT_SOURCES, formatSources } = require('../src/renderer/sources.js');
-
-const LIVE = process.env.E2E_LIVE === '1';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -36,7 +33,7 @@ async function launch(settings) {
   // fetchGames goes one source at a time; done once the grid holds cards or a
   // message. (An empty grid isn't enough: that's also the state before init runs.)
   await page.locator('#library-grid .game-card, #library-grid .loading-msg').first()
-    .waitFor({ timeout: LIVE ? 180_000 : 30_000 });
+    .waitFor({ timeout: 30_000 });
 
   const close = async () => {
     await app.close();
@@ -80,8 +77,7 @@ test.describe('fresh install uses the shipped sources', () => {
     await expect(ctx.page.locator('#library-grid .game-card')).toHaveCount(groups);
   });
 
-  test('fixtures: the same game from two uploaders is one card with both versions', async () => {
-    test.skip(LIVE, 'fixture data only');
+  test('the same game from two uploaders is one card with both versions', async () => {
     const zoo = await ctx.page.evaluate(() =>
       allGames.find(g => g.identifier === 'rk-e2e-zoo-tycoon')?._versions.map(v => v._sourceLabel));
     expect(zoo).toEqual(['rohanjackson071', 'pstriple']);
