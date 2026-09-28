@@ -15,7 +15,6 @@
 
 // ─── Archive.org API ──────────────────────────────────────────────────────────
 
-const ARCHIVE_SEARCH = 'https://archive.org/advancedsearch.php';
 // Used when settings.json has no `sources` key
 const DEFAULT_SOURCES = [
   { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
@@ -227,25 +226,44 @@ function withThumbSlot(fn) {
 }
 
 const thumbInFlight = {};
+const thumbFailed   = new Set();  // not retried this session, so a 429 isn't hammered
 
+// Disk-cached cover (file:// URL) for an item, or null if it couldn't be fetched.
+// Each cover is downloaded from archive.org at most once.
 async function resolveThumb(identifier) {
   if (thumbUrlCache[identifier]) return thumbUrlCache[identifier];
+  if (thumbFailed.has(identifier)) return null;
   // Re-renders reuse the pending request instead of queueing another
   thumbInFlight[identifier] ??= withThumbSlot(() => window.electronAPI.getThumb({ identifier }))
+    .catch(() => null)
     .finally(() => { delete thumbInFlight[identifier]; });
-  try {
-    const url = await thumbInFlight[identifier];
-    thumbUrlCache[identifier] = url;
-    return url;
-  } catch {
-    return `https://archive.org/services/img/${identifier}`;
-  }
+  const url = await thumbInFlight[identifier];
+  if (url) thumbUrlCache[identifier] = url;
+  else     thumbFailed.add(identifier);
+  return url;
 }
 
+const THUMB_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+// Covers are only fetched once their card is near the viewport
+const thumbObserver = new IntersectionObserver((entries) => {
+  for (const entry of entries) {
+    if (!entry.isIntersecting) continue;
+    const imgEl = entry.target;
+    thumbObserver.unobserve(imgEl);
+    const id = imgEl.dataset.thumbId;
+    resolveThumb(id).then(url => { if (url && imgEl.dataset.thumbId === id) imgEl.src = url; });
+  }
+}, { rootMargin: '200px' });
+
 function applyThumb(imgEl, identifier) {
-  imgEl.loading = 'lazy';
-  imgEl.src = thumbUrlCache[identifier] || `https://archive.org/services/img/${identifier}`;
-  resolveThumb(identifier).then(url => { if (imgEl.src !== url) imgEl.src = url; });
+  imgEl.dataset.thumbId = identifier;
+  if (thumbUrlCache[identifier]) {
+    imgEl.src = thumbUrlCache[identifier];
+    return;
+  }
+  imgEl.src = THUMB_PLACEHOLDER;
+  if (!thumbFailed.has(identifier)) thumbObserver.observe(imgEl);
 }
 
 function getLocalHero(identifier) {
@@ -817,32 +835,25 @@ async function onScanForGames() {
 // ─── Fetch games from archive.org ─────────────────────────────────────────────
 const SEARCH_PAGE_SIZE = 500;
 const SEARCH_MAX_ITEMS = 10000;  // advancedsearch won't page past this
-const SEARCH_TIMEOUT   = 30000;
 const SEARCH_RETRIES   = 3;
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// GET JSON with a timeout; retries 429/5xx/network errors with backoff,
-// honouring Retry-After when archive.org sends one.
-async function fetchJsonWithRetry(url) {
+// Advanced search via the main process (30s timeout, responses logged to
+// archive-net.log). Retries 429/5xx/network errors, waiting Retry-After when
+// archive.org sends it and backing off 2s/4s/8s when it doesn't.
+async function searchWithRetry(params) {
   let lastErr;
   for (let attempt = 0; attempt <= SEARCH_RETRIES; attempt++) {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), SEARCH_TIMEOUT);
-    try {
-      const res = await fetch(url, { signal: ctrl.signal });
-      if (res.ok) return await res.json();
-      lastErr = new Error(res.status === 429 ? 'rate limited by archive.org (HTTP 429)' : `HTTP ${res.status}`);
-      if (res.status !== 429 && res.status < 500) throw lastErr;
-      const retryAfter = Number(res.headers.get('Retry-After'));
-      if (attempt < SEARCH_RETRIES) await sleep(retryAfter > 0 ? retryAfter * 1000 : 2000 * 2 ** attempt);
-    } catch (e) {
-      if (e === lastErr) throw e;
-      lastErr = e.name === 'AbortError' ? new Error('archive.org timed out') : e;
-      if (attempt < SEARCH_RETRIES) await sleep(2000 * 2 ** attempt);
-    } finally {
-      clearTimeout(timer);
-    }
+    const r = await window.electronAPI.archiveSearch({ params });
+    if (r.status === 200 && r.json) return r.json;
+    lastErr = new Error(
+      r.status === 429 ? 'rate limited by archive.org (HTTP 429)'
+      : r.status        ? `HTTP ${r.status}`
+      :                   (r.error || 'network error'));
+    const retryable = r.status === 0 || r.status === 429 || r.status >= 500 || r.status === 200;
+    if (!retryable) throw lastErr;
+    if (attempt < SEARCH_RETRIES) await sleep(r.retryAfter ? r.retryAfter * 1000 : 2000 * 2 ** attempt);
   }
   throw lastErr;
 }
@@ -851,14 +862,13 @@ async function fetchJsonWithRetry(url) {
 async function fetchSource(src) {
   const docs = [];
   for (let page = 1; docs.length < SEARCH_MAX_ITEMS; page++) {
-    const params = new URLSearchParams({
+    const json  = await searchWithRetry({
       q:      `uploader:${src.uploader} mediatype:software`,
       fl:     'identifier,title,description,date,addeddate,downloads,subject',
       rows:   String(SEARCH_PAGE_SIZE),
       page:   String(page),
       output: 'json',
     });
-    const json  = await fetchJsonWithRetry(`${ARCHIVE_SEARCH}?${params}`);
     const batch = json?.response?.docs || [];
     docs.push(...batch);
     if (batch.length < SEARCH_PAGE_SIZE || docs.length >= (json?.response?.numFound || 0)) break;
@@ -1291,8 +1301,10 @@ async function selectGame(game) {
   }
   heroTitle.textContent = title;
 
-  resolveThumb(game.identifier).then(url => setDetailCover(url));
-  setDetailCover(thumbUrl);
+  setDetailCover(thumbUrlCache[game.identifier] || null);
+  resolveThumb(game.identifier).then(url => {
+    if (url && selectedGame?.identifier === game.identifier) setDetailCover(url);
+  });
   detailTitle.textContent = title;
 
   const date      = game.date ? new Date(game.date).getFullYear() : '-';

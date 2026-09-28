@@ -55,6 +55,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Thumbnail cache
   getThumb:        (opts) => ipcRenderer.invoke('get-thumb', opts),
+  archiveSearch:   (opts) => ipcRenderer.invoke('archive-search', opts),
 
   // Scan for pre-existing installs
   scanForGames:    (opts) => ipcRenderer.invoke('scan-for-games', opts),
