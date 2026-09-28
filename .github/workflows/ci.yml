@@ -2,6 +2,9 @@ name: CI
 
 on:
   pull_request:
+    # gh-pages PRs are update-channel files, no code to check
+    branches:
+      - main
 
 permissions:
   contents: read

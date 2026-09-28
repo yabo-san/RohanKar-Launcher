@@ -1002,6 +1002,9 @@ ipcMain.handle('delete-game', async (_, { identifier, installDir }) => {
 
 // Releases for this build live on the fork, not upstream
 const RELEASES_REPO = 'yabo-san/RohanKar-Launcher';
+// latest.yml per channel, served from the gh-pages branch
+const UPDATE_CHANNEL_BASE = 'https://yabo-san.github.io/RohanKar-Launcher';
+let availableVersion = null;
 
 function setupAutoUpdater() {
   if (!app.isPackaged) {
@@ -1025,12 +1028,17 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload         = false; // don't auto-download — GitHub releases don't report progress
   autoUpdater.allowDowngrade        = false;
 
+  const channel = loadSettings().betaUpdates ? 'beta' : 'stable';
+  autoUpdater.setFeedURL({ provider: 'generic', url: `${UPDATE_CHANNEL_BASE}/${channel}/` });
+  console.log(`[updater] Channel: ${channel}`);
+
   autoUpdater.on('checking-for-update', () => {
     console.log('[updater] Checking for update…');
   });
 
   autoUpdater.on('update-available', (info) => {
     console.log('[updater] Update available:', info.version);
+    availableVersion = info.version;
 
     // Fetch release notes from GitHub API
     const releaseUrl = `https://api.github.com/repos/${RELEASES_REPO}/releases/tags/v${info.version}`;
@@ -1090,10 +1098,12 @@ function setupAutoUpdater() {
 
 }  
 
-// IPC: renderer asks to download update — always registered, opens GitHub releases page
+// IPC: renderer asks to download update — always registered, opens GitHub releases page.
+// Fork releases are GitHub pre-releases, which /releases/latest skips, so link the tag.
 ipcMain.removeHandler('updater-install');
 ipcMain.handle('updater-install', () => {
-  shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/latest`);
+  const page = availableVersion ? `tag/v${availableVersion}` : 'latest';
+  shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/${page}`);
 });
 
 // ─── Add to Steam ───────────────────────────────────────────────────────────

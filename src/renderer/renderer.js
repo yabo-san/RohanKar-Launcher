@@ -705,6 +705,7 @@ async function openSettings() {
   installedFirstCheck.checked       = !!s.installedFirst;
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
   document.getElementById('setting-check-updates').checked = !!s.checkForUpdates;
+  document.getElementById('setting-beta-updates').checked  = !!s.betaUpdates;
   document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
   settingsModal.classList.remove('hidden');
 }
@@ -724,6 +725,7 @@ async function saveSettings() {
     showInstalledBadge:  showInstalledBadgeCheck.checked,
     sources:             newSources,
     checkForUpdates:     document.getElementById('setting-check-updates').checked,
+    betaUpdates:         document.getElementById('setting-beta-updates').checked,
   });
   installedFirst     = installedFirstCheck.checked;
   showInstalledBadge = showInstalledBadgeCheck.checked;

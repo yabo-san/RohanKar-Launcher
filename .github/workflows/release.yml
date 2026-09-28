@@ -4,6 +4,8 @@ name: Release
 # worked out from conventional commit messages (feat:, fix:, feat!: ...).
 # Merging that PR tags the version and opens a draft release; the Windows
 # installer is then built and attached to it. Publish the draft by hand.
+# Last, a PR against gh-pages moves the beta update channel to the new version;
+# stable only moves by a hand-made PR (see README, Releases).
 on:
   push:
     branches:
@@ -67,3 +69,41 @@ jobs:
             dist/*-Setup-*.exe.blockmap \
             dist/latest.yml \
             --clobber
+
+      - name: Keep latest.yml for the beta channel PR
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-yml
+          path: dist/latest.yml
+
+  beta-channel:
+    needs: [release-please, build]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Download latest.yml
+        uses: actions/download-artifact@v4
+        with:
+          name: latest-yml
+          path: beta
+
+      - name: Open PR updating beta/latest.yml
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          BRANCH="channel/beta-$TAG"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -c "$BRANCH"
+          git add beta/latest.yml
+          git commit -m "chore: beta channel to $TAG"
+          git push -u origin "$BRANCH"
+          gh pr create --base gh-pages --head "$BRANCH" \
+            --title "chore: beta channel to $TAG" \
+            --body "Points beta/latest.yml at $TAG. Merge once the $TAG release is published. Stable stays where it is until a promotion PR copies beta/latest.yml to stable/latest.yml."
