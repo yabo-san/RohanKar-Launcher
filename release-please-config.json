@@ -7,7 +7,10 @@
       "package-name": "rohankar-launcher",
       "include-component-in-tag": false,
       "draft": true,
-      "force-tag-creation": true
+      "force-tag-creation": true,
+      "versioning": "prerelease",
+      "prerelease": true,
+      "prerelease-type": "fork.0"
     }
   }
 }
