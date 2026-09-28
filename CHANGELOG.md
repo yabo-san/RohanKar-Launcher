@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.1](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.0...v1.6.0-fork.1) (2026-09-28)
+
+
+### Bug Fixes
+
+* always write latest.yml, also for -fork versions ([b881dc3](https://github.com/yabo-san/RohanKar-Launcher/commit/b881dc3140da243bb8ce916c080e3dd95a818c60))
+* channel files point at the release assets by absolute URL ([5d15c57](https://github.com/yabo-san/RohanKar-Launcher/commit/5d15c57c96ecd9b246de239a39997ee299c1f4b8))
+
 ## [1.6.0-fork.0](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.5.0...v1.6.0-fork.0) (2026-09-28)
 
 

@@ -1,6 +1,6 @@
 {
   "name": "rohankar-launcher",
-  "version": "1.6.0-fork.0",
+  "version": "1.6.0-fork.1",
   "description": "RohanKar Game Launcher",
   "author": "Kilted-Kraken",
   "main": "src/main/main.js",
@@ -9,11 +9,13 @@
     "lint": "eslint .",
     "test": "node --test",
     "test:coverage": "node --test --test-reporter=spec --experimental-test-coverage --test-coverage-include=src/renderer/sources.js --test-coverage-include=src/main/overrides.js --test-coverage-lines=80 --test-coverage-branches=80 --test-coverage-functions=80",
+    "test:e2e": "playwright test",
     "build": "electron-builder",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "electron": "^40.8.0",
     "electron-builder": "^26.8.1",
     "eslint": "^10.11.0",
