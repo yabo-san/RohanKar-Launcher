@@ -34,7 +34,8 @@ jobs:
         shell: bash
         run: npm run test:coverage --silent | tee test-output.txt
 
-      # Turn node's coverage table into markdown for the PR comment
+      # Turn node's coverage table into markdown for the PR comment.
+      # test:coverage pins the spec reporter, whose report lines start with "ℹ ".
       - name: Coverage summary
         if: ${{ !cancelled() && steps.coverage.outcome != 'skipped' }}
         shell: bash
@@ -51,7 +52,7 @@ jobs:
             echo "| File | Line % | Branch % | Funcs % |"
             echo "|---|---:|---:|---:|"
             sed -n '/start of coverage report/,/end of coverage report/p' test-output.txt \
-              | grep -E '^# .*\|' | sed 's/^# //' \
+              | grep -E '^ℹ .*\|' | sed 's/^ℹ //' \
               | awk -F'|' '$2 ~ /[0-9]/ { for (i = 1; i <= 4; i++) gsub(/^ +| +$/, "", $i); print "| " $1 " | " $2 " | " $3 " | " $4 " |" }'
           } > coverage.md
 
