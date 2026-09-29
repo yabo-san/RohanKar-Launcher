@@ -1,0 +1,23 @@
+{
+  "_comment": "Owner-confirmed collisions: catalog entry name -> IA content spec. Spec = '<identifier>' (auto-pick largest zip/7z/rar) OR '<identifier>::<exact/file/path>' (a file inside a bundle item). Run dev/ia-wire.py to inject iaIdentifier + contentUrl into apps.json (content-first: IA = durable PRIMARY, GitHub repository = fragile FALLBACK/updater). Add matches here as the owner finds them in dev/ia-cards.html.",
+  "Perfect Dark (Dab's Mod + HD Textures)": "perfect-dark-windows::Perfect Dark [Windows].tar",
+  "Quake II (vkQuake2)": "quakeresources::QuakeResources/quake2/gamedata/quake2.zip",
+  "OutRun (Cannonball)": "outrun-cannonball::CannonBall/cannonball-v034-w64.zip",
+  "Duke Nukem Zero Hour: Recompiled": "duke-nukem-zero-hour-recompiled_RC26::Duke Nukem Zero Hour.zip",
+  "Zelda: Ocarina of Time (Ship of Harkinian)": "ship-of-harkinian::ZELOOTD.zip",
+  "Raze": "raze_20220416::raze.zip",
+  "Perfect Dark": "pd-i686-windows::pd-i686-windows.zip",
+  "Bomberman 64: Recompiled": "bomberman-64_recompiled::Bomberman 64 Recompiled/Bomberman 64.zip",
+  "Banjo-Kazooie: Recompiled": "banjo-kazooie-recompiled.-7z::Banjo Kazooie Recompiled.7z",
+  "Zelda: Twilight Princess (dusk)": "twilight-princess-ddsk::Dusklight (v1.4.1).zip",
+  "UT2004 (OldUnreal UT2004 Patch)": "ut-2004_202509::UT2004.7z",
+  "Sonic 1 & 2 (2013 Decompilation)": "proper-sonic-origins::proper-sonic-origins/Sonic_2013_RSDKv4.zip",
+  "Diablo (DevilutionX)": "devilutionx-gamedata::gamedata.zip",
+  "Sonic CD Miracle Edition": "sonic-cd-miracle-edition.-7z_202508",
+  "Sonic Unleashed: Recompiled": "sonic-unleashed-recompiled_202603",
+  "Sonic 2 Absolute": "proper-sonic-origins::proper-sonic-origins/Sonic2Absolute.zip",
+  "Sonic 3 A.I.R.": "proper-sonic-origins::proper-sonic-origins/Sonic3AIR.zip",
+  "Sonic 1 Forever": "proper-sonic-origins::proper-sonic-origins/SonicForever.zip",
+  "Sonic CD (2011) Decompilation": "proper-sonic-origins::proper-sonic-origins/SonicCD_2011_RSDKv3.zip",
+  "Prey (Prey2006)": "prey_20240410"
+}

@@ -1,0 +1,140 @@
+{
+  "_comment": "yabo's Internet Archive curation seed (the L2 'repack' source; IA = core, same fetch->extract->launch loop as GitHub releases). TWO kinds of entries: 'uploaders' = curated repackers whose whole catalog yabo indexes via IA search (resolve @handle -> uploads with the official `internetarchive` python lib); 'items' = specific owner/user-pinned IA items (the 'users can add their own IA links' path). Same curation pattern as favorite-artists.json: the load-bearing part is trusting good repacks, not the plumbing. 2026-09-25: 'produces' = PcRepack | Rom | GameData | EmuBundle (what the account's items are, decides where they land); 'handles' = every IA account the same person uses, Seen is shared across them; 'titleExclude' = substring that drops noise items.",
+  "uploaders": [
+    {
+      "handle": "rohanjackson071",
+      "url": "https://archive.org/search?query=uploader%3A%22rohanjackson071%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "rohanjackson071@gmail.com",
+      "note": "Seed (owner-vouched): the uploader RohanKar Launcher tracks; real preservation."
+    },
+    {
+      "handle": "r4zel1ght",
+      "url": "https://archive.org/search?query=uploader%3A%22spideymaster661%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "spideymaster661@gmail.com",
+      "note": "Owner-vouched repacker (2026-06-02). RESOLVED: the @r4zel1ght full-text search only finds 2 items MENTIONING him; his real uploads are under uploader:spideymaster661@gmail.com = 17 items (Castlevania Lords of Shadow trilogy, Dark Souls PTDE, Metal Gear Rising, Prototype 2, Silent Hill Homecoming, Power Rangers BFTG, Ninja Five-O...). AAA console-port repacker. Indexer queries uploader:<email>."
+    },
+    {
+      "handle": "Infidelity",
+      "query": "creator:\"Infidelity\"",
+      "url": "https://archive.org/search?query=creator%3A%22Infidelity%22",
+      "addedBy": "owner",
+      "uploaderEmail": null,
+      "note": "Owner-added 2026-06-02. NOTE: tracked by IA `creator:` field (a search query), NOT an @handle/uploader email — the indexer must run `search_items('creator:\"Infidelity\"')`. Known romhacker."
+    },
+    {
+      "handle": "samuel_gomes668",
+      "url": "https://archive.org/search?query=uploader%3A%22gomes.samuel%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "gomes.samuel@gmail.com",
+      "note": "Owner-vouched GOLDMINE (2026-06-02). RESOLVED: @samuel_gomes668 = uploader gomes.samuel@gmail.com (a740g's favorites) = 22 items, heavy on CLASSIC FPS / source-port content: Doom (+WADs), Quake II/III, Hexen II, Blood II, Prey, NAM, Chrome, Fatal Racing, 007 Nightfire. HIGH collision potential with our existing source ports (Hexen II->uHexen2, Quake II->vkQuake2, Prey->Prey2006, NAM->NBlood, Doom->our Doom ports)."
+    },
+    {
+      "handle": "goblan1.0",
+      "url": "https://archive.org/search?query=uploader%3A%22goblan1.0%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "goblan1.0@gmail.com",
+      "produces": "PcRepack",
+      "track": false,
+      "note": "NOT TRACKED (owner 2026-09-27): posts an installer, not a real repack (Sega Rally 2 25th Anniversary, credited creator OldNewPixel), and IA hosting can vanish. Name kept for reference only. Earlier: Owner-vouched 2026-09-24: the uploader RohanKar's script also tracks. PC repacks. Stays even though 0 of his items are on the drive yet."
+    },
+    {
+      "handle": "chadmaster",
+      "url": "https://archive.org/search?query=uploader%3A%22chad.master%40outlook.pt%22",
+      "addedBy": "owner",
+      "uploaderEmail": "chad.master@outlook.pt",
+      "produces": "Rom",
+      "note": "Owner-vouched 2026-09-25. 63 items, 11 TB. The DATA-half supplier for ports: proper-sonic-origins, devilutionx-gamedata, outrun-cannonball, ship-of-harkinian, quakeresources, DOOM WADs, BIOS sets, CHD platform sets (Redump). Skip items over ~60 GB when hunting one ROM."
+    },
+    {
+      "handle": "thiago86",
+      "formerHandle": "lawlessb991",
+      "url": "https://archive.org/search?query=uploader%3A%22lawlessb991%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "lawlessb991@gmail.com",
+      "produces": "PcRepack",
+      "titleExclude": "discography",
+      "note": "RENAMED: @lawlessb991 is now @thiago86 (confirmed 2026-09-27: thiago86 items carry uploader lawlessb991@gmail.com; the old @ page is dead). Owner: 'actual goat of repacks'. Some items already show as Deleted, so grab wanted ones into Drop early. Owner-vouched 2026-09-25 (found via mega-pack-raze-fps). 137 items, 235 GB: GOG repacks (Dino Crisis, RE, Silent Hill 4, MGS 1/2, NOLF trilogy, Chex Quest), GTA preinstalls, Raze + Build mega pack, wolfenstein-2009-and-fixes. ~40 metal discographies and some leaks in the same account: filter titles containing 'discography'."
+    },
+    {
+      "handle": "d118",
+      "url": "https://archive.org/search?query=uploader%3A%22224915%40d118.org%22",
+      "addedBy": "owner",
+      "uploaderEmail": "224915@d118.org",
+      "produces": "GameData",
+      "note": "Owner-vouched 2026-09-25. Three known items, all data halves for id-tech and Build: raze-package (1.6 GB, NO Raze inside despite the name), raze_1.2.1, gzdoom_202109 (5.4 GB GZDoom Collection: every Doom/Heretic/Hexen/Strife IWAD variant, Wadsmoosh). Handle unknown; the email is what the items carry."
+    },
+    {
+      "handle": "hailstormttv",
+      "handles": [
+        "hailstormttv",
+        "tirednonfire"
+      ],
+      "url": "https://archive.org/search?query=uploader%3A%22frankiemiqueli1%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "frankiemiqueli1@gmail.com",
+      "produces": "EmuBundle",
+      "note": "Also shows as PSTRIPLE (owner 2026-09-27; wanted in the RohanKar uploader list). Email confirmed 2026-09-27 via BBLauncher (Bloodborne on shadPS4, 31 GB): same 48 items. Owner-vouched 2026-09-25, rohan's friend, one person with two accounts (tirednonfire mirrors three of the same items). 48 + 3 items, ~540 GB, all since June 2026: RPCS3 + game bundles preconfigured (Uncharted 2, GoW Ascension, Demon's Souls, Killzone 2 and Resistance with online revived, Infamous 1/2, Ratchet Future, Modnation, Motorstorm), shadPS4 bundles (Godzilla), PCSX2 Sly 1, Skate 3 Recompiled. Produces=EmuBundle is a NEW kind: install = extract, play = the emulator exe inside the bundle with the game as argument. Do not subscribe until the C# ArtifactKind has it, or every item imports as a broken PC repack. Email not exposed: the uploads list comes from the profile search backend by handle (services/search/beta/page_production, page_type=account_details, page_target=@handle)."
+    },
+    {
+      "handle": "eldritchpenumbra",
+      "url": "https://archive.org/details/@eldritchpenumbra",
+      "addedBy": "owner",
+      "uploaderEmail": null,
+      "produces": "PcRepack",
+      "titleInclude": "Windows|Linux|Wine|Batocera",
+      "titleExclude": "DVD|MiSTer|WUP|GOD|XBLA|PS2|PS3|PSX",
+      "note": "Owner-vouched 2026-09-25, PC STUFF ONLY (owner's asterisk). 900 items, 1.3 TB, 2025-26; every title carries a bracketed platform tag, which is what the include/exclude match. The PC-tagged ~144 are mirrors of port RELEASES repackaged per platform: recomps (Wet, Valkyrie Profile, SF EX2, Mega Man 64, Super Metroid), PsyDOOM, ReDriver 2, Klonoa, Daggerfall Unity, Doom TCs, Perfect Dark + texture pack. That makes him binary-half insurance: when a GitHub repo vanishes the last release usually survives here (Link's Awakening DX HD v2.0.6 after BigheadSMZ went 404). His raw PS3 ISOs and 360 GoD are not useful on their own: those platforms only work through a GAME-SPECIFIC emulator fork (shadPS4 fork for one game, e.g. GRFork for Gravity Rush, a Bloodborne one; ReXGlue for 360; RPCS3 forks), and that fork is the port half of a collision with the dump as the data half. Single AOL account, no second handle."
+    },
+    {
+      "handle": "hansel98",
+      "url": "https://archive.org/details/@hansel98",
+      "addedBy": "owner",
+      "uploaderEmail": null,
+      "produces": "Rom",
+      "enabled": false,
+      "note": "WATCH ONLY, owner 2026-09-25: track, do not import into the catalogue. 184 items, 79 GB, 2023-26, Latino romhack and homebrew scene: Wii homebrew PORTS (GTA Vice City Wii, PvZ Wii, TheXTech Wii, sm64coopdx), Mario Kart Wii Deluxe X, Project M and SSBM builds, MKDD mods, N64 hacks (Smash Remix, Pokemon Kart 64), SMW hacks, Spanish patches (RE4 Latino, Simpsons Hit and Run Latino). Relevant when a Wii port of something in the catalogue appears; the subscription refresher can diff his list without any of it landing anywhere."
+    },
+    {
+      "handle": "spuntik80",
+      "url": "https://archive.org/search?query=uploader%3A%22spuntick80%40outlook.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "spuntick80@outlook.com",
+      "produces": "GameData",
+      "titleInclude": "USA|Europe",
+      "enabled": false,
+      "note": "Owner-flagged 2026-09-25. RETAIL PC DISC IMAGES, Redump style: 1,172 items, 1.7 TB, 2021-23, one game per item as Disc.rar (a disc image inside) plus box and manual scans, titled Title_Region (Japan 445, USA 328, Europe 145, Germany 61, ...). This is the data half for every port that needs a retail install: Blood USA and Special Edition (NBlood/Raze), Duke Nukem 3D Atomic USA, Oddworld Abe's Oddysee USA (RELIVE), Arx Fatalis USA (Arx Libertatis), Theme Hospital USA (CorsixTH), Gothic II (OpenGothic), Heroes II Millennium USA (fheroes2), NOLF 1 and 2 USA, Carmageddon (Italy only), Pharaoh (China only), RCT1 Loopy Landscapes. No Tomb Raider 1, no RCT2, no Future Cop. DISABLED until the importer can stage files FROM a disc image (rar -> image -> the port's data files); today's acquisition kinds stop at extract-and-place. Include USA|Europe only; the Japanese half is mostly eroge."
+    },
+    {
+      "handle": "cacona",
+      "url": "https://archive.org/search?query=uploader%3A%22estoytodoloco%40gmail.com%22",
+      "addedBy": "owner",
+      "uploaderEmail": "estoytodoloco@gmail.com",
+      "note": "Owner 2026-09-27: 'treasure trove of RE stuff'. Resident Evil preservation archive: 942 items, 1.9 TB, 910 RE (every PC release, JP/CN editions, SourceNext/Mediakite, big boxes, Aydan Watkins mods, Switch versions, scans, OSTs). 148 PC items, 141 under 15 GB (Drop-sized). Mix of installs, disc images and mods: check each item. Profile page @cacona works."
+    },
+    {
+      "handle": null,
+      "url": "https://archive.org/search?query=uploader%3A%22xbox.live.psn%40hotmail.fr%22",
+      "addedBy": "owner",
+      "uploaderEmail": "xbox.live.psn@hotmail.fr",
+      "note": "Owner 2026-09-27. RE/horror PC: 16 items (every RE on PC incl. both HD Remasters and Classic Trilogy HD mods, JP Biohazard versions, Outlast Complete, Alone in the Dark: The New Nightmare). Profile hidden (item pages say 'Uploaded by Unknown'), browse via the email search. Mix of ISOs and installed builds. RE0 HD item id ends in a period: 'resident-evil-0-hd-remaster-pc.' (the no-dot twin is dark)."
+    }
+  ],
+  "items": [
+    {
+      "identifier": "sega-rally-2-25th-anniversary",
+      "url": "https://archive.org/details/sega-rally-2-25th-anniversary",
+      "title": "Sega Rally 2 (25th Anniversary)",
+      "addedBy": "owner",
+      "note": "Owner-added IA item (2026-06-02)."
+    },
+    {
+      "identifier": "proper-sonic-origins",
+      "url": "https://archive.org/details/proper-sonic-origins",
+      "title": "Sonic Origins (proper)",
+      "addedBy": "owner",
+      "note": "Owner-added IA item (2026-06-02). KEY: this IA repack SIDESTEPS the Sonic decompilation/RSDK port+data file-plumbing entirely — you get the whole game via download->extract->launch, no per-port ROM/data dance. Example of why IA-as-core 'opens up a lot and sidesteps stuff' (owner)."
+    }
+  ]
+}
