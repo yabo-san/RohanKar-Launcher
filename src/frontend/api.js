@@ -107,6 +107,7 @@ const api = (() => {
     getSettings:  async () => (await call('GET', '/settings')).body || {},
     saveSettings: (s) => call('PUT', '/settings', s),
     getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
+    getFeatured:  async () => (await call('GET', '/featured')).body?.picks || [],
 
     // Items: { items, errors }; throws when every source failed
     getItems: async (query = {}) => {

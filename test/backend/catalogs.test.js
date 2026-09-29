@@ -127,3 +127,11 @@ test('an unreadable collisions file joins nothing', async (t) => {
   const none = createCatalogs({ dir: path.join(dir, 'c3'), settings });
   assert.ok(none.items().every(i => i.data === null));
 });
+
+test('every collision joins a catalog entry on repository', () => {
+  const read = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../catalog', f), 'utf8'));
+  const catalog = read('catalog.json');
+  const repos = new Set((catalog.apps || catalog).map(e => entryKey({ repository: e.repository })));
+  const orphans = read('collisions.json').filter(c => !repos.has(entryKey({ repository: c.repository })));
+  assert.deepEqual(orphans.map(c => c.repository), []);
+});
