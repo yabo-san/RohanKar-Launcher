@@ -108,6 +108,8 @@ ALIASES = {
     "shadps-4-gr-2-branch": "Gravity Rush 2",
     "GRFork": "Gravity Rush Remastered",  # GR2fork build tagged "gravity rush 1" on archive.org
     "BBLauncher": "Bloodborne",  # Bloodborne on shadPS4, per catalog/uploaders.json
+    "Pokestadia": "Pokémon Stadium",  # the Pokémon Stadium recomp
+    "gen-1-recomp-guide-dramatic-shape-mod": "Pokémon Red Version",  # gen 1 recomp, not "GEN 2.1"
 }
 
 # Emulator names, build numbers and extras that bundle titles carry around the game.
