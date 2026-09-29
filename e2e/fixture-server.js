@@ -40,8 +40,10 @@ async function startFixtures() {
 }
 
 // Fixtures + backend on a fresh data dir holding `settings`.
-// Resolves { dataDir, pageUrl, close }; pageUrl opens the frontend on that backend.
-async function startStack(settings) {
+//   page:     the page to open under src/frontend/ (index.html is the classic UI)
+//   catalogs: Quiver list files to subscribe to first, as [{ file, shelf }]
+// Resolves { dataDir, pageUrl, base, close }; pageUrl opens the page on that backend.
+async function startStack(settings, { page = 'index.html', catalogs = [] } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-e2e-'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings, null, 2));
   const fixtures = await startFixtures();
@@ -51,13 +53,16 @@ async function startStack(settings) {
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
   ], {}, () => {});
-  const pageUrl = `${fixtures.base}/app/index.html?${new URLSearchParams({ api: backend.url, token: backend.token })}`;
+  for (const c of catalogs) {
+    await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });
+  }
+  const pageUrl = `${fixtures.base}/app/${page}?${new URLSearchParams({ api: backend.url, token: backend.token })}`;
   const close = async () => {
     await backend.stop();
     await fixtures.close();
     fs.rmSync(dataDir, { recursive: true, force: true });
   };
-  return { dataDir, pageUrl, close };
+  return { dataDir, pageUrl, base: fixtures.base, close };
 }
 
 module.exports = { startFixtures, startStack };

@@ -61,7 +61,13 @@ function createWindow({ url, token }) {
       additionalArguments: [`--launcher-api=${url}`, `--launcher-token=${token}`],
     },
   });
-  mainWindow.loadFile(path.join(__dirname, '../frontend/index.html'));
+  mainWindow.loadFile(path.join(__dirname, useClassicUi() ? '../frontend/index.html' : '../frontend/new/index.html'));
+}
+
+// The new UI is the default; "ui": "legacy" in settings.json (the toggle in
+// either UI's Settings) or RK_UI=legacy opens the classic one
+function useClassicUi() {
+  return process.env.RK_UI === 'legacy' || loadSettings().ui === 'legacy';
 }
 
 app.whenReady().then(async () => {

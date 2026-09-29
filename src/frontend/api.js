@@ -5,7 +5,8 @@
  * /v1 API (docs/API.md). Where it runs:
  *   - the desktop app: preload.js sets window.launcher = { apiBase, token }
  *   - a plain browser: index.html?api=http://127.0.0.1:<port>/v1&token=<token>
- * Loaded as a plain <script> before renderer.js, which calls `api.*`.
+ * Loaded as a plain <script> before renderer.js (the classic UI) or
+ * new/app.js (the new one), which call `api.*`.
  */
 
 const api = (() => {
@@ -142,6 +143,24 @@ const api = (() => {
       const r = await call('POST', '/library/scan', {});
       return r.ok ? r.body : { found: [], error: r.body?.detail };
     },
+
+    // Library rows for items that aren't installed (catalog ports)
+    addToLibrary:      ({ id, source }) => call('POST', '/library', { id, source }),
+    removeFromLibrary: async ({ id }) => {
+      const r = await call('DELETE', `/library/${enc(id)}`);
+      return r.ok || r.status === 404 ? { ok: true } : failure(r);
+    },
+
+    // Catalogs (Quiver lists) and what changed in them
+    getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],
+    subscribeCatalog: async ({ url, name, shelf }) => {
+      const r = await call('POST', '/catalogs', { url, name, shelf });
+      return r.ok ? r.body : null;
+    },
+    refreshCatalog:  async (id) => (await call('POST', `/catalogs/${enc(id)}/refresh`)).body,
+    getCatalogItems: async (id) => (await call('GET', `/catalogs/${enc(id)}/items`)).body?.items || [],
+    reviewCatalog:   async (id) => (await call('GET', `/catalogs/${enc(id)}/review`)).body || { new: [], changed: [], removed: [] },
+    markCatalogSeen: (id) => call('POST', `/catalogs/${enc(id)}/seen`),
 
     // Collections
     getCollections:   async () => (await call('GET', '/collections')).body?.collections || [],

@@ -22,6 +22,9 @@ new UI is written against it too.
 How the frontend finds it:
 
 - In the desktop app, `preload.js` sets `window.launcher = { apiBase, token }`.
+- The desktop app opens `src/frontend/new/index.html` (the new UI) unless settings say
+  `"ui": "legacy"`, then `src/frontend/index.html` (the classic one). Both take the same
+  connection details.
 - In a plain browser, pass both in the page URL:
   `src/frontend/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
   server (the e2e tests use `e2e/fixture-server.js`).
@@ -174,6 +177,16 @@ Fetch again. A failed fetch keeps the last good copy and sets `error`.
 ```sh
 curl -X POST http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/refresh
 # {"id":"8c1f0e2a9b3d","entries":215,"error":null,…}
+```
+
+### `GET /catalogs/:id/items`
+
+That catalog's entries as items (the same shape as catalog items in `GET /items`, with library
+state joined in), without waiting for archive.org.
+
+```sh
+curl http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/items
+# {"items":[{"id":"quiver:8c1f0e2a9b3d:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Nintendo","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
 ```
 
 ### `GET /catalogs/:id/review`

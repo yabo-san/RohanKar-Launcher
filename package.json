@@ -34,7 +34,8 @@
       "src/**/*",
       "assets/**/*",
       "overrides.json",
-      "catalog/uploaders.json"
+      "catalog/uploaders.json",
+      "catalog/collisions.json"
     ],
     "extraResources": [
       {
