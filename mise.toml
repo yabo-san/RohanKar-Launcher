@@ -11,13 +11,31 @@ run = [
   "find src -name '*.js' -print0 | xargs -0 -n1 node --check",
 ]
 
+[tasks.backend]
+description = "The standalone backend on 127.0.0.1:5170 (token dev, data in .launcher-data)"
+run = "node scripts/dev.js backend"
+
+[tasks.frontend]
+description = "src/frontend on 127.0.0.1:5173, pointed at the backend task"
+run = "node scripts/dev.js frontend"
+
+[tasks.dev]
+description = "Backend and frontend together in one process; prints the page URLs"
+run = "node scripts/dev.js"
+
 [tasks.test]
-description = "Unit tests with the 80% coverage gate"
+description = "Unit and API tests with the 80% coverage gate"
 run = "npm run test:coverage"
 
 [tasks.e2e]
-description = "Playwright e2e under xvfb, archive.org served from e2e/fixtures"
-run = "xvfb-run -a npm run test:e2e"
+description = "Browser e2e: the frontend in headless Chromium, archive.org served from e2e/fixtures"
+run = "npm run test:e2e"
+
+[tasks.smoke]
+description = "The packaged smoke test against the unpacked Linux build, under xvfb"
+depends = ["build-dir"]
+env = { E2E_APP = "dist/linux-unpacked/rohankar-launcher" }
+run = "xvfb-run -a npx playwright test"
 
 [tasks.build-dir]
 description = "Unpacked Linux build in dist/linux-unpacked (no installer)"

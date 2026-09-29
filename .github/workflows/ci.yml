@@ -44,6 +44,7 @@ jobs:
               - *shared
               - 'src/backend/**'
               - 'test/**'
+              - 'scripts/dev.js'
             # The frontend's e2e runs against the backend, so API changes run it too
             frontend:
               - *shared

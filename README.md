@@ -93,14 +93,26 @@ The container runs everything a PR check runs:
 | Task | Runs |
 |---|---|
 | `mise run lint` | ESLint and a syntax check of `src` |
-| `mise run test` | Unit tests with the 80% coverage gate |
-| `mise run e2e` | Playwright tests headless under xvfb, archive.org served from `e2e/fixtures` |
+| `mise run test` | Unit and API tests with the 80% coverage gate |
+| `mise run e2e` | The frontend in headless Chromium against the standalone backend, archive.org served from `e2e/fixtures` |
 | `mise run build-dir` | An unpacked Linux build in `dist/linux-unpacked` |
+| `mise run smoke` | `build-dir`, then the packaged smoke test that CI runs on the Windows build, under xvfb |
 | `trivy fs --scanners vuln --severity HIGH,CRITICAL .` | The dependency scan |
 
-The smoke test that CI runs on the Windows build also runs against the Linux
-one: `E2E_APP=dist/linux-unpacked/rohankar-launcher mise run e2e` after
-`mise run build-dir`.
+To work on the app without Electron:
+
+| Task | Runs |
+|---|---|
+| `mise run dev` | The backend and the frontend together, and prints the page URLs |
+| `mise run backend` | Only the backend, on `127.0.0.1:5170` |
+| `mise run frontend` | Only `src/frontend`, on `127.0.0.1:5173`, pointed at the backend task |
+
+Open the printed URL in a browser: `new/index.html` is the new interface and
+`index.html` the classic one. The backend keeps its data in `.launcher-data/`
+and uses the token `dev`, so the URLs stay the same across restarts
+(`LAUNCHER_PORT`, `FRONTEND_PORT`, `LAUNCHER_TOKEN` and `LAUNCHER_DATA_DIR`
+change that). Folder pickers, the Recycle Bin, Add to Steam and the updater
+need the desktop app and answer 501 here. The API is in [docs/API.md](docs/API.md).
 
 To see the app, run `npm start` on Windows. The Windows installer comes only
 from `release.yml` on `windows-latest`; nothing in the container builds it.
