@@ -325,6 +325,20 @@ test('GET /sources: catalog defaults, fetched from main or bundled; a saved list
   assert.deepEqual(await none.getDefaultSources(), [], 'empty fetch and no bundled copy: no defaults');
 });
 
+test('GET /featured: the picks from main, else the bundled copy', async (t) => {
+  const { call, backend, fake } = await testApi(t);
+  const bundled = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'catalog', 'featured.json'), 'utf8')).picks;
+  const { body } = await call('GET', '/featured');
+  assert.equal(body.picks.length, bundled.length);
+  assert.ok(body.picks.every(p => p.identifier || p.repository));
+
+  fake.routes['/featured.json'] = (req, res) => { res.writeHead(200); res.end('{"picks":[{"identifier":"a","blurb":"Hi"},{"repository":"Owner/Repo"},{"nope":1}]}'); };
+  const { createBackend } = require('../../src/backend');
+  const other = createBackend({ dataDir: backend.dataDir + '-f', archiveBase: fake.base, featuredUrl: `${fake.base}/featured.json`, log: () => {} });
+  t.after(() => { other.close(); fs.rmSync(backend.dataDir + '-f', { recursive: true, force: true }); });
+  assert.deepEqual(await other.getFeatured(), [{ identifier: 'a', blurb: 'Hi' }, { repository: 'owner/repo', blurb: null }]);
+});
+
 test('os: window, open-external, add-to-steam, updater go to the host; 501 standalone', async (t) => {
   const calls = [];
   const { call, backend } = await testApi(t, {
