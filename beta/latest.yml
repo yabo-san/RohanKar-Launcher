@@ -1,8 +1,8 @@
-version: 1.6.0-fork.4
+version: 1.6.0-fork.5
 files:
-  - url: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.4/RohanKar-Launcher-Setup-1.6.0-fork.4.exe
-    sha512: 0PwgLqZQTIY/H5YNX4oFmqlLMmqW32xyFbZtdpKxiVvb8fFlIPx+ZVbIlwGjxhgqr5QuPQDndGDLw9aeoK0uHw==
-    size: 100187544
-path: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.4/RohanKar-Launcher-Setup-1.6.0-fork.4.exe
-sha512: 0PwgLqZQTIY/H5YNX4oFmqlLMmqW32xyFbZtdpKxiVvb8fFlIPx+ZVbIlwGjxhgqr5QuPQDndGDLw9aeoK0uHw==
-releaseDate: '2026-09-29T03:33:55.060Z'
+  - url: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.5/RohanKar-Launcher-Setup-1.6.0-fork.5.exe
+    sha512: JrAhswfd6roT50gfMMMakBKdGVCcDZS3plILavhu+WzswHtACb2udpa6svMwgyAJjsxPOMHDEqOJ9j0GC6sjSg==
+    size: 100188372
+path: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.5/RohanKar-Launcher-Setup-1.6.0-fork.5.exe
+sha512: JrAhswfd6roT50gfMMMakBKdGVCcDZS3plILavhu+WzswHtACb2udpa6svMwgyAJjsxPOMHDEqOJ9j0GC6sjSg==
+releaseDate: '2026-09-29T04:06:35.044Z'
