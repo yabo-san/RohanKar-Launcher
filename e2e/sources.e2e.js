@@ -2,7 +2,8 @@
 /**
  * End-to-end: launch the app the way a user gets it and check the sources.
  *
- * - Fresh install (no `sources` in settings.json): the shipped DEFAULT_SOURCES
+ * - Fresh install (no `sources` in settings.json): the defaults from the bundled
+ *   catalog/uploaders.json
  *   are the ones queried, and each of them loads its games.
  * - Saved list with a # line: the disabled uploader is never queried.
  *
@@ -13,7 +14,11 @@ const { test, expect, _electron: electron } = require('@playwright/test');
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
-const { DEFAULT_SOURCES, formatSources } = require('../src/renderer/sources.js');
+const { sourcesFromCatalog, formatSources } = require('../src/renderer/sources.js');
+
+// What a fresh install defaults to: the bundled catalog (the stub 404s the fetched copy)
+const DEFAULT_SOURCES = sourcesFromCatalog(require('../catalog/uploaders.json'));
+const ENABLED         = DEFAULT_SOURCES.filter(s => s.enabled);
 
 test.describe.configure({ mode: 'serial' });
 
@@ -63,7 +68,7 @@ test.describe('fresh install uses the shipped sources', () => {
   });
 
   test('each shipped source is queried and loads its games', async () => {
-    const expected = DEFAULT_SOURCES.filter(s => s.enabled !== false);
+    const expected = ENABLED;
     await expect.poll(() => searchedUploaders(ctx.userData).length).toBe(expected.length);
     expect(searchedUploaders(ctx.userData).sort()).toEqual(expected.map(s => s.uploader).sort());
 
@@ -80,7 +85,7 @@ test.describe('fresh install uses the shipped sources', () => {
   test('the same game from two uploaders is one card with both versions', async () => {
     const zoo = await ctx.page.evaluate(() =>
       allGames.find(g => g.identifier === 'rk-e2e-zoo-tycoon')?._versions.map(v => v._sourceLabel));
-    expect(zoo).toEqual(['rohanjackson071', 'pstriple']);
+    expect(zoo).toEqual(['rohanjackson071', 'hailstormttv']);
     await expect(ctx.page.locator('#library-grid .game-card')).toHaveCount(6);
   });
 });
@@ -88,17 +93,17 @@ test.describe('fresh install uses the shipped sources', () => {
 test.describe('a # line in the saved list is skipped', () => {
   const disabled = { uploader: 'disabled-uploader@example.invalid', label: 'disabled', enabled: false };
   let ctx;
-  test.beforeAll(async () => { ctx = await launch({ sources: [DEFAULT_SOURCES[0], disabled] }); });
+  test.beforeAll(async () => { ctx = await launch({ sources: [ENABLED[0], disabled] }); });
   test.afterAll(async () => { await ctx?.close(); });
 
   test('only the enabled source is queried', async () => {
     await ctx.page.locator('#btn-settings').click();
-    await expect(ctx.page.locator('#setting-sources')).toHaveValue(formatSources([DEFAULT_SOURCES[0], disabled]));
+    await expect(ctx.page.locator('#setting-sources')).toHaveValue(formatSources([ENABLED[0], disabled]));
     await ctx.page.keyboard.press('Escape');
 
     await expect.poll(() => searchedUploaders(ctx.userData).length).toBe(1);
-    expect(searchedUploaders(ctx.userData)).toEqual([DEFAULT_SOURCES[0].uploader]);
+    expect(searchedUploaders(ctx.userData)).toEqual([ENABLED[0].uploader]);
     const labels = await ctx.page.evaluate(() => [...new Set(allVersions.map(g => g._sourceLabel))]);
-    expect(labels).toEqual([DEFAULT_SOURCES[0].label]);
+    expect(labels).toEqual([ENABLED[0].label]);
   });
 });

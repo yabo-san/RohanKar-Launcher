@@ -5,12 +5,18 @@
  * before renderer.js, and required as CommonJS by the node:test suite.
  */
 
-// Shipped sources, used when settings.json has no `sources` key
-const DEFAULT_SOURCES = [
-  { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
-  { uploader: 'frankiemiqueli1@gmail.com', label: 'pstriple',        enabled: true },
-  { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
-];
+// Default sources from catalog/uploaders.json. An entry is on only when it is
+// marked launcher: true, not track: false, and has an uploaderEmail (what
+// archive.org's uploader: field matches); everything else ships off.
+function sourcesFromCatalog(data) {
+  const list = Array.isArray(data?.uploaders) ? data.uploaders : [];
+  return list.map(u => {
+    const uploader = u?.uploaderEmail || u?.handle;
+    if (!uploader) return null;
+    const enabled = u.launcher === true && u.track !== false && !!u.uploaderEmail;
+    return { uploader, label: u.handle || uploader.split('@')[0], enabled };
+  }).filter(Boolean);
+}
 
 // An overrides.json title (attached as _override) replaces the archive.org one
 function getTitle(game) {
@@ -54,5 +60,5 @@ function versionLabel(v) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { DEFAULT_SOURCES, getTitle, parseSources, formatSources, titleKey, preferredVersion, versionLabel };
+  module.exports = { sourcesFromCatalog, getTitle, parseSources, formatSources, titleKey, preferredVersion, versionLabel };
 }
