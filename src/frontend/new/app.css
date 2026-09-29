@@ -84,7 +84,7 @@ button { font: inherit; color: inherit; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 22px 18px; }
 .row { display: grid; grid-auto-flow: column; grid-auto-columns: 148px; gap: 18px; overflow-x: auto; padding: 6px 0 10px; margin-top: -6px; scrollbar-width: none; }
 .row::-webkit-scrollbar { display: none; }
-.row.dragging { cursor: grabbing; scroll-behavior: auto; }
+.row.dragging { cursor: grabbing; scroll-behavior: auto; scroll-snap-type: none; }
 .row.dragging .card { pointer-events: none; }
 .row img { -webkit-user-drag: none; }
 .has-row .section-head { align-items: center; }
@@ -281,7 +281,8 @@ button { font: inherit; color: inherit; }
   position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; margin: 0; padding: 40px 14px 12px; font-size: 12px; line-height: 1.4; color: #fff;
   background: linear-gradient(transparent, rgba(0, 0, 0, .75));
 }
-.row.list { grid-auto-columns: 300px; grid-template-rows: repeat(4, auto); gap: 4px 28px; }
+.row.list { grid-auto-columns: 280px; grid-template-rows: repeat(4, auto); gap: 4px 28px; scroll-snap-type: x mandatory; }
+.list-item { scroll-snap-align: start; }
 .list-item { display: flex; align-items: center; gap: 12px; padding: 6px 4px; border-radius: var(--rad-ctl); }
 .list-item:hover { transform: none; background: var(--fill); }
 .list-item .art { width: 40px; flex: none; aspect-ratio: 1; border-radius: 6px; background-size: cover; background-position: center; }

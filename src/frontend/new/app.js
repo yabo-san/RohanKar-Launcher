@@ -327,7 +327,20 @@ function syncRowNav(row) {
   nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
   nav.querySelector('.next').disabled = row.scrollLeft >= max - 1;
 }
-const syncRows = () => document.querySelectorAll('#body .row').forEach(syncRowNav);
+const syncRows = () => {
+  document.querySelectorAll('#body .row.list').forEach(layoutList);
+  document.querySelectorAll('#body .row').forEach(syncRowNav);
+};
+
+// A list row fills the width in columns (as many ~280px columns as fit), up to
+// four items deep, then pages sideways like the other rows
+const LIST_COL = 280, LIST_GAP = 28, LIST_DEPTH = 4;
+function layoutList(row) {
+  const n = row.children.length;
+  const cols = Math.max(1, Math.floor((row.clientWidth + LIST_GAP) / (LIST_COL + LIST_GAP)));
+  row.style.gridTemplateRows = `repeat(${Math.min(LIST_DEPTH, Math.ceil(n / cols))}, auto)`;
+  row.style.gridAutoColumns = `calc((100% - ${(cols - 1) * LIST_GAP}px) / ${cols})`;
+}
 
 function scrollRow(btn) {
   const row = btn.closest('.section').querySelector('.row');
