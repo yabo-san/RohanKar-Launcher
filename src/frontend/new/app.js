@@ -503,6 +503,56 @@ function viewLibrary() {
   return html;
 }
 
+// New: what landed most recently, laid out like Cider's New page. A wide
+// feature carousel, a compact list, then this week's uploads and new ports.
+const FEATURED = 8;
+const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
+
+function featureCard(g) {
+  const v = newestVersion(g);
+  const n = g._versions?.length || 1;
+  const blurb = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description).replace(/\s+/g, ' ').trim();
+  return `<button class="card feature-card" data-open="game" data-id="${esc(g.identifier)}">
+    <div class="eyebrow">${n > 1 ? 'New version' : 'New upload'}</div>
+    <div class="title">${esc(getTitle(g))}</div>
+    <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div>
+    <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}">
+      ${blurb ? `<p>${esc(blurb.length > 110 ? `${blurb.slice(0, 107)}…` : blurb)}</p>` : ''}
+    </div>
+  </button>`;
+}
+
+function listItem(g) {
+  const v = newestVersion(g);
+  return `<button class="card list-item" data-open="game" data-id="${esc(g.identifier)}">
+    <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}"></div>
+    <div class="grow"><div class="title">${esc(getTitle(g))}</div>
+    <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div></div>
+  </button>`;
+}
+
+function viewNew() {
+  let html = wallNotice();
+  const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
+  if (!newest.length) return html + (state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>');
+
+  // A short wall still leaves something for the list
+  const featured = Math.min(FEATURED, Math.max(2, Math.ceil(newest.length / 3)));
+  html += `<section class="section has-row feature-sec"><div class="row feature">${newest.slice(0, featured).map(featureCard).join('')}</div>${rowNav}</section>`;
+
+  const rest = newest.slice(featured, featured + 40);
+  if (rest.length) html += section('Recently added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
+
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const week = newest.filter(g => String(newestVersion(g).addeddate || '') >= weekAgo);
+  if (week.length) html += section('New this week', week.slice(0, 24).map(gameCard).join(''), { count: week.length, cls: 'row' });
+
+  const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
+  const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
+  if (newPorts.length) html += section('New ports', newPorts.map(portCard).join(''), { count: newPorts.length, cls: 'row ports', seeAll: ['updates'] });
+  return html;
+}
+
 function viewUpdates() {
   let html = `<div class="toolbar"><span style="color:var(--text2)">What changed in the catalogs since you last looked. Nothing updates itself; you decide.</span>
     <span class="grow"></span><button class="btn" data-action="refresh-ports">Check catalogs now</button>
@@ -561,13 +611,14 @@ function viewSearch(q) {
   return html;
 }
 
-const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings' };
+const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings' };
 
 function render() {
   const v = state.view;
   pagedGrid.pending = {};
   let html;
   if (state.query) html = viewSearch(state.query);
+  else if (v.name === 'new') html = viewNew();
   else if (v.name === 'wall') html = viewWall(null);
   else if (v.name === 'uploader') html = viewWall(v.arg);
   else if (v.name === 'shelf') html = viewShelf(v.arg);

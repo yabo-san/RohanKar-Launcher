@@ -88,6 +88,7 @@ button { font: inherit; color: inherit; }
 .row.dragging .card { pointer-events: none; }
 .row img { -webkit-user-drag: none; }
 .has-row .section-head { align-items: center; }
+
 .row-nav { display: flex; gap: 8px; margin-left: auto; }
 .seeall ~ .row-nav { margin-left: 0; }
 .row-nav[hidden] { display: none; }
@@ -260,6 +261,32 @@ button { font: inherit; color: inherit; }
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .12); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ---- New: feature carousel and compact list (Cider's New page) ---- */
+.feature-sec { margin-top: 12px; }
+.row.feature { grid-auto-columns: calc((100% - 18px) / 2); scroll-snap-type: x mandatory; }
+.feature-sec .row-nav { justify-content: center; margin: 12px 0 0; }
+.feature-card { scroll-snap-align: start; }
+.feature-card:hover { transform: none; }
+.feature-card .eyebrow { font-size: 10px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--text2); }
+.feature-card .title { margin-top: 3px; font-size: 16px; font-weight: 600; }
+.feature-card .sub { font-size: 13px; margin-top: 1px; }
+.feature-card .art {
+  position: relative; margin-top: 10px; aspect-ratio: 16 / 9; border-radius: var(--rad-card); overflow: hidden;
+  background-size: cover; background-position: center 25%; transition: box-shadow .16s ease;
+}
+.feature-card .art img { position: absolute; inset: 0; object-position: center 25%; }
+.feature-card:hover .art { box-shadow: 0 14px 34px rgba(0, 0, 0, .6); }
+.feature-card .art p {
+  position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; margin: 0; padding: 40px 14px 12px; font-size: 12px; line-height: 1.4; color: #fff;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .75));
+}
+.row.list { grid-auto-columns: 300px; grid-template-rows: repeat(4, auto); gap: 4px 28px; }
+.list-item { display: flex; align-items: center; gap: 12px; padding: 6px 4px; border-radius: var(--rad-ctl); }
+.list-item:hover { transform: none; background: var(--fill); }
+.list-item .art { width: 40px; flex: none; aspect-ratio: 1; border-radius: 6px; background-size: cover; background-position: center; }
+.list-item .grow { min-width: 0; }
+.list-item .title { margin-top: 0; }
 
 @media (max-width: 860px) {
   .sidebar { width: 72px; padding: 12px 6px; }

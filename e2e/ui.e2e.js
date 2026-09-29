@@ -10,6 +10,8 @@
  * - Install downloads, extracts and registers an archive.org game.
  * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
  *   the Left/Right keys, and a drag doesn't open a card.
+ * - New shows the latest uploads: a feature carousel, then a compact list,
+ *   newest first.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -87,6 +89,23 @@ test("Home's rows scroll without a scrollbar", async () => {
   await page.keyboard.press('ArrowLeft');
   await expect(row.locator('.card').nth(4)).toBeFocused();
   await page.setViewportSize({ width: 1280, height: 800 });
+});
+
+test('New leads with the latest uploads, newest first', async () => {
+  await page.locator('[data-view="new"]').click();
+  await expect(page.locator('#heading')).toHaveText('New');
+  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
+  const groups = new Set(docs.map(d => titleKey(d))).size;
+  const features = page.locator('#body .feature-card');
+  const items = page.locator('#body .list-item');
+  await expect(features).toHaveCount(Math.max(2, Math.ceil(groups / 3)));
+  await expect(items).toHaveCount(groups - await features.count());
+  const dates = await page.locator('#body .feature-card .sub, #body .list-item .sub')
+    .evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
+  expect(dates).toEqual([...dates].sort().reverse());
+  await items.first().click();
+  await expect(page.locator('#detail')).not.toHaveClass(/hidden/);
+  await page.keyboard.press('Escape');
 });
 
 test('a Ports shelf comes from its Quiver list, joined to the collision catalog', async () => {
