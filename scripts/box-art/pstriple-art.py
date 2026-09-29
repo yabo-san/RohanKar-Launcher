@@ -102,6 +102,7 @@ ALIASES = {
     "INFAMOUS1RPCS3": "inFAMOUS",
     "IronMan2-RPCS3": "Iron Man 2",
     "shadps-4-gr-2-branch": "Gravity Rush 2",
+    "GRFork": "Gravity Rush Remastered",  # GR2fork build tagged "gravity rush 1" on archive.org
     "BBLauncher": "Bloodborne",  # Bloodborne on shadPS4, per catalog/uploaders.json
 }
 
