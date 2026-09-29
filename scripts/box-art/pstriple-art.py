@@ -78,12 +78,31 @@ def items():
     return res.get("response", {}).get("docs", [])
 
 
+# Titles too abbreviated or misspelled for the search, by archive.org identifier.
+ALIASES = {
+    "SpidermanWOS": "Spider-Man: Web of Shadows",
+    "ResistanceOnline": "Resistance: Fall of Man",
+    "TOKYOJUNGLERPCS3": "Tokyo Jungle",
+    "pcsx-2-sly-1": "Sly Cooper and the Thievius Raccoonus",
+    "rpcs-3-latest-mod-nation-racers-online": "ModNation Racers",
+    "INFAMOUS1RPCS3": "inFAMOUS",
+    "IronMan2-RPCS3": "Iron Man 2",
+    "shadps-4-gr-2-branch": "Gravity Rush 2",
+}
+
+# Emulator names, build numbers and extras that bundle titles carry around the game.
+JUNK = [
+    r"R[PC]{2}S\s?3", r"PCSX\s?2", r"Shad\s?PS\s?4", r"Recompiled", r"Preconfigured", r"Bundle",
+    r"Online Revived", r"Build[- ]?(\d[\d.]*(\s\d+)?)?", r"Latest", r"Patched", r"Multiplayer",
+    r"Revived", r"DLC", r"ONLINE",
+]
+
+
 def game_name(title):
-    # Bundle titles carry the emulator and extras; keep the game.
     t = re.sub(r"\[.*?\]|\(.*?\)", "", title)
     t = re.split(r"\s[-|:]\s|\+", t)[0]
-    for junk in ["RPCS3", "shadPS4", "PCSX2", "Recompiled", "Preconfigured", "Bundle", "Online Revived"]:
-        t = re.sub(r"\b" + re.escape(junk) + r"\b", "", t, flags=re.I)
+    for junk in JUNK:
+        t = re.sub(r"\b" + junk + r"\b", "", t, flags=re.I)
     return re.sub(r"\s+", " ", t).strip(" -:")
 
 
@@ -91,7 +110,11 @@ def cover(term):
     s = sgdb("/search/autocomplete/" + urllib.parse.quote(term))
     if not s or not s.get("data"):
         return None, None, None, None
-    game = s["data"][0]
+    # Skip emulator entries, which match any title that still mentions one.
+    games = [g for g in s["data"] if "(Emulator)" not in g["name"]]
+    if not games:
+        return None, None, None, None
+    game = games[0]
     grids = (sgdb(f"/grids/game/{game['id']}?dimensions=600x900&types=static") or {}).get("data") or []
     fav = [g for g in grids if str((g.get("author") or {}).get("steam64") or "") in RANK]
     if not fav:
@@ -105,7 +128,7 @@ rows = []
 docs = items()
 print(f"{len(docs)} items from pstriple", flush=True)
 for d in docs:
-    term = game_name(d.get("title") or d["identifier"])
+    term = ALIASES.get(d["identifier"]) or game_name(d.get("title") or d["identifier"])
     matched, url, artist, style = cover(term)
     rows.append([d["identifier"], d.get("title", ""), term, matched or "", artist or "", style or "", url or ""])
 
