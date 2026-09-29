@@ -134,5 +134,14 @@
   },
   "BLUR-MULTIPLAYER": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/30e920df8099c4feb835211451c3aa62.png"
+  },
+  "BBLauncher": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/021399af062379408df9c358a1a83cdb.png"
+  },
+  "godzilla-shadps4": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
+  },
+  "godzilla-shadps4_202607": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
   }
 }
