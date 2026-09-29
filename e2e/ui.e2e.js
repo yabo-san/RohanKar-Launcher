@@ -8,6 +8,8 @@
  *   collisions.json; a list that can't be fetched shows as unreachable.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
+ * - A port installs: the Windows build from its GitHub release, then its game
+ *   data from archive.org, staged and sha1-checked (Perfect Dark).
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -18,6 +20,7 @@ const fs   = require('fs');
 const path = require('path');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 const { startStack } = require('./fixture-server');
+const { PD_ROM } = require('./fixtures');
 const fixtures = require('./fixtures/search.json');
 
 const ENABLED = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
@@ -29,7 +32,7 @@ let stack, page;
 test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, {
     page: 'new/index.html',
-    catalogs: [{ file: 'Nintendo.json', shelf: 'Nintendo' }, { file: 'Xbox.json', shelf: 'Xbox' }],
+    catalogs: [{ file: 'Nintendo.json', shelf: 'Nintendo' }, { file: 'Xbox.json', shelf: 'Xbox' }, { file: 'TestPorts.json', shelf: 'Test ports' }],
   });
   page = await browser.newPage();
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[frontend] ${m.text()}`); });
@@ -87,6 +90,18 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   const lib = await page.evaluate(() => api.getLibrary());
   expect(Object.values(lib).some(l => l.install_dir)).toBe(true);
   await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+});
+
+test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
+  await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
+  await page.locator('#btn-install-port').click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const dir = path.join(stack.dataDir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  expect(fs.readFileSync(path.join(dir, 'data', 'pd.ntsc-final.z64'), 'utf8')).toBe(PD_ROM);
+  expect(fs.existsSync(path.join(dir, 'pd.exe'))).toBe(true);
+  await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
 

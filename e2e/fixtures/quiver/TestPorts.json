@@ -1,0 +1,16 @@
+{
+  "name": "Test ports",
+  "description": "Fixture: Perfect Dark as Quiver lists it",
+  "apps": [
+    {
+      "name": "Perfect Dark",
+      "project": "Perfect Dark PC Port",
+      "repository": "perfect-dark-pc-port/perfect_dark",
+      "folderName": "PerfectDark-PerfectDarkPCPort",
+      "tags": [
+        "decomp",
+        "n64"
+      ]
+    }
+  ]
+}

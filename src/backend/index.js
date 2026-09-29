@@ -15,7 +15,7 @@ const { createNetLog }   = require('./netlog');
 const { createLibrary }  = require('./library');
 const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
-const { createInstalls } = require('./installs');
+const { createInstalls, GITHUB_API } = require('./installs');
 const { createCatalogs } = require('./catalogs');
 const { createItems }    = require('./items');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
@@ -58,6 +58,7 @@ function createBackend({
   archiveBase = 'https://archive.org',
   overridesUrl = OVERRIDES_URL,
   uploadersUrl = UPLOADERS_URL,
+  githubApi = GITHUB_API,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
   playniteExportDelayMs = 250,
   host = {},
@@ -115,7 +116,7 @@ function createBackend({
   })());
 
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, heroesDir, archive, getOverrides, log: netlog.log });
-  const installs = createInstalls({ settings, library, archive, gamesDir, emit, log, netLog: netlog.log, platform });
+  const installs = createInstalls({ settings, library, archive, gamesDir, emit, log, netLog: netlog.log, platform, githubApi });
   const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, netLog: netlog.log, log });
   const items    = createItems({ archive, settings, catalogs, library, getOverrides, getDefaultSources, emit, log });
 

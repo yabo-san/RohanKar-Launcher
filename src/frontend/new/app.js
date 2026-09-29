@@ -638,6 +638,27 @@ function gameDetail(d) {
     </div>`;
 }
 
+// Install, progress and the installed actions for a port (library row keyed by its catalog id)
+const PORT_STEPS = { binary: 'the build from GitHub', data: 'the game data from archive.org' };
+function portActions(p) {
+  const dl = state.downloads.get(p.id);
+  if (dl) {
+    const what = dl.status === 'verifying' ? 'Checking game data…' : dl.status === 'extracting' ? 'Unpacking…' : 'Downloading…';
+    return `<button class="btn primary" disabled>${what}</button>${dl.status === 'downloading' ? '<button class="btn" data-action="cancel">Cancel</button>' : ''}`;
+  }
+  if (state.library[p.id]?.install_dir) {
+    return `<button class="btn primary" id="btn-play" data-action="play">Play</button>
+      <button class="btn" data-action="open-folder">Open folder</button>`;
+  }
+  return `<button class="btn primary" id="btn-install-port" data-action="install">Install</button>`;
+}
+function portProgress(p) {
+  const dl = state.downloads.get(p.id);
+  if (!dl) return state.library[p.id]?.install_dir ? `<div class="srcline"><b>Installed to</b> ${esc(state.library[p.id].install_dir)}</div>` : '';
+  return `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div>
+    <div class="progress-label">${esc(PORT_STEPS[dl.step] || '')} · ${dl.percent || 0}%</div>`;
+}
+
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
@@ -654,9 +675,10 @@ function portDetail(d) {
     <div class="d-body">
       <div class="actions">
         <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
-        <button class="btn" disabled title="Port installs are step 3 of docs/AGENT-BRIEF.md">Install</button>
+        ${portActions(p)}
         <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
       </div>
+      ${portProgress(p)}
       <div class="srcline">${data}</div>
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
@@ -696,6 +718,24 @@ async function installGame(v) {
   await reloadLibrary();
   if (job.status === 'done') toast(`${getTitle(v)} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`);
+  render();
+}
+
+async function installPort(p) {
+  if (state.downloads.has(p.id)) return;
+  const dl = { percent: 0, status: 'downloading', step: 'binary', jobId: null };
+  state.downloads.set(p.id, dl);
+  renderDetail();
+  const job = await api.install({
+    identifier:   p.id,
+    onStart:      (j) => { dl.jobId = j.id; },
+    onProgress:   (percent, j) => { Object.assign(dl, { percent, status: 'downloading', step: j.step }); renderDetail(); },
+    onExtracting: (j) => { Object.assign(dl, { percent: 100, status: j.status, step: j.step }); renderDetail(); },
+  });
+  state.downloads.delete(p.id);
+  await reloadLibrary();
+  if (job.status === 'done') toast(`${p.name} is installed.`);
+  else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
   render();
 }
 
@@ -747,9 +787,10 @@ async function saveSettingsForm() {
 
 async function onAction(action, el) {
   const d = state.detail;
-  const v = d?.version;
+  // A port acts through its library row, keyed by the catalog item id
+  const v = d?.version || (d?.port && { identifier: d.port.id, title: d.port.name });
   switch (action) {
-    case 'install': return installGame(v);
+    case 'install': return d?.port ? installPort(d.port) : installGame(v);
     case 'cancel': {
       const dl = state.downloads.get(v.identifier);
       if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId });

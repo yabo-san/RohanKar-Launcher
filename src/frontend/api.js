@@ -70,8 +70,8 @@ const api = (() => {
     on('install', (job) => {
       const w = jobWaiters.get(job.id);
       if (!w) return;
-      if (job.status === 'downloading') w.onProgress(job.percent);
-      if (job.status === 'extracting') w.onExtracting();
+      if (job.status === 'downloading') w.onProgress(job.percent, job);
+      if (job.status === 'extracting' || job.status === 'verifying') w.onExtracting(job);
       if (['done', 'error', 'cancelled'].includes(job.status)) {
         jobWaiters.delete(job.id);
         w.resolve(job);
@@ -177,12 +177,14 @@ const api = (() => {
     addGameToCollection:      ({ collectionId, identifier }) => call('PUT', `/collections/${collectionId}/items/${enc(identifier)}`),
     removeGameFromCollection: ({ collectionId, identifier }) => call('DELETE', `/collections/${collectionId}/items/${enc(identifier)}`),
 
-    // Installs one file of an item: download, extract, record. Resolves the
-    // finished job ({ status: done | error | cancelled, error, ... }).
-    // onStart(job) gets the job at once, so the caller can cancel it.
+    // Installs one file of an item (download, extract, record), or a catalog
+    // port when identifier is its quiver: id and fileName is left out. Resolves
+    // the finished job ({ status: done | error | cancelled, error, ... }).
+    // onStart(job) gets the job at once, so the caller can cancel it; a port's
+    // job says which step (binary, data) onProgress and onExtracting are for.
     install: async ({ identifier, fileName, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
       watchInstalls();
-      const r = await call('POST', '/installs', { id: identifier, files: [fileName] });
+      const r = await call('POST', '/installs', fileName ? { id: identifier, files: [fileName] } : { id: identifier });
       if (!r.ok) return { status: 'error', error: r.body?.detail || `HTTP ${r.status}` };
       const job = r.body.installs[0];
       onStart(job);

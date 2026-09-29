@@ -128,6 +128,7 @@ async function testBackend(t, { state, ...opts } = {}) {
     archiveBase: fake.base,
     overridesUrl: `${fake.base}/overrides.json`,
     uploadersUrl: `${fake.base}/uploaders.json`,
+    githubApi: fake.base,
     sleep: async () => {},
     log: () => {},
     ...opts,
