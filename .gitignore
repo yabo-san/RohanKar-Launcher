@@ -9,3 +9,4 @@ scripts/box-art/cache/
 scripts/box-art/*.csv
 .launcher-data/
 __pycache__/
+scripts/box-art/batch.md

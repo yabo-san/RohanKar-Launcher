@@ -1,14 +1,20 @@
 name: Box art report
 
-# Manual only: builds a CSV of curated-artist portrait covers for pstriple's
-# archive.org items. Never runs on push or PR, so PR checks never call
-# archive.org. The script paces archive.org at 1 request/s, honours
-# Retry-After, and writes nothing but the CSV; responses are cached across runs.
+# Manual only: finds curated-artist SteamGridDB art for pstriple's archive.org
+# items and opens one PR per batch that adds it to overrides.json (artUrl, plus
+# hero where a 1920x620 exists), with cover previews in the PR body. Never runs
+# on push or PR, so PR checks never call archive.org. The script paces
+# archive.org at 1 request/s and honours Retry-After; responses are cached
+# across runs. Run from any branch other than main, it only prints the diff.
+#
+# Repo setting required: Actions > General > "Allow GitHub Actions to create
+# and approve pull requests".
 on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
+  pull-requests: write
 
 concurrency:
   group: box-art
@@ -35,15 +41,39 @@ jobs:
       - name: Find covers
         env:
           STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
-        run: python3 scripts/box-art/pstriple-art.py scripts/box-art/favorite-artists.json
+        run: python3 scripts/box-art/pstriple-art.py
 
       # Also in the log and job summary, so the report can be read without downloading the artifact.
       - name: Show report
         run: |
           cat scripts/box-art/pstriple-art.csv
+          git diff overrides.json
+          cat scripts/box-art/batch.md >> "$GITHUB_STEP_SUMMARY"
           { echo '```csv'; cat scripts/box-art/pstriple-art.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         with:
           name: pstriple-art
-          path: scripts/box-art/pstriple-art.csv
+          path: |
+            scripts/box-art/pstriple-art.csv
+            scripts/box-art/batch.md
+
+      - name: Open batch PR
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet overrides.json; then
+            echo "No new art; no PR."
+            exit 0
+          fi
+          branch="box-art/batch-${{ github.run_number }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add overrides.json
+          git commit -m "feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})"
+          git push -u origin "$branch"
+          gh pr create --base main --head "$branch" \
+            --title "feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})" \
+            --body-file scripts/box-art/batch.md
