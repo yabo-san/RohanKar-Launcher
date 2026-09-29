@@ -90,8 +90,8 @@
     "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png"
   },
   "GRFork": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/cee0281e36d843e932cbabe3aaa22d50.png",
-    "title": "Gravity Rush 2"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/aa2a0ebe0de8c6f13f677ff6be223138.png",
+    "title": "Gravity Rush Remastered"
   },
   "folklore_rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/e6f695e4175268eca28621fb6fe05fe1.png"
@@ -131,5 +131,20 @@
   },
   "twilight-princess-ddsk": {
     "title": "The Legend of Zelda: Twilight Princess (Dusklight)"
+  },
+  "BLUR-MULTIPLAYER": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/30e920df8099c4feb835211451c3aa62.png"
+  },
+  "BBLauncher": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/021399af062379408df9c358a1a83cdb.png"
+  },
+  "godzilla-shadps4": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
+  },
+  "godzilla-shadps4_202607": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
+  },
+  "Pokestadia": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png"
   }
 }
