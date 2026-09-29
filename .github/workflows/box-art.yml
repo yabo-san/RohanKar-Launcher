@@ -11,6 +11,11 @@ name: Box art report
 # and approve pull requests".
 on:
   workflow_dispatch:
+    inputs:
+      grids:
+        description: 'Only look up these SteamGridDB grid ids (space-separated) and print their image URL and artist'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -30,8 +35,17 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Look up grids
+        if: inputs.grids != ''
+        env:
+          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
+          GRIDS: ${{ inputs.grids }}
+        run: |
+          python3 scripts/box-art/grid-lookup.py $GRIDS | tee -a "$GITHUB_STEP_SUMMARY"
+
       # A new key each run saves the updated cache; restore-keys picks up the latest one.
       - name: Restore response cache
+        if: inputs.grids == ''
         uses: actions/cache@v4
         with:
           path: scripts/box-art/cache
@@ -39,12 +53,14 @@ jobs:
           restore-keys: box-art-cache-
 
       - name: Find covers
+        if: inputs.grids == ''
         env:
           STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
         run: python3 scripts/box-art/pstriple-art.py
 
       # Also in the log and job summary, so the report can be read without downloading the artifact.
       - name: Show report
+        if: inputs.grids == ''
         run: |
           cat scripts/box-art/pstriple-art.csv
           echo '--- candidates.csv ---'
@@ -55,6 +71,7 @@ jobs:
           { echo '```csv'; cat scripts/box-art/pstriple-art.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
+        if: inputs.grids == ''
         with:
           name: pstriple-art
           path: |
@@ -63,7 +80,7 @@ jobs:
             scripts/box-art/batch.md
 
       - name: Open batch PR
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && inputs.grids == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
