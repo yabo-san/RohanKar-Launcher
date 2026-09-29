@@ -21,12 +21,12 @@ test('buildExport: one record per library row, ids, sources and platforms per ki
     },
     items: {
       a: { title: 'A Game', source: { type: 'archive.org', uploader: 'u@x' } },
-      'quiver:c1:x/sm64': { title: 'SM64 PC', shelf: 'Nintendo 64', source: { type: 'quiver', url: 'https://c/n.json', name: 'N' }, entry: { folderName: 'sm64ex' } },
+      'quiver:c1:x/sm64': { title: 'SM64 PC', shelf: 'Nintendo 64', source: { type: 'quiver', url: 'https://c/n.json', name: 'N' } },
     },
     tagsFor: (id) => (id === 'a' ? ['Faves'] : []),
     art: (id) => (id === 'a' ? { cover: '/c/a.jpg', hero: '/h/a.png' } : {}),
     exportIdFor: (id) => (id === 'm' ? '00000000-0000-4000-8000-000000000001' : null),
-    previous: { games: [{ id: 'z', name: 'Zed', source: 'archive.org:old@x' }, { id: 'quiver:y/gone', name: 'Gone', source: 'quiver:https://old', platform: 'Xbox', folderName: 'gone' }] },
+    previous: { games: [{ id: 'z', name: 'Zed', source: 'archive.org:old@x' }, { id: 'quiver:y/gone', name: 'Gone', source: 'quiver:https://old', platform: 'Xbox' }] },
   });
   assert.equal(data.schemaVersion, SCHEMA_VERSION);
   assert.equal(data.generatedAt, '1970-01-01T00:00:00.000Z');
@@ -39,11 +39,11 @@ test('buildExport: one record per library row, ids, sources and platforms per ki
     coverPath: '/c/a.jpg', heroPath: '/h/a.png', tags: ['Faves'], lastPlayed: '1970-01-01T00:00:01.000Z',
     playtimeSeconds: 60, favorite: true,
   });
-  assert.deepEqual([q.id, q.name, q.source, q.platform, q.installed, q.workingDir, q.folderName],
-    ['quiver:x/sm64', 'SM64 PC', 'quiver:https://c/n.json', 'Nintendo', false, null, 'sm64ex']);
+  assert.deepEqual([q.id, q.name, q.source, q.platform, q.installed, q.workingDir],
+    ['quiver:x/sm64', 'SM64 PC', 'quiver:https://c/n.json', 'Nintendo', false, null]);
   assert.deepEqual([m.id, m.name, m.source, m.platform, m.workingDir], ['00000000-0000-4000-8000-000000000001', 'm', 'manual', 'PC', '/g/m']);
   assert.deepEqual([z.name, z.source, z.coverPath, z.lastPlayed], ['Zed', 'archive.org:old@x', null, null]);
-  assert.deepEqual([gone.id, gone.name, gone.source, gone.platform, gone.folderName], ['quiver:y/gone', 'Gone', 'quiver:https://old', 'Xbox', 'gone']);
+  assert.deepEqual([gone.id, gone.name, gone.source, gone.platform], ['quiver:y/gone', 'Gone', 'quiver:https://old', 'Xbox']);
   assert.equal(buildExport({ rows: {} }).games.length, 0);
   const bare = buildExport({ rows: { z: { identifier: 'z' }, 'quiver:c:k': { identifier: 'quiver:c:k' } } }).games;
   assert.deepEqual(bare.map(g => [g.source, g.platform]), [['archive.org:', 'PC'], ['quiver:', 'Other']]);

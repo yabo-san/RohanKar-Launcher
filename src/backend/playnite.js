@@ -52,7 +52,7 @@ function buildExport({
   for (const r of Object.values(rows)) {
     const item = items[r.identifier] || null;
     const src = item?.source;
-    let id, source, platform, folderName = null;
+    let id, source, platform;
     if (r.source === 'manual') {
       id = exportIdFor(r.identifier);
       if (!id) continue;
@@ -63,7 +63,6 @@ function buildExport({
       const url = src?.url || (/^https?:/.test(r.source || '') ? r.source : null);
       source = url ? `quiver:${url}` : before.get(id)?.source || 'quiver:';
       platform = item ? platformOf(item.shelf || src.name) : before.get(id)?.platform || 'Other';
-      folderName = item?.entry?.folderName || before.get(id)?.folderName || null;
     } else {
       id = r.identifier;
       source = src?.uploader ? `archive.org:${src.uploader}` : before.get(id)?.source || 'archive.org:';
@@ -88,7 +87,6 @@ function buildExport({
       lastPlayed:      iso(r.last_played_at),
       playtimeSeconds: r.playtime_secs || 0,
       favorite:        !!r.is_favorite,
-      ...(folderName ? { folderName } : {}),
     });
   }
   return { schemaVersion: SCHEMA_VERSION, generatedAt: new Date(now).toISOString(), launcherVersion, games };

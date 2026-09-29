@@ -1,7 +1,7 @@
 # playnite-export.json
 
 The launcher's library, written for the y4bo Playnite library plugin
-(`YaboLauncherLibrary` in `yabo-san/playnite-extensions`). Playnite reads this
+(the `RohanKar` plugin in `yabo-san/playnite-extensions`). Playnite reads this
 file; it never opens `library.db`.
 
 ## Where and when
@@ -46,7 +46,6 @@ file; it never opens `library.db`.
 | `lastPlayed` | string\|null | ISO time of the last launch from the launcher. |
 | `playtimeSeconds` | number | Playtime the launcher recorded. |
 | `favorite` | bool | Optional. Favourited in the launcher. |
-| `folderName` | string | Optional, ports only: the catalog entry's `folderName`, so the plugin can find records imported by the older YaboLibrary plugin. |
 
 Readers ignore fields they do not know; new optional fields do not bump
 `schemaVersion`.
@@ -59,7 +58,9 @@ Readers ignore fields they do not know; new optional fields do not bump
 | Quiver catalog port | `quiver:<repository>` (lowercase `owner/repo`; `quiver:name:<name>` when the entry has no repository) | `quiver:harbourmasters/shipwright` |
 | manual entry | a UUID made once and kept in `library.db` (`games.export_id`) | `6f1c2a1e-0b7d-4c55-9f0e-3d2a8b1c4e77` |
 
-A port keeps its id when it moves to another catalog, and an archive.org item
+For archive.org items the id is the library id (`games.identifier` in
+`library.db`), which the Playnite plugin uses as its GameId. A port keeps its
+id when it moves to another catalog, and an archive.org item
 keeps its id when its title changes, so Playnite keeps its own metadata (art,
 categories, notes) across re-exports.
 

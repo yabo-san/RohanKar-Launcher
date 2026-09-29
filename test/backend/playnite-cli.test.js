@@ -46,12 +46,12 @@ test('auto export: names from the last export and loaded catalogs, failures logg
   const logs = [];
   const { backend, dataDir, fake } = await testBackend(t, { playniteExportDelayMs: 5, log: (m) => logs.push(m) });
   const file = path.join(dataDir, 'playnite-export.json');
-  fake.routes['/n.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'X/SM64', folderName: 'sm64ex' }])); };
+  fake.routes['/n.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'X/SM64' }])); };
   const { catalog } = await backend.catalogs.subscribe({ url: `${fake.base}/n.json`, name: 'Nintendo' });
   backend.library.add(`quiver:${catalog.id}:x/sm64`, catalog.url);
   await backend.flushPlayniteExport();
   const [port] = readJson(file).games;
-  assert.deepEqual([port.id, port.name, port.platform, port.folderName], ['quiver:x/sm64', 'SM64 PC', 'Nintendo', 'sm64ex']);
+  assert.deepEqual([port.id, port.name, port.platform], ['quiver:x/sm64', 'SM64 PC', 'Nintendo']);
 
   // A failed write is logged, not thrown
   fs.rmSync(file);
