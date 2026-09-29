@@ -8,3 +8,6 @@ playwright-report/
 scripts/box-art/cache/
 scripts/box-art/*.csv
 .launcher-data/
+__pycache__/
+scripts/box-art/batch.md
+scripts/box-art/candidates.csv
