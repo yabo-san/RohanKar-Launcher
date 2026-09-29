@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.0-fork.4](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.3...v1.6.0-fork.4) (2026-09-29)
+
+
+### Features
+
+* **backend:** write playnite-export.json on every library change ([c4d1b7a](https://github.com/yabo-san/RohanKar-Launcher/commit/c4d1b7a17f563967a4e71f17957016c3878034a2))
+* **cli:** add --export-playnite, --install, --uninstall and --launch ([8d9be4a](https://github.com/yabo-san/RohanKar-Launcher/commit/8d9be4a093e7a0f2bdd04c4bc5d30740ac2f94ae))
+* Playnite export and CLI flags (step 7) ([eb02ed6](https://github.com/yabo-san/RohanKar-Launcher/commit/eb02ed685b3b32fafb9bc5faf1878e778ec2bf40))
+* **ui:** ship the new y4bo interface, with a toggle to the classic one ([5add284](https://github.com/yabo-san/RohanKar-Launcher/commit/5add2843e491b7ef9bf4535a42df362b0a58449a))
+* **ui:** ship the new y4bo interface, with a toggle to the classic one ([e787f59](https://github.com/yabo-san/RohanKar-Launcher/commit/e787f598f90a97ea93923e60b8f3f2786d31ab43))
+
 ## [1.6.0-fork.3](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.2...v1.6.0-fork.3) (2026-09-29)
 
 
