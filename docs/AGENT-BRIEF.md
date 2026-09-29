@@ -98,6 +98,42 @@ A `mise run ui` task that serves `src/renderer/` from a static server with a stu
 shelves and cards render in a browser through the devcontainer's forwarded port. No installs in
 that mode.
 
+### Step 6: Quiver parity
+
+What Quiver has that steps 1 to 5 do not cover, in priority order. One PR each, after step 5.
+
+1. **Manually managed apps.** An entry with no repository and no archive item: the user names it,
+   drops files into its folder, the library launches it. Adopt-existing (step 3) handles installs
+   we recognise; this handles ones we do not.
+2. **Tags and library search.** User tags on library entries; the search box filters by name, tag,
+   repository or folder, as Quiver does.
+3. **Portable data layout.** Option to keep `library.db`, settings, cache and installs beside the
+   executable instead of `%APPDATA%`, so a folder is the whole install and can be moved. Quiver's
+   default; ours should be a Settings choice with a migration.
+4. **Import a Quiver library.** Read a Quiver `apps.json` plus its `Apps/` folder and adopt
+   everything it lists, so a Quiver user can switch without reinstalling.
+5. **Mod management** (Thunderstore, GameBanana) as Quiver does it. Last; large; only if asked for.
+6. **Announcements.** A remote `announcement.json` shown once per message id. Small; do it with 1.
+
+Not needed: Linux and Android builds (Electron can, nobody asked), code signing (a purchase, not a
+PR).
+
+### Step 7: Playnite export, trivial by design
+
+Playnite is the owner's front end. Exporting to it must never be a manual step.
+
+- On every library change, write `playnite-export.json` next to `library.db`: one record per
+  library entry with `id`, `name`, `source` (archive.org uploader, quiver catalog URL, manual),
+  `installDir`, `exe`, `args`, `workingDir`, `installed`, `version`, `coverPath` (the cached cover
+  on disk), `heroPath`, `platform` (the console shelf for ports, `PC` otherwise), `tags`,
+  `lastPlayed`, `playtimeSeconds`. Atomic write (temp file then rename). Stable ids so Playnite
+  keeps its own metadata across re-imports.
+- A `--export-playnite <path>` CLI flag that writes the same file on demand and exits, for the
+  Playnite plugin to call.
+- Add to Steam stays as is; this is the Playnite equivalent and it costs nothing at runtime.
+- The Playnite library plugin in `yabo-san/playnite-extensions` reads this file; document the
+  schema in `docs/PLAYNITE-EXPORT.md` with an example record, and version it (`schemaVersion`).
+
 ## Rules
 
 - One PR per step against `main`; stop after each and wait for the merge; do not stack on unmerged
