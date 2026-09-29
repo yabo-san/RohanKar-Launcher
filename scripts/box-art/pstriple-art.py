@@ -16,9 +16,10 @@ Rules (K):
 - Items with no curated cover get their top three portrait candidates by any
   artist (no_logo first, then votes) in candidates.csv for K to pick from;
   items with none at all are marked "needs art". Candidates are never written.
-- The CSV report has a name_override column, prefilled with the title already
-  in overrides.json. K fills it in; apply-names.py writes non-blank values into
-  overrides.json as title.
+- The CSV report has a name_override column: the title already in
+  overrides.json, else the name of the SteamGridDB game the item matched (the
+  display title is the SGDB game's name). apply-names.py writes non-blank
+  values into overrides.json as title.
 - catalog/art.json keeps every portrait grid and hero SteamGridDB has for each
   item (grid id, CDN URL, artist, style, votes), so picks and lookups read
   the repo instead of the API.
@@ -113,6 +114,8 @@ ALIASES = {
     "BBLauncher": "Bloodborne",  # Bloodborne on shadPS4, per catalog/uploaders.json
     "Pokestadia": "Pokémon Stadium",  # the Pokémon Stadium recomp
     "gen-1-recomp-guide-dramatic-shape-mod": "Pokémon Red Version",  # gen 1 recomp, not "GEN 2.1"
+    "dragon-ball-z-raging-blast-2-rpcs3": "Dragon Ball: Raging Blast 2",
+    "rag-doll-kung-fu-fists-of-plastic-rpcs3": "Rag Doll Kung Fu: Fists of Plastic",
 }
 
 # Emulator names, build numbers and extras that bundle titles carry around the game.
@@ -201,7 +204,7 @@ for d in docs:
         "identifier": d["identifier"], "ia_title": d.get("title", ""), "searched": term,
         "sgdb_game": matched or "", "artist": artist(g), "style": (g or {}).get("style") or "",
         "cover_url": (g or {}).get("url") or "", "hero_artist": artist(h), "hero_url": (h or {}).get("url") or "",
-        "name_override": (current.get(d["identifier"]) or {}).get("title", ""),
+        "name_override": (current.get(d["identifier"]) or {}).get("title") or matched or "",
     })
 
 with OUT.open("w", newline="", encoding="utf-8") as f:
