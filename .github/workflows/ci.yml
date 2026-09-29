@@ -11,8 +11,9 @@ permissions:
 
 jobs:
   # Which parts of the repo this PR touches. Each job below runs only for its
-  # part; a change to shared config (dependencies, lint and test config, this
-  # workflow, the bundled catalogs) runs all three.
+  # part; a change to shared config (dependencies, lint and test config, any
+  # workflow or action, the bundled catalogs) runs all three. A PR that
+  # touches none of them (docs only) runs nothing but this job.
   changes:
     runs-on: ubuntu-latest
     permissions:
@@ -22,6 +23,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       electron: ${{ steps.filter.outputs.electron }}
+      any: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.frontend == 'true' || steps.filter.outputs.electron == 'true' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,7 +39,7 @@ jobs:
               - 'eslint.config.js'
               - 'playwright.config.js'
               - 'mise.toml'
-              - '.github/workflows/ci.yml'
+              - '.github/**'
               - 'catalog/**'
               - 'overrides.json'
             backend:
@@ -45,17 +47,20 @@ jobs:
               - 'src/backend/**'
               - 'test/**'
               - 'scripts/dev.js'
-            # The frontend's e2e runs against the backend, so API changes run it too
+            # The UI in Chromium against the standalone backend on fixtures;
+            # no Electron, so a frontend-only PR proves the UI on its own
             frontend:
               - *shared
               - 'src/frontend/**'
-              - 'src/backend/**'
-              - 'e2e/**'
+              - 'e2e/*.e2e.js'
+              - 'e2e/fixture-server.js'
+              - 'e2e/fixtures.js'
+              - 'e2e/fixtures/**'
+            # The Electron host with the backend it forks: build and packaged smoke
             electron:
               - *shared
               - 'src/electron/**'
-              - 'src/backend/main.js'
-              - 'src/backend/parent.js'
+              - 'src/backend/**'
               - 'assets/**'
               - 'e2e/packaged.smoke.js'
               - 'e2e/archive-stub.js'
@@ -124,9 +129,10 @@ jobs:
           name: coverage-summary
           path: coverage.md
 
-  # Playwright in headless Chromium against the standalone backend on fixtures (no xvfb)
+  # Playwright in headless Chromium against the standalone backend on fixtures
+  # (no xvfb, no Electron). Not a required check.
   frontend:
-    name: e2e
+    name: frontend
     needs: changes
     if: ${{ needs.changes.outputs.frontend == 'true' }}
     runs-on: ubuntu-latest
@@ -161,8 +167,8 @@ jobs:
             playwright-report/
             test-results/
 
-  # Unpacked Windows build plus the packaged smoke test. Named `build`, the
-  # required check on main.
+  # Electron e2e: unpacked Windows build plus the packaged smoke test, which
+  # boots the app and its backend. Named `build`, the required check on main.
   electron:
     name: build
     needs: changes
@@ -202,6 +208,8 @@ jobs:
             test-results/
 
   trivy:
+    needs: changes
+    if: ${{ needs.changes.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -246,7 +254,7 @@ jobs:
 
   report:
     needs: [changes, backend, trivy]
-    if: ${{ !cancelled() }}
+    if: ${{ !cancelled() && needs.changes.outputs.any == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
