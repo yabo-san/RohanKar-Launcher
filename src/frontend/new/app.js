@@ -410,14 +410,12 @@ function viewHome() {
   let html = `<div class="hero">
     <div class="bg">${covers.map(g => `<div data-thumb="${esc(g.identifier)}" style="background:${tint(getTitle(g))}"></div>`).join('')}</div>
     <div class="copy">
-      <div class="eyebrow">One launcher, two kinds of shelf</div>
-      <h2>Games from archive.org, ports from GitHub.</h2>
-      <p>The wall is everything ${esc(enabled.map(sourceName).join(', '))} have posted. The Ports shelves come from Quiver's community catalogs, and when a port needs game data the collision catalog says where to get it.</p>
+      <h2>Pick something to play.</h2>
+      <p>Games and ports, one click to install.</p>
       <div class="stats">
-        <div class="stat"><b>${state.wall.loading && !state.games.length ? '…' : fmtNum(state.games.length)}</b><span>games on the wall</span></div>
-        <div class="stat"><b>${enabled.length}</b><span>uploaders</span></div>
-        <div class="stat"><b>${ports ? fmtNum(ports.items.length) : '…'}</b><span>ports on ${ports ? ports.shelves.length : 4} shelves</span></div>
-        <div class="stat"><b>${ports ? ports.items.filter(i => i.data.status === 'available').length : '…'}</b><span>with data wired</span></div>
+        <div class="stat"><b>${state.wall.loading && !state.games.length ? '…' : fmtNum(state.games.length)}</b><span>games</span></div>
+        <div class="stat"><b>${ports ? fmtNum(ports.items.length) : '…'}</b><span>ports</span></div>
+        <div class="stat"><b>${fmtNum(state.games.filter(isInstalled).length)}</b><span>installed</span></div>
       </div>
     </div></div>`;
   html += wallNotice();
