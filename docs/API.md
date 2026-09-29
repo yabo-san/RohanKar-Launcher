@@ -21,7 +21,11 @@ new UI is written against it too.
 
 How the frontend finds it:
 
-- In the desktop app, `preload.js` sets `window.launcher = { apiBase, token }`.
+- In the desktop app, `src/electron/main.js` starts the backend as a utility process, waits for
+  it to report its port and token, and `src/electron/preload.js` hands both to the page as
+  `window.launcher = { apiBase, token }`. The backend asks the app for OS actions (dialogs,
+  the Recycle Bin, the window, the browser, Steam, the updater) over that process's message
+  port; see `src/backend/parent.js`. Quitting the app stops the backend.
 - In a plain browser, pass both in the page URL:
   `src/frontend/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
   server (the e2e tests use `e2e/fixture-server.js`).
