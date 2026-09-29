@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { OVERRIDES_URL, parseOverrides, loadOverrides, artSource } = require('../src/backend/overrides.js');
-const { getTitle, titleKey } = require('../src/renderer/sources.js');
+const { getTitle, titleKey } = require('../src/backend/sources.js');
 
 test('override title wins for display and grouping', () => {
   const junk  = { identifier: 'tlr-pstriple', title: 'TLR_PC_FINAL (1)', _override: { title: 'The Last Remnant' } };

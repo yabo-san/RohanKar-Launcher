@@ -1,7 +1,8 @@
 # Launcher API, v1
 
-The contract between the backend (`src/backend/`) and any frontend. The current renderer still
-talks to Electron over IPC; it moves onto this API next, and the custom UI is written against it.
+The contract between the backend (`src/backend/`) and any frontend. The current UI
+(`src/frontend/`) reaches the backend only through this API, via `src/frontend/api.js`, and a
+new UI is written against it too.
 
 ## Connecting
 
@@ -18,6 +19,13 @@ talks to Electron over IPC; it moves onto this API next, and the custom UI is wr
   `503` library.db is unavailable.
 - CORS allows any origin: the token is what's checked, so a frontend served from anywhere works.
 
+How the frontend finds it:
+
+- In the desktop app, `preload.js` sets `window.launcher = { apiBase, token }`.
+- In a plain browser, pass both in the page URL:
+  `src/frontend/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
+  server (the e2e tests use `e2e/fixture-server.js`).
+
 Standalone:
 
 ```sh
@@ -26,8 +34,9 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base` points archive.org traffic elsewhere (fixtures). Without Electron, the endpoints
-that need an OS dialog or the Recycle Bin answer `501`.
+`--archive-base`, `--overrides-url` and `--uploaders-url` point archive.org and the two catalog
+fetches elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
 
@@ -75,7 +84,7 @@ A **library row** is what `library.db` holds: `identifier`, `install_dir`, `exe_
 
 ```sh
 curl http://127.0.0.1:7777/v1/health
-# {"ok":true,"api":"v1"}
+# {"ok":true,"api":"v1","version":"1.6.0"}
 ```
 
 ### `GET /items`
@@ -123,10 +132,12 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/reviews
 
 Image bytes from the covers cache. The cover is the `overrides.json` art if set, else the
 archive.org thumbnail, each downloaded once. The hero is the override hero, else a `hero.*` in the
-install folder. `404 no_image` when there is none.
+install folder, else the `<id>.png` shipped with the app. `?from=override|install|bundled` asks
+for one of those only (`400` for anything else). `404 no_image` when there is none.
 
 ```html
 <img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/cover?token=…">
+<img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/hero?from=bundled&token=…">
 ```
 
 ### `GET /catalogs`
@@ -315,6 +326,8 @@ Server-sent events. Types:
 - `install`: a job changed (same shape as `GET /installs/:id`); sent on each percent step.
 - `library`: a row changed, `{ "identifier": "…" }`, or `{}` for bulk changes.
 - `items`: the sources were (re)loaded, `{ "count": 6, "errors": [] }`.
+- `updater`: the desktop app's update check found something, `{ "status": "available", "version",
+  "releaseNotes", "releaseDate" }` or `{ "status": "error", "message" }`.
 
 ```js
 const es = new EventSource(`${apiBase}/events?token=${token}`);
@@ -361,6 +374,45 @@ Shows the desktop app's folder picker. `{ "path": null }` when cancelled; `501` 
 ```sh
 curl -X POST http://127.0.0.1:7777/v1/os/choose-folder
 # {"path":"D:\\Games"}
+```
+
+### `POST /os/open-external`
+
+Opens an `http(s)` URL in the default browser; `400` for any other scheme.
+
+```sh
+curl -X POST -d '{"url":"https://archive.org/donate"}' http://127.0.0.1:7777/v1/os/open-external
+# {"ok":true}
+```
+
+### `POST /os/window`
+
+Minimizes, maximizes (or restores) or closes the app window. `action` is `minimize`, `maximize`
+or `close`.
+
+```sh
+curl -X POST -d '{"action":"minimize"}' http://127.0.0.1:7777/v1/os/window
+# {"ok":true}
+```
+
+### `POST /os/add-to-steam`
+
+Adds a non-Steam shortcut for every Steam user on this PC. Needs `appName`, `exePath` and
+`startDir`; `alreadyAdded` when a shortcut with that exe exists.
+
+```sh
+curl -X POST -d '{"appName":"Halo","exePath":"C:\\Games\\Halo\\halo.exe","startDir":"C:\\Games\\Halo"}' http://127.0.0.1:7777/v1/os/add-to-steam
+# {"ok":true,"alreadyAdded":false,"updatedUsers":1}
+```
+
+### `GET /os/updater`, `POST /os/updater-install`
+
+The latest update status (the same object as the `updater` event, or `null`), and the action
+that sends the user to the release download.
+
+```sh
+curl http://127.0.0.1:7777/v1/os/updater
+# {"status":{"status":"available","version":"1.7.0","releaseNotes":"…","releaseDate":"…"}}
 ```
 
 ## Versioning

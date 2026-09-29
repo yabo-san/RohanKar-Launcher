@@ -19,7 +19,7 @@ module.exports = [
     },
   },
   {
-    files: ['src/renderer/**/*.js'],
+    files: ['src/frontend/**/*.js'],
     languageOptions: { sourceType: 'module', globals: globals.browser },
     rules: {
       'no-useless-escape': 'off',         // baseline: redundant \- escapes in renderer.js regexes
@@ -28,18 +28,18 @@ module.exports = [
     },
   },
   {
-    // Defined in sources.js, which index.html loads before renderer.js
-    files: ['src/renderer/renderer.js'],
+    // Defined in api.js and sources.js, which index.html loads before renderer.js
+    files: ['src/frontend/renderer.js'],
     languageOptions: {
       globals: {
-        sourcesFromCatalog: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
-        titleKey: 'readonly', preferredVersion: 'readonly', versionLabel: 'readonly',
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        preferredVersion: 'readonly', versionLabel: 'readonly',
       },
     },
   },
   {
     // module.exports is guarded by typeof, for the node:test suite
-    files: ['src/renderer/sources.js'],
+    files: ['src/frontend/sources.js'],
     languageOptions: { globals: { module: 'writable' } },
   },
   {

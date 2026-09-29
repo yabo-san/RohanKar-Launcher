@@ -1,9 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const {
-  sourcesFromCatalog, parseSources, formatSources, titleKey, preferredVersion, versionLabel,
-} = require('../src/renderer/sources.js');
+const { parseSources, formatSources, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
+const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 
 test('parseSources: uploader with label', () => {
   assert.deepEqual(parseSources('a@x.com, Alpha'), [
