@@ -411,7 +411,7 @@ function viewHome() {
     <div class="bg">${covers.map(g => `<div data-thumb="${esc(g.identifier)}" style="background:${tint(getTitle(g))}"></div>`).join('')}</div>
     <div class="copy">
       <h2>Pick something to play.</h2>
-      <p>Games and ports, one click to install.</p>
+      <p>Games and ports in one place.</p>
       <div class="stats">
         <div class="stat"><b>${state.wall.loading && !state.games.length ? '…' : fmtNum(state.games.length)}</b><span>games</span></div>
         <div class="stat"><b>${ports ? fmtNum(ports.items.length) : '…'}</b><span>ports</span></div>
