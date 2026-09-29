@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.6.0-fork.6](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.5...v1.6.0-fork.6) (2026-09-29)
+
+
+### Features
+
+* add All Stars Battle Royale to the picks; test and document /featured ([f194503](https://github.com/yabo-san/RohanKar-Launcher/commit/f1945039442addc6029571309321114b80ba8012))
+* lead the New page with hand-picked favourites ([f4dc510](https://github.com/yabo-san/RohanKar-Launcher/commit/f4dc5109258737bbd6962f4902a3a96f9d31aae6))
+* Skate 3 Recompiled is a collision with hailstormttv's bundle ([3d5ca44](https://github.com/yabo-san/RohanKar-Launcher/commit/3d5ca448d733a045b0e812f1c0e42120013950ce))
+* **ui:** add a New page modelled on Cider's ([adc7112](https://github.com/yabo-san/RohanKar-Launcher/commit/adc71129c2fd56cada5135f02d18fb2dee319ec3))
+* **ui:** follow Cider 2's layout, add a New page, hide the row scrollbar ([c6e432f](https://github.com/yabo-san/RohanKar-Launcher/commit/c6e432f60e5128713147a4d9131ea36450f87ebb))
+
+
+### Bug Fixes
+
+* close the killzone2 entry lost in the [#48](https://github.com/yabo-san/RohanKar-Launcher/issues/48) merge ([d9b3a73](https://github.com/yabo-san/RohanKar-Launcher/commit/d9b3a738e7e3294a38fbe3d285bf575bbfe24506))
+* Dusklight and Skate 3 get their data flag; zelda finds Dusklight ([e253a47](https://github.com/yabo-san/RohanKar-Launcher/commit/e253a479fdef358017fa249eed519ea462f70999))
+* give Dusklight its data flag again ([df2b216](https://github.com/yabo-san/RohanKar-Launcher/commit/df2b2162461fdedae541fbc3a19b7224dda2ddf8))
+* r4ze's Dusklight upload shows up when searching zelda ([45cfb11](https://github.com/yabo-san/RohanKar-Launcher/commit/45cfb11685a8594960c66899551380ac2af501c1))
+* restore 12 pstriple covers dropped when [#44](https://github.com/yabo-san/RohanKar-Launcher/issues/44) merged over [#43](https://github.com/yabo-san/RohanKar-Launcher/issues/43) ([4f70898](https://github.com/yabo-san/RohanKar-Launcher/commit/4f70898e2b3fdbb29031f6df02b41b34d5b7763e))
+* restore 12 pstriple covers dropped when [#44](https://github.com/yabo-san/RohanKar-Launcher/issues/44) merged over [#43](https://github.com/yabo-san/RohanKar-Launcher/issues/43) ([9a53148](https://github.com/yabo-san/RohanKar-Launcher/commit/9a53148b7103ddbef39b239fcb7e05518da6ca0e))
+* **ui:** don't promise one-click installs for ports on Home ([594baff](https://github.com/yabo-san/RohanKar-Launcher/commit/594baffdcd1183bd46cdd2f61ba2980e815a2874))
+* **ui:** follow Cider 2's layout for search, titles and row arrows ([dc1aadb](https://github.com/yabo-san/RohanKar-Launcher/commit/dc1aadb274431dd5d447075bcb5e52c2f6f10984))
+* **ui:** hide the horizontal scrollbar on Home's rows ([fe4bd13](https://github.com/yabo-san/RohanKar-Launcher/commit/fe4bd13c2898b00469537628498f14a1e6d939a4))
+* **ui:** lay Recently added out in columns across the width ([d11177a](https://github.com/yabo-san/RohanKar-Launcher/commit/d11177af5bafca10ea1f832307b38c881c7e0072))
+* **ui:** move search to the top of the sidebar, as in Cider ([0ff89fa](https://github.com/yabo-san/RohanKar-Launcher/commit/0ff89fadc26bb1a17d824cb27b98c9653e85e407))
+* **ui:** replace the Home intro copy with a short line ([75dd7cb](https://github.com/yabo-san/RohanKar-Launcher/commit/75dd7cbf587e7ee65aacc616745c60c9ca1bd656))
+
 ## [1.6.0-fork.5](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.4...v1.6.0-fork.5) (2026-09-29)
 
 
