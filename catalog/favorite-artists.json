@@ -1,0 +1,309 @@
+{
+  "_comment": "[yabo-launcher fork] Favorite SteamGridDB artists, in PRIORITY ORDER. When one of these uploaders has a portrait cover for a game, the resolver prefers it over the default top-ranked grid (earlier entries win ties). Edit this file to add/reorder artists — NO rebuild needed; it's read at runtime by the app and by dev/resolve-art.py. Rule: any art link the user supplies => that grid's author is added here.",
+  "artists": [
+    {
+      "steam64": "76561198278011808",
+      "name": "Mr. Mania",
+      "styles": [
+        "no_logo"
+      ]
+    },
+    {
+      "steam64": "76561198053726107",
+      "name": "Julia"
+    },
+    {
+      "steam64": "76561198096046985",
+      "name": "davemadden22"
+    },
+    {
+      "steam64": "76561198005126968",
+      "name": "(unnamed #4)"
+    },
+    {
+      "steam64": "76561197996636614",
+      "name": "ItsFreakinJesus"
+    },
+    {
+      "steam64": "76561197962284819",
+      "name": "mrBrawndo"
+    },
+    {
+      "steam64": "76561198151106355",
+      "name": "rickyspanish"
+    },
+    {
+      "steam64": "76561198025210011",
+      "name": "TalkyPup"
+    },
+    {
+      "steam64": "76561198861656634",
+      "name": "Zarkozy"
+    },
+    {
+      "steam64": "76561199472044594",
+      "name": "AuWa"
+    },
+    {
+      "steam64": "76561198296610889",
+      "name": "Kam"
+    },
+    {
+      "steam64": "76561198093905364",
+      "name": "TheSecretDino"
+    },
+    {
+      "steam64": "76561198179192829",
+      "name": "MegaDriveBrad"
+    },
+    {
+      "steam64": "76561198005109716",
+      "name": "pizzapizzapizzatime"
+    },
+    {
+      "steam64": "76561198077173925",
+      "name": "Alexios"
+    },
+    {
+      "steam64": "76561198163102696",
+      "name": "FermuntikG"
+    },
+    {
+      "steam64": "76561198039231307",
+      "name": "Winchester7314"
+    },
+    {
+      "steam64": "76561198326728647",
+      "name": "Toadstein"
+    },
+    {
+      "steam64": "76561198081751664",
+      "name": "VictiniGames"
+    },
+    {
+      "steam64": "76561198027099913",
+      "name": "snesrev artist"
+    },
+    {
+      "steam64": "76561197990682447",
+      "name": "Malixx"
+    },
+    {
+      "steam64": "76561198799214057",
+      "name": "Toti"
+    },
+    {
+      "steam64": "76561198302170749",
+      "name": "BrochachoTheBro"
+    },
+    {
+      "steam64": "76561198087247165",
+      "name": "Blockamoka"
+    },
+    {
+      "steam64": "76561198008290860",
+      "name": "TheBirdSolution"
+    },
+    {
+      "steam64": "76561197993865775",
+      "name": "TerrorK"
+    },
+    {
+      "steam64": "76561198003469940",
+      "name": "Bloodhammer"
+    },
+    {
+      "steam64": "76561198007567387",
+      "name": "GabrielXZLIVE"
+    },
+    {
+      "steam64": "76561197995491903",
+      "name": "Leko"
+    },
+    {
+      "steam64": "76561197989099590",
+      "name": "CaSquall"
+    },
+    {
+      "steam64": "76561198426380023",
+      "name": "NickGoblin"
+    },
+    {
+      "steam64": "76561198081596330",
+      "name": "gleem"
+    },
+    {
+      "name": "alphtrion",
+      "steam64": "76561198064732552"
+    },
+    {
+      "name": "Hollie",
+      "steam64": "76561198968082582"
+    },
+    {
+      "name": "Skidd",
+      "steam64": "76561197999307361"
+    },
+    {
+      "name": "Besli",
+      "steam64": "76561197970967510"
+    },
+    {
+      "name": "Graywolf The 45th",
+      "steam64": "76561198040335884"
+    },
+    {
+      "name": "mrBrawndo",
+      "steam64": "76561197962284819\r"
+    },
+    {
+      "name": "cdymrtn",
+      "steam64": "76561198098226947\r"
+    },
+    {
+      "name": "Luckspeare",
+      "steam64": "76561198094314206"
+    },
+    {
+      "name": "Awakened",
+      "steam64": "76561199006128183"
+    },
+    {
+      "name": "Doshin",
+      "steam64": "76561198829198585"
+    },
+    {
+      "steam64": "76561198880367503",
+      "name": "George",
+      "styles": [
+        "no_logo"
+      ]
+    },
+    {
+      "steam64": "76561198191726139",
+      "name": "fycher_",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198069521439",
+      "name": "Tomi",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198095634087",
+      "name": "yst",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198062205801",
+      "name": "Sound/wave",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198095364901",
+      "name": "Kynd",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198009304313",
+      "name": "Emmalise",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561199023476987",
+      "name": "carlsgrids",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198000867315",
+      "name": "Fres",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561199121916473",
+      "name": "Viator_",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198002047533",
+      "name": "jacksonderuler",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198968011246",
+      "name": "Scoop",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198079845158",
+      "name": "Sora357",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198125292564",
+      "name": "Onyx8011",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561197996844513",
+      "name": "Neuropod",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198226746916",
+      "name": "SwampTV",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561197971523336",
+      "name": "Obdulio",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561197984741195",
+      "name": "Shingo",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198317037339",
+      "name": "CriticalComposer",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198031589242",
+      "name": "Grillsoße",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198319892674",
+      "name": "FrostWolf",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    },
+    {
+      "steam64": "76561198064341002",
+      "name": "Julgamesh",
+      "addedBy": "owner",
+      "note": "picked 2026-09-28, pstriple batch 1"
+    }
+  ]
+}
