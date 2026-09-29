@@ -24,6 +24,20 @@ jobs:
   report:
     runs-on: ubuntu-latest
     steps:
+      - name: Gravity Rush item metadata (one-off check)
+        run: |
+          for id in GRFork shadps-4-gr-2-branch; do
+            echo "=== $id"
+            curl -sS -A yabo "https://archive.org/metadata/$id" | python3 -c "
+          import json,sys
+          m=json.load(sys.stdin); md=m.get('metadata',{})
+          for k in ('title','description','subject','date','addeddate'): print(k+':', md.get(k))
+          for f in m.get('files',[]):
+              if f.get('source')=='original': print('  file:', f.get('name'), f.get('size'))
+          "
+            sleep 1
+          done
+          exit 0
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
