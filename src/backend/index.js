@@ -19,6 +19,7 @@ const { createInstalls, GITHUB_API } = require('./installs');
 const { createCatalogs } = require('./catalogs');
 const { createItems }    = require('./items');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
+const { loadFeatured, FEATURED_URL } = require('./featured');
 const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
@@ -59,6 +60,7 @@ function createBackend({
   overridesUrl = OVERRIDES_URL,
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
+  featuredUrl = FEATURED_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
   playniteExportDelayMs = 250,
   host = {},
@@ -91,6 +93,15 @@ function createBackend({
     fetchText: (url) => getText(url, { kind: 'overrides', timeoutMs: 5000, log: netlog.log })
       .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
     readBundled: () => fs.readFileSync(path.join(appDir, 'overrides.json'), 'utf8'),
+    log,
+  }));
+
+  let featuredPromise = null;
+  const getFeatured = () => (featuredPromise ??= loadFeatured({
+    url: featuredUrl,
+    fetchText: (url) => getText(url, { kind: 'featured', timeoutMs: 5000, log: netlog.log })
+      .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
+    readBundled: () => fs.readFileSync(path.join(appDir, 'catalog', 'featured.json'), 'utf8'),
     log,
   }));
 
@@ -263,7 +274,7 @@ function createBackend({
     dataDir, appDir, appVersion, events, emit, os,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
-    settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources,
+    settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources, getFeatured,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }

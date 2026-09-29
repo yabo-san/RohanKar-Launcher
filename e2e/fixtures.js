@@ -8,6 +8,8 @@
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip holding pd.exe, and its archive.org data item holds
  *     PD_ROM, which fixtures/collisions.json expects by sha1
+ *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
+ *     that isn't on the wall
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
  *     bundled copies are used
  * Shared by archive-stub.js (inside Electron) and fixture-server.js (over HTTP).
@@ -51,6 +53,9 @@ function answer(url, base = '') {
   if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
   if (decodeURIComponent(url.pathname) === '/download/perfect-dark-pc-port_202510/Perfect Dark PC Port.zip') return reply(200, PD_DATA, 'application/zip');
 
+  if (url.pathname === '/featured.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
+  }
   const [, kind, id, file] = url.pathname.split('/');
   if (kind === 'metadata') return reply(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
   if (kind === 'download' && file === `${id}.zip`) return reply(200, TINY_ZIP, 'application/zip');

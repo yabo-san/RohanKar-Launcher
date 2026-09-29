@@ -463,6 +463,19 @@
       "hidden": false
     },
     {
+      "name": "Skate 3: Recompiled",
+      "repository": "mchughalex/skate3recomp",
+      "iaIdentifier": "skate-3-recompiled",
+      "contentUrl": null,
+      "folderName": "mchughalex.skate3recomp",
+      "appIconUrl": "https://raw.githubusercontent.com/mchughalex/skate3recomp/refs/heads/main/banner.png",
+      "category": "Xbox",
+      "assetPattern": "(?i)windows",
+      "ingest": "internet-archive",
+      "artUrl": "https://cdn2.steamgriddb.com/grid/46dd013457bbe05b580eb48eb869be0c.png",
+      "hidden": false
+    },
+    {
       "name": "OutRun (Cannonball)",
       "repository": "",
       "iaIdentifier": "outrun-cannonball",

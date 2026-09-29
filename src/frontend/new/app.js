@@ -22,6 +22,7 @@ const state = {
   portsError: null,
   portLibrary: [],
   review: [],
+  featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   wallFilter: { uploader: null, sort: 'newest' },
   shelfFilter: { tag: null, dataOnly: false },
   detail: null,
@@ -301,10 +302,86 @@ const skeletons = (n) => Array.from({ length: n }, () =>
   '<div class="card skel"><div class="art"></div><div class="title">.</div><div class="sub">.</div></div>').join('');
 
 function section(title, body, { count, sub, seeAll, cls = 'grid' } = {}) {
-  return `<section class="section"><div class="section-head"><h2>${esc(title)}</h2>
+  const isRow = cls.split(' ')[0] === 'row';
+  return `<section class="section${isRow ? ' has-row' : ''}"><div class="section-head"><h2>${esc(title)}</h2>
     ${count != null ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
-    ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}</div>
+    ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}
+    ${isRow ? rowNav : ''}</div>
     <div class="${cls}">${body}</div></section>`;
+}
+
+// ─── horizontal rows ─────────────────────────────────────────────────────────
+// No scrollbar: rows scroll with the round arrows in their header (as in
+// Cider), a mouse drag, a sideways wheel or trackpad swipe, and Left/Right
+// between focused cards.
+
+const rowNav = `<span class="row-nav">
+  <button class="prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
+  <button class="next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button></span>`;
+
+// Arrows only on rows that overflow, each disabled at its end
+function syncRowNav(row) {
+  const nav = row.closest('.section')?.querySelector('.row-nav');
+  if (!nav) return;
+  const max = row.scrollWidth - row.clientWidth;
+  nav.hidden = max <= 1;
+  nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
+  nav.querySelector('.next').disabled = row.scrollLeft >= max - 1;
+}
+const syncRows = () => {
+  document.querySelectorAll('#body .row.list').forEach(layoutList);
+  document.querySelectorAll('#body .row').forEach(syncRowNav);
+};
+
+// A list row fills the width in columns (as many ~280px columns as fit), up to
+// four items deep, then pages sideways like the other rows
+const LIST_COL = 280, LIST_GAP = 28, LIST_DEPTH = 4;
+function layoutList(row) {
+  const n = row.children.length;
+  const cols = Math.max(1, Math.floor((row.clientWidth + LIST_GAP) / (LIST_COL + LIST_GAP)));
+  row.style.gridTemplateRows = `repeat(${Math.min(LIST_DEPTH, Math.ceil(n / cols))}, auto)`;
+  row.style.gridAutoColumns = `calc((100% - ${(cols - 1) * LIST_GAP}px) / ${cols})`;
+}
+
+function scrollRow(btn) {
+  const row = btn.closest('.section').querySelector('.row');
+  row.scrollBy({ left: Number(btn.dataset.rowNav) * row.clientWidth * 0.85, behavior: 'smooth' });
+}
+
+// Drag to scroll with the mouse; a drag doesn't open the card it started on
+let rowDrag = null;
+document.addEventListener('pointerdown', (e) => {
+  const row = e.pointerType === 'mouse' && e.button === 0 && e.target.closest('#body .row');
+  if (row) rowDrag = { row, x: e.clientX, left: row.scrollLeft, moved: false };
+});
+document.addEventListener('pointermove', (e) => {
+  if (!rowDrag) return;
+  const dx = e.clientX - rowDrag.x;
+  if (!rowDrag.moved && Math.abs(dx) < 6) return;
+  if (!rowDrag.moved) { rowDrag.moved = true; rowDrag.row.classList.add('dragging'); }
+  rowDrag.row.scrollLeft = rowDrag.left - dx;
+});
+document.addEventListener('pointerup', () => {
+  if (!rowDrag) return;
+  const { row, moved } = rowDrag;
+  rowDrag = null;
+  row.classList.remove('dragging');
+  if (moved) document.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+});
+document.addEventListener('dragstart', (e) => { if (e.target.closest?.('#body .row')) e.preventDefault(); });
+document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('row')) syncRowNav(e.target); }, true);
+window.addEventListener('resize', syncRows);
+
+// Left/Right moves focus along a row; the row follows
+function stepRow(e) {
+  const card = document.activeElement?.closest?.('.row > .card');
+  if (!card) return false;
+  const next = e.key === 'ArrowRight' ? card.nextElementSibling : card.previousElementSibling;
+  if (next?.matches('.card')) {
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
+  return true;
 }
 
 // Big grids render in pages; a sentinel near the bottom pulls in the next one
@@ -345,21 +422,7 @@ function wallNotice(uploader = null) {
 function viewHome() {
   const enabled = state.sources.filter(s => s.enabled !== false);
   const ports = state.ports;
-  const covers = state.games.slice().sort(byDownloads).slice(0, 6);
-  let html = `<div class="hero">
-    <div class="bg">${covers.map(g => `<div data-thumb="${esc(g.identifier)}" style="background:${tint(getTitle(g))}"></div>`).join('')}</div>
-    <div class="copy">
-      <div class="eyebrow">One launcher, two kinds of shelf</div>
-      <h2>Games from archive.org, ports from GitHub.</h2>
-      <p>The wall is everything ${esc(enabled.map(sourceName).join(', '))} have posted. The Ports shelves come from Quiver's community catalogs, and when a port needs game data the collision catalog says where to get it.</p>
-      <div class="stats">
-        <div class="stat"><b>${state.wall.loading && !state.games.length ? '…' : fmtNum(state.games.length)}</b><span>games on the wall</span></div>
-        <div class="stat"><b>${enabled.length}</b><span>uploaders</span></div>
-        <div class="stat"><b>${ports ? fmtNum(ports.items.length) : '…'}</b><span>ports on ${ports ? ports.shelves.length : 4} shelves</span></div>
-        <div class="stat"><b>${ports ? ports.items.filter(i => i.data.status === 'available').length : '…'}</b><span>with data wired</span></div>
-      </div>
-    </div></div>`;
-  html += wallNotice();
+  let html = wallNotice();
 
   const newest = state.games.slice().sort(byNewest).slice(0, 24);
   html += section('Newest on the wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
@@ -454,6 +517,74 @@ function viewLibrary() {
   return html;
 }
 
+// New, laid out like Cider's New page: a wide carousel of the hand-picked
+// games and ports (catalog/featured.json), then a compact list of what landed
+// most recently, this week's uploads and the ports new in the catalogs.
+const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
+const blurbOf = (text) => {
+  const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
+  return b.length > 110 ? `${b.slice(0, 107)}…` : b;
+};
+
+// Picks in order, each resolved to a wall game or a catalog port; picks not
+// on the wall (a disabled uploader, a catalog not subscribed) are skipped
+function resolvePicks() {
+  return state.featured.flatMap((pick) => {
+    if (pick.identifier) {
+      const g = state.games.find(x => (x._versions || [x]).some(v => v.identifier === pick.identifier));
+      return g ? [{ kind: 'game', g, v: (g._versions || [g]).find(v => v.identifier === pick.identifier), pick }] : [];
+    }
+    const p = state.ports?.items.find(x => String(x.repository).toLowerCase() === pick.repository);
+    return p ? [{ kind: 'port', p, pick }] : [];
+  });
+}
+
+function featureCard({ kind, g, v, p, pick }) {
+  const port = kind === 'port';
+  const title = port ? p.name : getTitle(g);
+  const sub = port ? (p.project || p.repository) : [v._sourceLabel, v.addeddate ? new Date(v.addeddate).getFullYear() : ''].filter(Boolean).join(' · ');
+  const blurb = pick.blurb || blurbOf(port ? p.description : v.description);
+  const art = port
+    ? `<div class="art icon" style="background:${tint(p.repository)}">${p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : ''}`
+    : `<div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(title)}">`;
+  return `<button class="card feature-card" data-open="${port ? 'port' : 'game'}" data-id="${esc(port ? p.id : g.identifier)}">
+    <div class="eyebrow">${port ? 'y4bo pick · port' : 'y4bo pick'}</div>
+    <div class="title">${esc(title)}</div>
+    <div class="sub">${esc(sub)}</div>
+    ${art}${blurb ? `<p>${esc(blurb)}</p>` : ''}</div>
+  </button>`;
+}
+
+function listItem(g) {
+  const v = newestVersion(g);
+  return `<button class="card list-item" data-open="game" data-id="${esc(g.identifier)}">
+    <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}"></div>
+    <div class="grow"><div class="title">${esc(getTitle(g))}</div>
+    <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div></div>
+  </button>`;
+}
+
+function viewNew() {
+  let html = wallNotice();
+  const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
+  if (!newest.length) return html + (state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>');
+
+  const picks = resolvePicks();
+  if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
+
+  const rest = newest.slice(0, 40);
+  if (rest.length) html += section('Recently added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
+
+  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
+  const week = newest.filter(g => String(newestVersion(g).addeddate || '') >= weekAgo);
+  if (week.length) html += section('New this week', week.slice(0, 24).map(gameCard).join(''), { count: week.length, cls: 'row' });
+
+  const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
+  const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
+  if (newPorts.length) html += section('New ports', newPorts.map(portCard).join(''), { count: newPorts.length, cls: 'row ports', seeAll: ['updates'] });
+  return html;
+}
+
 function viewUpdates() {
   let html = `<div class="toolbar"><span style="color:var(--text2)">What changed in the catalogs since you last looked. Nothing updates itself; you decide.</span>
     <span class="grow"></span><button class="btn" data-action="refresh-ports">Check catalogs now</button>
@@ -512,13 +643,14 @@ function viewSearch(q) {
   return html;
 }
 
-const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings' };
+const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings' };
 
 function render() {
   const v = state.view;
   pagedGrid.pending = {};
   let html;
   if (state.query) html = viewSearch(state.query);
+  else if (v.name === 'new') html = viewNew();
   else if (v.name === 'wall') html = viewWall(null);
   else if (v.name === 'uploader') html = viewWall(v.arg);
   else if (v.name === 'shelf') html = viewShelf(v.arg);
@@ -527,7 +659,7 @@ function render() {
   else if (v.name === 'settings') html = viewSettings();
   else html = viewHome();
 
-  $('#heading').textContent = state.query ? 'Search'
+  const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
     : HEADINGS[v.name] || 'Home';
@@ -535,8 +667,9 @@ function render() {
   // Keep the settings form as typed while the wall is still streaming in
   if (v.name === 'settings' && !state.query && $('#setting-sources')) { renderNav(); return; }
   const body = $('#body');
-  body.innerHTML = html;
+  body.innerHTML = `<h1 class="page-title" id="heading">${esc(heading)}</h1>` + html;
   observeCovers(body);
+  syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
   if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
   renderAmbient();
@@ -836,6 +969,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.href) { e.preventDefault(); return api.openExternal(t.dataset.href); }
   if (t.dataset.view) return go(t.dataset.view, t.dataset.arg || null);
   if (t.dataset.go) return go(t.dataset.go, t.dataset.arg || null);
+  if (t.dataset.rowNav) return scrollRow(t);
   if (t.dataset.open) return openDetail(t.dataset.open, t.dataset.id);
   if (t.dataset.togglePort) return togglePort(t.dataset.togglePort);
   if (t.dataset.version && state.detail) {
@@ -871,6 +1005,7 @@ $('#q').addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
   if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('#q').focus(); }
 });
 
@@ -894,6 +1029,7 @@ function showProgress(identifier, percent) {
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
   state.sources = (await api.getSources()).sources;
+  state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall
