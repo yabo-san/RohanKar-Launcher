@@ -7,12 +7,18 @@
  * dialogs, the shell, the auto-updater and Add to Steam, which the backend
  * asks for over the process's message port (src/backend/parent.js).
  * Quitting the app shuts the backend down.
+ *
+ * Started with a Playnite command (--install, --uninstall, --launch,
+ * --export-playnite; see src/backend/cli.js) it runs the backend on that
+ * command without a window and exits with its code, unless the command
+ * needs the window (exit code 3), which then opens on that item.
  */
 
 const { app, BrowserWindow, dialog, shell, utilityProcess } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
+const { parseCli } = require('../backend/cli');
 
 const USER_DATA   = app.getPath('userData');
 const HEROES_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes');
@@ -21,6 +27,8 @@ const BACKEND_MAIN = path.join(__dirname, '../backend/main.js');
 let mainWindow;
 let windowShown = false;
 let backendInfo = null;   // { port, token, url } once the backend is listening
+const cli = parseCli(process.argv.slice(1));
+const NEEDS_WINDOW = 3;   // the exit code of a command that needs the window
 
 // ─── OS actions the backend asks for ─────────────────────────────────────────
 
@@ -48,16 +56,15 @@ let backend = null;         // the utility process
 let backendExited = false;
 let quitting = false;
 
-// Resolves with { port, token, url } once the backend is listening
-function startBackend() {
-  backend = utilityProcess.fork(BACKEND_MAIN, ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR], {
-    serviceName: 'Launcher backend',
-    stdio:       'inherit',
-  });
+const BACKEND_ARGS = ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR];
 
-  backend.on('message', async (msg) => {
+// Answers the backend's requests for OS actions
+function answerHost(proc) {
+  let exited = false;
+  proc.once('exit', () => { exited = true; });
+  proc.on('message', async (msg) => {
     if (msg?.type !== 'host') return;
-    const reply = (res) => { if (!backendExited) backend.postMessage({ type: 'host-result', id: msg.id, ...res }); };
+    const reply = (res) => { if (!exited) proc.postMessage({ type: 'host-result', id: msg.id, ...res }); };
     if (!Object.hasOwn(host, msg.method)) {
       return reply({ ok: false, error: { message: `Unknown host action ${msg.method}`, code: 'unsupported' } });
     }
@@ -67,6 +74,25 @@ function startBackend() {
       reply({ ok: false, error: { message: e.message, code: e.code } });
     }
   });
+}
+
+// A Playnite command: the backend runs it and exits; resolves with its exit code
+function runCommand() {
+  const proc = utilityProcess.fork(BACKEND_MAIN, [...BACKEND_ARGS, ...process.argv.slice(1)], {
+    serviceName: 'Launcher command',
+    stdio:       'inherit',
+  });
+  answerHost(proc);
+  return new Promise((resolve) => proc.once('exit', resolve));
+}
+
+// Resolves with { port, token, url } once the backend is listening
+function startBackend() {
+  backend = utilityProcess.fork(BACKEND_MAIN, BACKEND_ARGS, {
+    serviceName: 'Launcher backend',
+    stdio:       'inherit',
+  });
+  answerHost(backend);
 
   return new Promise((resolve, reject) => {
     backend.on('message', (msg) => { if (msg?.type === 'listening') resolve(msg); });
@@ -119,7 +145,22 @@ async function createWindow({ url, token }) {
   mainWindow.loadFile(path.join(__dirname, classic ? '../frontend/index.html' : '../frontend/new/index.html'));
 }
 
+// Playnite asking the running launcher to show an item: the argv of the second start
+const openItem = (id) => { if (id && backend && !backendExited) backend.postMessage({ type: 'open-item', id }); };
+app.on('second-instance', (_, argv) => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+  openItem(parseCli(argv.slice(1))?.value);
+});
+
 app.whenReady().then(async () => {
+  if (cli) {
+    const code = await runCommand();
+    if (code !== NEEDS_WINDOW) { app.exit(code ?? 1); return; }
+  }
+  // One window: a second start hands its argv to this one and quits
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   try {
     backendInfo = await startBackend();
   } catch (e) {
@@ -128,6 +169,7 @@ app.whenReady().then(async () => {
   }
   await createWindow(backendInfo);
   setupAutoUpdater();
+  if (cli) openItem(cli.value);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => {

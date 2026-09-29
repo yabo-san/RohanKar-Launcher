@@ -345,6 +345,14 @@ test('os: window, open-external, add-to-steam, updater go to the host; 501 stand
   backend.setUpdaterStatus({ status: 'available', version: '9.9.9' });
   assert.equal((await call('GET', '/os/updater')).body.status.version, '9.9.9');
   assert.equal((await call('POST', '/os/updater-install')).body.ok, true);
+  const opened = [];
+  backend.events.on('event', (e) => { if (e.type === 'open-item') opened.push(e.data.identifier); });
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: null });
+  backend.requestOpen('rk-e2e-halo-ce');
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: 'rk-e2e-halo-ce' });
+  assert.equal((await call('DELETE', '/os/open-item')).status, 204);
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: null });
+  assert.deepEqual(opened, ['rk-e2e-halo-ce']);
   assert.deepEqual(calls, [['window', 'maximize'], ['open', 'https://archive.org/donate'], ['steam', 'Halo'], ['update']]);
 });
 

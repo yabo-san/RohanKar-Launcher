@@ -346,6 +346,8 @@ function createApi(backend) {
   });
 
   route('GET', '/os/updater', () => ({ body: { status: backend.updaterStatus } }));
+  route('GET', '/os/open-item', () => ({ body: { identifier: backend.openRequest } }));
+  route('DELETE', '/os/open-item', () => { backend.clearOpenRequest(); return { status: 204 }; });
   route('POST', '/os/updater-install', async () => {
     await os(() => backend.os.updaterInstall());
     return { body: { ok: true } };

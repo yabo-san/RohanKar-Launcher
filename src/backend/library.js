@@ -8,6 +8,7 @@
  * write reports { ok: false }, as before.
  */
 const fs = require('fs');
+const crypto = require('crypto');
 const { openDatabase, transaction } = require('./sqlite');
 
 const GAME_COLUMNS = {
@@ -19,6 +20,8 @@ const GAME_COLUMNS = {
   is_favorite:   'INTEGER DEFAULT 0',
   notes:         'TEXT',
   source:        'TEXT',
+  export_id:     'TEXT',     // stable Playnite id for manual entries (a UUID)
+  last_played_at: 'INTEGER',
 };
 
 function migrate(db, log) {
@@ -151,13 +154,15 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     return { ok: true };
   }
 
-  // Replaces the row, as the install-game IPC always has
+  // Replaces the row, as the install-game IPC always has, keeping only the
+  // ids Playnite knows it by and when it was last played
   function recordInstall(identifier, installDir, exePath) {
     if (!db) return { ok: false };
+    const prev = db.prepare('SELECT export_id, last_played_at FROM games WHERE identifier = ?').get(identifier);
     db.prepare(`
-      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at)
-      VALUES (?, ?, ?, ?)
-    `).run(identifier, installDir, exePath || null, Date.now());
+      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(identifier, installDir, exePath || null, Date.now(), prev?.export_id ?? null, prev?.last_played_at ?? null);
     changed(identifier);
     return { ok: true };
   }
@@ -169,6 +174,33 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     db.prepare('UPDATE games SET install_dir = ?, exe_path = ? WHERE identifier = ?').run(installDir, exePath || null, identifier);
     changed(identifier);
     return { ok: true };
+  }
+
+  // Uninstalled: the entry stays in the library (favourite, collections, playtime)
+  function clearInstall(identifier) {
+    if (!db) return { ok: false };
+    db.prepare('UPDATE games SET install_dir = NULL, exe_path = NULL WHERE identifier = ?').run(identifier);
+    changed(identifier);
+    return { ok: true };
+  }
+
+  function markPlayed(identifier, at = Date.now()) {
+    if (!db) return { ok: false };
+    db.prepare('UPDATE games SET last_played_at = ? WHERE identifier = ?').run(at, identifier);
+    changed(identifier);
+    return { ok: true };
+  }
+
+  // The Playnite id of an entry that has no archive.org or catalog id of its
+  // own: a UUID made once and kept, so renames never change it
+  function exportId(identifier) {
+    if (!db) return null;
+    const row = db.prepare('SELECT export_id FROM games WHERE identifier = ?').get(identifier);
+    if (!row) return null;
+    if (row.export_id) return row.export_id;
+    const id = crypto.randomUUID();
+    db.prepare('UPDATE games SET export_id = ? WHERE identifier = ?').run(id, identifier);
+    return id;
   }
 
   function remove(identifier) {
@@ -248,6 +280,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   return {
     get available() { return !!db; },
     all, get, add, setCategory, setFavorite, setNotes, setExePath, recordInstall, adoptInstall, remove,
+    clearInstall, markPlayed, exportId,
     clearMissingInstalls,
     collections, createCollection, renameCollection, setCollectionColor, deleteCollection,
     addToCollection, removeFromCollection,

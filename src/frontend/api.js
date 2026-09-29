@@ -96,6 +96,12 @@ const api = (() => {
       on('updater', cb);
       call('GET', '/os/updater').then(r => { if (r.body?.status) cb(r.body.status); });
     },
+    // Playnite asking to show an item: the pending request now, if any, then each new one
+    onOpenItem: (cb) => {
+      on('open-item', cb);
+      call('GET', '/os/open-item').then(r => { if (r.body?.identifier) cb({ identifier: r.body.identifier }); });
+    },
+    clearOpenItem: () => call('DELETE', '/os/open-item'),
 
     // Settings and sources
     getSettings:  async () => (await call('GET', '/settings')).body || {},

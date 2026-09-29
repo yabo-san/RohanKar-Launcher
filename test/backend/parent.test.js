@@ -129,4 +129,19 @@ test('main: runs until SIGTERM, and exits 1 when it cannot start', async (t) => 
 
   process.argv = ['node', 'main.js', '--data-dir', dataDir, '--port', '99999', ...urls];
   assert.equal(await new Promise(exit => main({ exit })), 1);
+
+  // A Playnite command exits with its code instead of serving
+  process.argv = ['node', 'main.js', '--data-dir', dataDir, ...urls, '--launch', 'x'];
+  assert.equal(await new Promise(exit => main({ exit, print: () => {} })), 3);
+});
+
+test('parent: the app asks to show an item by its export id or library id', async (t) => {
+  const port = fakePort();
+  const { srv } = await startChild(t, port);
+  srv.backend.library.add('mine', 'manual');
+  const uuid = srv.backend.library.exportId('mine');
+  port.deliver({ type: 'open-item', id: uuid });
+  assert.equal(srv.backend.openRequest, 'mine');
+  port.deliver({ type: 'open-item', id: 'rk-e2e-halo-ce' });
+  assert.equal(srv.backend.openRequest, 'rk-e2e-halo-ce');
 });

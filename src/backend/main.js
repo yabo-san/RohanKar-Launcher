@@ -7,6 +7,11 @@
  * process (or a person) can find it. The token is random per start unless
  * LAUNCHER_TOKEN is set.
  *
+ * Given a Playnite command (--install, --uninstall, --launch,
+ * --export-playnite; see cli.js) it runs that instead of the server, prints
+ * one JSON line and resolves with { exitCode }: 3 means the command needs the
+ * window (the item isn't installed, or needs a choice).
+ *
  * Standalone, OS actions that need the desktop app answer 501. Started by
  * the desktop app as its utility process, it also reports { type: 'listening' }
  * over process.parentPort and asks the app for those actions (parent.js).
@@ -15,6 +20,8 @@ const path = require('path');
 const { createBackend } = require('./index');
 const { createServer, newToken } = require('./server');
 const { connectParent } = require('./parent');
+const { parseCli, runCli } = require('./cli');
+const { findRow } = require('./playnite');
 
 function parseArgs(argv) {
   const out = {};
@@ -40,6 +47,18 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(bridge ? { host: bridge.host } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),
   });
+
+  const cli = parseCli(argv);
+  if (cli) {
+    let r = await runCli(cli, backend, { print });
+    if (r.open) {
+      print(JSON.stringify({ ok: false, error: 'needs_window', id: r.open }) + '\n');
+      r = { code: 3 };
+    }
+    backend.close();
+    return { exitCode: r.code };
+  }
+
   const api = createServer(backend, { token: env.LAUNCHER_TOKEN || newToken(), log: (msg) => process.stderr.write(msg + '\n') });
   let info;
   try {
@@ -54,10 +73,14 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
   backend.getOverrides();
   backend.getDefaultSources();
   backend.library.clearMissingInstalls();
+  // playnite-export.json is rewritten on every library change; this covers a first run
+  backend.exportPlaynite(undefined, { loadItems: false }).catch(() => {});
 
   const stop = async () => { await api.close(); backend.close(); };
   if (bridge) {
     bridge.on('updater', (msg) => backend.setUpdaterStatus(msg.status));
+    // Playnite asked the app to show an item; id is an export id or a library id
+    bridge.on('open-item', (msg) => backend.requestOpen(findRow(backend.library.all(), msg.id)?.identifier || msg.id));
     bridge.send({ type: 'listening', ...info });
   }
   return { ...info, backend, api, stop, bridge };
@@ -66,7 +89,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
 // The process entry: runs until SIGINT/SIGTERM or the app's shutdown message.
 // Resolves with the function that stops it.
 function main({ exit = (code) => process.exit(code), print } = {}) {
-  return run(process.argv.slice(2), process.env, print, { parent: process.parentPort || null }).then(({ stop, bridge }) => {
+  return run(process.argv.slice(2), process.env, print, { parent: process.parentPort || null }).then(({ stop, bridge, exitCode }) => {
+    if (exitCode !== undefined) return exit(exitCode);
     const quit = () => stop().then(() => exit(0));
     process.on('SIGINT', quit);
     process.on('SIGTERM', quit);
