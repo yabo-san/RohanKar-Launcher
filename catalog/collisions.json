@@ -49,9 +49,9 @@
   },
   {
     "name": "Zelda: Twilight Princess (dusk)",
-    "repository": "TwilitRealm/dusk",
+    "repository": "TwilitRealm/dusklight",
     "iaIdentifier": "twilight-princess-ddsk",
-    "contentUrl": "https://archive.org/download/twilight-princess-ddsk/Twilight%20Princess%20Decompilation%20%28v1.0%29.zip",
+    "contentUrl": "https://archive.org/download/twilight-princess-ddsk/Dusklight%20%28v1.4.1%29.zip",
     "ingest": "place-file",
     "assetPattern": "(?i)win32-x86_64",
     "folderName": "TwilitRealm.dusk",
@@ -205,6 +205,16 @@
     "ingest": "internet-archive",
     "assetPattern": null,
     "folderName": "ia.driver-2-pc",
+    "dataFiles": null
+  },
+  {
+    "name": "Skate 3: Recompiled",
+    "repository": "mchughalex/skate3recomp",
+    "iaIdentifier": "skate-3-recompiled",
+    "contentUrl": null,
+    "ingest": "internet-archive",
+    "assetPattern": "(?i)windows",
+    "folderName": "mchughalex.skate3recomp",
     "dataFiles": null
   }
 ]
