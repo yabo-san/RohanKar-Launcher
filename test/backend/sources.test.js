@@ -6,8 +6,12 @@ const renderer = require('../../src/renderer/sources.js');
 const { SEARCH } = require('./helpers');
 
 // The renderer keeps its own copy until it reads grouped items from the API
-test('backend and renderer agree on shipped sources and grouping', () => {
-  assert.deepEqual(backend.DEFAULT_SOURCES, renderer.DEFAULT_SOURCES);
+const CATALOG = require('../../catalog/uploaders.json');
+
+test('backend and renderer agree on default sources and grouping', () => {
+  assert.deepEqual(backend.sourcesFromCatalog(CATALOG), renderer.sourcesFromCatalog(CATALOG));
+  assert.deepEqual(backend.sourcesFromCatalog({ uploaders: [null, { handle: 'h' }] }), renderer.sourcesFromCatalog({ uploaders: [null, { handle: 'h' }] }));
+  assert.deepEqual(backend.sourcesFromCatalog(null), []);
   const docs = [...Object.values(SEARCH).flat(), { identifier: 'x', title: ['The Game (v2) [GOG]'] }, { identifier: 'y-z' }];
   for (const d of docs) {
     assert.equal(backend.titleKey(d), renderer.titleKey(d), d.identifier);
@@ -15,8 +19,10 @@ test('backend and renderer agree on shipped sources and grouping', () => {
   }
 });
 
-test('sourcesFromSettings: saved list wins, drops junk, else the shipped list', () => {
-  assert.equal(backend.sourcesFromSettings({}), backend.DEFAULT_SOURCES);
+test('sourcesFromSettings: saved list wins, drops junk, else the defaults', () => {
+  const defaults = [{ uploader: 'd' }];
+  assert.equal(backend.sourcesFromSettings({}, defaults), defaults);
+  assert.deepEqual(backend.sourcesFromSettings({}), []);
   assert.deepEqual(backend.sourcesFromSettings({ sources: [{ uploader: 'a' }, null, { label: 'no uploader' }] }), [{ uploader: 'a' }]);
 });
 

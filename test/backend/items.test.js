@@ -16,7 +16,7 @@ test('items: shipped sources grouped by title, overrides applied, library joined
   assert.deepEqual(events, ['items']);
 
   const zoo = items.find(i => i.id === 'rk-e2e-zoo-tycoon');
-  assert.deepEqual(zoo.versions.map(v => v.source.label), ['rohanjackson071', 'pstriple']);
+  assert.deepEqual(zoo.versions.map(v => v.source.label), ['rohanjackson071', 'hailstormttv']);
   assert.equal(zoo.installed, true);
   assert.equal(zoo.library.identifier, 'rk-e2e-zoo-tycoon-pstriple');
   assert.equal(zoo.shelf, 'wall');
@@ -35,7 +35,7 @@ test('items: filters by source, shelf, search, installed, inLibrary', async (t) 
   backend.library.recordInstall('rk-e2e-halo-ce', '/g/halo', null);
   backend.library.setFavorite('rk-e2e-the-sims', true);
   const ids = async (f) => (await backend.items.list(f)).items.map(i => i.id).sort();
-  assert.deepEqual(await ids({ source: 'PSTRIPLE' }), ['rk-e2e-rollercoaster-tycoon', 'rk-e2e-zoo-tycoon']);
+  assert.deepEqual(await ids({ source: 'HAILSTORMTTV' }), ['rk-e2e-rollercoaster-tycoon', 'rk-e2e-zoo-tycoon']);
   assert.deepEqual(await ids({ source: 'spideymaster661@gmail.com' }), ['rk-e2e-spider-man-2000', 'rk-e2e-the-sims']);
   assert.deepEqual(await ids({ search: 'tycoon' }), ['rk-e2e-rollercoaster-tycoon', 'rk-e2e-zoo-tycoon']);
   assert.deepEqual(await ids({ search: 'v1.0' }), ['rk-e2e-zoo-tycoon']);

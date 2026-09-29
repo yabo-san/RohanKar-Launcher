@@ -33,7 +33,8 @@
     "files": [
       "src/**/*",
       "assets/**/*",
-      "overrides.json"
+      "overrides.json",
+      "catalog/uploaders.json"
     ],
     "extraResources": [
       {

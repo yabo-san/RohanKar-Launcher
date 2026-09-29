@@ -32,7 +32,7 @@ module.exports = [
     files: ['src/renderer/renderer.js'],
     languageOptions: {
       globals: {
-        DEFAULT_SOURCES: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        sourcesFromCatalog: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
         titleKey: 'readonly', preferredVersion: 'readonly', versionLabel: 'readonly',
       },
     },

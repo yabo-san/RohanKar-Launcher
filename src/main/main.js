@@ -54,6 +54,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   backend.getOverrides();
+  backend.getDefaultSources();
   createWindow();
   setupAutoUpdater();
   // Validate installs on every launch — clears DB entries whose folders were deleted
@@ -120,7 +121,8 @@ ipcMain.handle('fetch-reviews',   (_, { identifier }) => archive.reviews(identif
 
 // ─── Covers ───────────────────────────────────────────────────────────────────
 
-ipcMain.handle('get-overrides',     ()                  => backend.getOverrides());
+ipcMain.handle('get-overrides',       ()                  => backend.getOverrides());
+ipcMain.handle('get-default-sources', ()                  => backend.getDefaultSources());
 ipcMain.handle('get-thumb',         async (_, { identifier }) => fileUrl(await covers.thumb(identifier)));
 ipcMain.handle('get-override-hero', async (_, { identifier }) => fileUrl((await covers.overrideArt(identifier, 'hero')) ?? null));
 ipcMain.handle('check-game-hero',   (_, { installDir })  => fileUrl(covers.installHero(installDir)));

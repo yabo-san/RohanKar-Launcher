@@ -321,6 +321,18 @@ const es = new EventSource(`${apiBase}/events?token=${token}`);
 es.addEventListener('install', (e) => console.log(JSON.parse(e.data)));
 ```
 
+### `GET /sources`
+
+The archive.org uploaders the wall loads. `defaults` come from `catalog/uploaders.json` (the copy
+on main at launch, the bundled one as fallback): on only where `launcher` is true, `track` isn't
+false and there's an `uploaderEmail`. `sources` is the saved list from settings when there is
+one, else the defaults.
+
+```sh
+curl http://127.0.0.1:7777/v1/sources
+# {"defaults":[{"uploader":"rohanjackson071@gmail.com","label":"rohanjackson071","enabled":true},…],"sources":[…]}
+```
+
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.

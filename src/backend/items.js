@@ -9,13 +9,13 @@ const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
 
 const truthy = (v) => v === true || v === 'true' || v === '1';
 
-function createItems({ archive, settings, catalogs, library, getOverrides, emit = () => {}, log = () => {} }) {
+function createItems({ archive, settings, catalogs, library, getOverrides, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {
   let loaded = null;   // { groups, errors, loadedAt }
   let loading = null;
 
   // One source at a time so archive.org sees a trickle, not a burst
   async function loadArchive() {
-    const enabled = sourcesFromSettings(settings.load()).filter(s => s.enabled !== false);
+    const enabled = sourcesFromSettings(settings.load(), await getDefaultSources()).filter(s => s.enabled !== false);
     const overrides = await getOverrides();
     const results = [];
     for (const src of enabled) {

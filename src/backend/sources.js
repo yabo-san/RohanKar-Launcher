@@ -5,15 +5,22 @@
  * grouped items from the API; test/backend/sources.test.js keeps the two in step.
  */
 
-// Shipped sources, used when settings.json has no `sources` key
-const DEFAULT_SOURCES = [
-  { uploader: 'rohanjackson071@gmail.com', label: 'rohanjackson071', enabled: true },
-  { uploader: 'frankiemiqueli1@gmail.com', label: 'pstriple',        enabled: true },
-  { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
-];
+// Default sources from catalog/uploaders.json. An entry is on only when it is
+// marked launcher: true, not track: false, and has an uploaderEmail (what
+// archive.org's uploader: field matches); everything else ships off.
+function sourcesFromCatalog(data) {
+  const list = Array.isArray(data?.uploaders) ? data.uploaders : [];
+  return list.map(u => {
+    const uploader = u?.uploaderEmail || u?.handle;
+    if (!uploader) return null;
+    const enabled = u.launcher === true && u.track !== false && !!u.uploaderEmail;
+    return { uploader, label: u.handle || uploader.split('@')[0], enabled };
+  }).filter(Boolean);
+}
 
-function sourcesFromSettings(settings) {
-  return Array.isArray(settings.sources) ? settings.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
+// The saved list when settings.json has one, else the catalog defaults
+function sourcesFromSettings(settings, defaults = []) {
+  return Array.isArray(settings.sources) ? settings.sources.filter(x => x && x.uploader) : defaults;
 }
 
 // An overrides.json title (attached as _override) replaces the archive.org one
@@ -32,4 +39,4 @@ function titleKey(game) {
     .replace(/[^a-z0-9]+/g, '');
 }
 
-module.exports = { DEFAULT_SOURCES, sourcesFromSettings, getTitle, titleKey };
+module.exports = { sourcesFromCatalog, sourcesFromSettings, getTitle, titleKey };

@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  parseSources, formatSources, titleKey, preferredVersion, versionLabel,
+  sourcesFromCatalog, parseSources, formatSources, titleKey, preferredVersion, versionLabel,
 } = require('../src/renderer/sources.js');
 
 test('parseSources: uploader with label', () => {
@@ -132,4 +132,33 @@ test('versionLabel: either part alone, or neither', () => {
   assert.equal(versionLabel({ _sourceLabel: 'Alpha' }), 'Alpha');
   assert.equal(versionLabel({ addeddate: '2025-03-04T00:00:00Z' }), '2025-03-04');
   assert.equal(versionLabel({}), '');
+});
+
+test('sourcesFromCatalog: on only with launcher, tracked, and an email', () => {
+  assert.deepEqual(sourcesFromCatalog({ uploaders: [
+    { handle: 'on', uploaderEmail: 'on@x.com', launcher: true },
+    { handle: 'untracked', uploaderEmail: 'u@x.com', launcher: true, track: false },
+    { handle: 'noflag', uploaderEmail: 'n@x.com' },
+    { handle: 'noemail', launcher: true },
+    { uploaderEmail: 'nohandle@x.com' },
+    { note: 'neither' },
+  ] }), [
+    { uploader: 'on@x.com', label: 'on', enabled: true },
+    { uploader: 'u@x.com', label: 'untracked', enabled: false },
+    { uploader: 'n@x.com', label: 'noflag', enabled: false },
+    { uploader: 'noemail', label: 'noemail', enabled: false },
+    { uploader: 'nohandle@x.com', label: 'nohandle', enabled: false },
+  ]);
+});
+
+test('sourcesFromCatalog: missing or malformed catalog', () => {
+  assert.deepEqual(sourcesFromCatalog(undefined), []);
+  assert.deepEqual(sourcesFromCatalog({}), []);
+  assert.deepEqual(sourcesFromCatalog({ uploaders: 'x' }), []);
+  assert.deepEqual(sourcesFromCatalog({ uploaders: [null] }), []);
+});
+
+test('sourcesFromCatalog: the bundled catalog turns on exactly the three launcher uploaders', () => {
+  const on = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
+  assert.deepEqual(on.map(s => s.label).sort(), ['hailstormttv', 'r4zel1ght', 'rohanjackson071']);
 });

@@ -6,6 +6,7 @@
       "url": "https://archive.org/search?query=uploader%3A%22rohanjackson071%40gmail.com%22",
       "addedBy": "owner",
       "uploaderEmail": "rohanjackson071@gmail.com",
+      "launcher": true,
       "note": "Seed (owner-vouched): the uploader RohanKar Launcher tracks; real preservation."
     },
     {
@@ -13,6 +14,7 @@
       "url": "https://archive.org/search?query=uploader%3A%22spideymaster661%40gmail.com%22",
       "addedBy": "owner",
       "uploaderEmail": "spideymaster661@gmail.com",
+      "launcher": true,
       "note": "Owner-vouched repacker (2026-06-02). RESOLVED: the @r4zel1ght full-text search only finds 2 items MENTIONING him; his real uploads are under uploader:spideymaster661@gmail.com = 17 items (Castlevania Lords of Shadow trilogy, Dark Souls PTDE, Metal Gear Rising, Prototype 2, Silent Hill Homecoming, Power Rangers BFTG, Ninja Five-O...). AAA console-port repacker. Indexer queries uploader:<email>."
     },
     {
@@ -74,6 +76,7 @@
       "url": "https://archive.org/search?query=uploader%3A%22frankiemiqueli1%40gmail.com%22",
       "addedBy": "owner",
       "uploaderEmail": "frankiemiqueli1@gmail.com",
+      "launcher": true,
       "produces": "EmuBundle",
       "note": "Also shows as PSTRIPLE (owner 2026-09-27; wanted in the RohanKar uploader list). Email confirmed 2026-09-27 via BBLauncher (Bloodborne on shadPS4, 31 GB): same 48 items. Owner-vouched 2026-09-25, rohan's friend, one person with two accounts (tirednonfire mirrors three of the same items). 48 + 3 items, ~540 GB, all since June 2026: RPCS3 + game bundles preconfigured (Uncharted 2, GoW Ascension, Demon's Souls, Killzone 2 and Resistance with online revived, Infamous 1/2, Ratchet Future, Modnation, Motorstorm), shadPS4 bundles (Godzilla), PCSX2 Sly 1, Skate 3 Recompiled. Produces=EmuBundle is a NEW kind: install = extract, play = the emulator exe inside the bundle with the game as argument. Do not subscribe until the C# ArtifactKind has it, or every item imports as a broken PC repack. Email not exposed: the uploads list comes from the profile search backend by handle (services/search/beta/page_production, page_type=account_details, page_target=@handle)."
     },

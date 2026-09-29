@@ -43,7 +43,7 @@ test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (
   assert.equal(all.status, 200);
   assert.equal(all.body.items.length, 6);
   assert.deepEqual(all.body.errors, []);
-  assert.equal((await call('GET', '/items?search=tycoon&source=pstriple')).body.items.length, 2);
+  assert.equal((await call('GET', '/items?search=tycoon&source=hailstormttv')).body.items.length, 2);
   assert.equal((await call('GET', '/items?installed=true')).body.items.length, 0);
 
   const zoo = await call('GET', '/items/rk-e2e-zoo-tycoon-pstriple');
@@ -297,4 +297,25 @@ test('standalone: prints port and token, serves the API, stops cleanly', async (
   const res = await fetch(`${printed.url}/settings`, { headers: { authorization: 'Bearer fixed' } });
   assert.equal(res.status, 200);
   await srv.stop();
+});
+
+test('GET /sources: catalog defaults, fetched from main or bundled; a saved list wins', async (t) => {
+  const { call, backend, fake } = await testApi(t);
+  const bundled = await call('GET', '/sources');
+  assert.deepEqual(bundled.body.defaults.filter(s => s.enabled).map(s => s.label).sort(), ['hailstormttv', 'r4zel1ght', 'rohanjackson071']);
+  assert.deepEqual(bundled.body.sources, bundled.body.defaults);
+  backend.settings.save({ sources: [{ uploader: 'mine@x' }] });
+  assert.deepEqual((await call('GET', '/sources')).body.sources, [{ uploader: 'mine@x' }]);
+
+  // A second backend on the same fake: the fetched copy wins when it has uploaders
+  fake.routes['/uploaders.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify({ uploaders: [{ handle: 'fetched', uploaderEmail: 'f@x', launcher: true }] })); };
+  const { createBackend } = require('../../src/backend');
+  const other = createBackend({ dataDir: backend.dataDir + '-2', archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });
+  t.after(() => { other.close(); fs.rmSync(backend.dataDir + '-2', { recursive: true, force: true }); });
+  assert.deepEqual(await other.getDefaultSources(), [{ uploader: 'f@x', label: 'fetched', enabled: true }]);
+
+  fake.routes['/uploaders.json'] = (req, res) => { res.writeHead(200); res.end('{"uploaders":[]}'); };
+  const none = createBackend({ dataDir: backend.dataDir + '-3', appDir: backend.dataDir, archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });
+  t.after(() => { none.close(); fs.rmSync(backend.dataDir + '-3', { recursive: true, force: true }); });
+  assert.deepEqual(await none.getDefaultSources(), [], 'empty fetch and no bundled copy: no defaults');
 });

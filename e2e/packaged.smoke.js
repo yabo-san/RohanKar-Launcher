@@ -13,7 +13,10 @@ const { spawn } = require('child_process');
 const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
-const { DEFAULT_SOURCES, formatSources } = require('../src/renderer/sources.js');
+const { sourcesFromCatalog, formatSources } = require('../src/renderer/sources.js');
+
+// What a fresh install defaults to: the bundled catalog (the stub 404s the fetched copy)
+const DEFAULT_SOURCES = sourcesFromCatalog(require('../catalog/uploaders.json'));
 
 const STUB = path.join(__dirname, 'archive-stub.js');
 

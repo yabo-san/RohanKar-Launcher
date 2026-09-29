@@ -127,6 +127,7 @@ async function testBackend(t, { state, ...opts } = {}) {
     dataDir,
     archiveBase: fake.base,
     overridesUrl: `${fake.base}/overrides.json`,
+    uploadersUrl: `${fake.base}/uploaders.json`,
     sleep: async () => {},
     log: () => {},
     ...opts,

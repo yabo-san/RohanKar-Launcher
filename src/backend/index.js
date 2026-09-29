@@ -20,10 +20,12 @@ const { createCatalogs } = require('./catalogs');
 const { createItems }    = require('./items');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
 const { getText } = require('./net');
+const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
 const disk = require('./disk');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
+const UPLOADERS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/uploaders.json';
 
 // OS actions when no Electron host is attached (standalone backend). Electron
 // replaces openPath, trashItem and chooseFolder with shell/dialog calls.
@@ -46,6 +48,7 @@ function createBackend({
   appDir = REPO_ROOT,
   archiveBase = 'https://archive.org',
   overridesUrl = OVERRIDES_URL,
+  uploadersUrl = UPLOADERS_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
   host = {},
   platform = process.platform,
@@ -80,10 +83,31 @@ function createBackend({
     log,
   }));
 
+  // Default sources: catalog/uploaders.json on main at launch, the bundled copy as fallback
+  let defaultSourcesPromise = null;
+  const getDefaultSources = () => (defaultSourcesPromise ??= (async () => {
+    const r = await getText(uploadersUrl, { kind: 'uploaders', timeoutMs: 5000, log: netlog.log });
+    try {
+      if (r.status !== 200) throw new Error(r.error || `HTTP ${r.status}`);
+      const list = sourcesFromCatalog(JSON.parse(r.body));
+      if (!list.length) throw new Error('no uploaders');
+      log(`[uploaders] ${list.length} from ${uploadersUrl}`);
+      return list;
+    } catch (e) {
+      log(`[uploaders] fetch failed (${e.message}), using bundled copy`);
+    }
+    try {
+      return sourcesFromCatalog(JSON.parse(fs.readFileSync(path.join(appDir, 'catalog', 'uploaders.json'), 'utf8')));
+    } catch (e) {
+      log(`[uploaders] no bundled copy (${e.message}), no default sources`);
+      return [];
+    }
+  })());
+
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, log: netlog.log });
   const installs = createInstalls({ settings, library, archive, gamesDir, emit, log, netLog: netlog.log, platform });
   const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, netLog: netlog.log, log });
-  const items    = createItems({ archive, settings, catalogs, library, getOverrides, emit, log });
+  const items    = createItems({ archive, settings, catalogs, library, getOverrides, getDefaultSources, emit, log });
 
   // ─── Actions that combine a module with the OS ────────────────────────────
 
@@ -155,7 +179,7 @@ function createBackend({
 
   return {
     dataDir, appDir, events, emit, os,
-    settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides,
+    settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources,
     launch, openFolder, removeFromLibrary, exportPlaynite, close,
   };
 }

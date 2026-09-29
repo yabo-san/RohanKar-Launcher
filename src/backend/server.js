@@ -13,6 +13,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
+const { sourcesFromSettings } = require('./sources');
 
 const API_VERSION = 'v1';
 const HOST = '127.0.0.1';
@@ -290,6 +291,11 @@ function createApi(backend) {
   });
 
   // ─── Settings, export, OS ─────────────────────────────────────────────────
+
+  route('GET', '/sources', async () => {
+    const defaults = await backend.getDefaultSources();
+    return { body: { defaults, sources: sourcesFromSettings(settings.load(), defaults) } };
+  });
 
   route('GET', '/settings', () => ({ body: settings.load() }));
   route('PUT', '/settings', ({ body }) => ({ body: settings.save(requireObject(body)) }));
