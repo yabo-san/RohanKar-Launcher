@@ -8,6 +8,8 @@
  *   collisions.json; a list that can't be fetched shows as unreachable.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
+ * - Home's rows have no scrollbar; they scroll with the arrows, a drag and
+ *   the Left/Right keys, and a drag doesn't open a card.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -51,6 +53,38 @@ test('the wall shows every shipped uploader, grouped by title', async () => {
   for (const s of ENABLED) {
     await expect(page.locator(`#nav-uploaders [data-arg="${s.uploader}"] .n`)).toHaveText(String(fixtures[s.uploader].length));
   }
+});
+
+test("Home's rows scroll without a scrollbar", async () => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.locator('[data-view="home"]').click();
+  const wrap = page.locator('#body .row-wrap').first();
+  const row = wrap.locator('.row');
+  await expect(wrap).toHaveClass(/can-next/);
+  expect(await row.evaluate(r => r.offsetHeight - r.clientHeight)).toBe(0);
+  const left = () => row.evaluate(r => r.scrollLeft);
+
+  await row.hover();
+  await wrap.locator('.row-nav.next').click();
+  await expect.poll(left).toBeGreaterThan(0);
+  await expect(wrap).toHaveClass(/can-prev/);
+  await wrap.locator('.row-nav.prev').click();
+  await expect.poll(left).toBe(0);
+
+  const box = await row.boundingBox();
+  await page.mouse.move(box.x + 300, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 100, box.y + 100, { steps: 5 });
+  await page.mouse.up();
+  expect(await left()).toBe(200);
+  await expect(page.locator('#detail')).toHaveClass(/hidden/);
+
+  await row.locator('.card').first().focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+  await expect(row.locator('.card').nth(5)).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(row.locator('.card').nth(4)).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
 });
 
 test('a Ports shelf comes from its Quiver list, joined to the collision catalog', async () => {

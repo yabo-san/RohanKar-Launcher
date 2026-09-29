@@ -304,7 +304,68 @@ function section(title, body, { count, sub, seeAll, cls = 'grid' } = {}) {
   return `<section class="section"><div class="section-head"><h2>${esc(title)}</h2>
     ${count != null ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
     ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}</div>
-    <div class="${cls}">${body}</div></section>`;
+    ${cls.split(' ')[0] === 'row' ? rowWrap(cls, body) : `<div class="${cls}">${body}</div>`}</section>`;
+}
+
+// ─── horizontal rows ─────────────────────────────────────────────────────────
+// No scrollbar: rows scroll with the arrow buttons, a mouse drag, a sideways
+// wheel or trackpad swipe, and Left/Right between focused cards.
+
+function rowWrap(cls, body) {
+  return `<div class="row-wrap">
+    <button class="row-nav prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
+    <div class="${cls}">${body}</div>
+    <button class="row-nav next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button></div>`;
+}
+
+// Arrows only where there's more to see
+function syncRowNav(row) {
+  const wrap = row.parentElement;
+  if (!wrap?.classList.contains('row-wrap')) return;
+  wrap.classList.toggle('can-prev', row.scrollLeft > 1);
+  wrap.classList.toggle('can-next', row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+}
+const syncRows = () => document.querySelectorAll('#body .row').forEach(syncRowNav);
+
+function scrollRow(btn) {
+  const row = btn.parentElement.querySelector('.row');
+  row.scrollBy({ left: Number(btn.dataset.rowNav) * row.clientWidth * 0.85, behavior: 'smooth' });
+}
+
+// Drag to scroll with the mouse; a drag doesn't open the card it started on
+let rowDrag = null;
+document.addEventListener('pointerdown', (e) => {
+  const row = e.pointerType === 'mouse' && e.button === 0 && e.target.closest('#body .row');
+  if (row) rowDrag = { row, x: e.clientX, left: row.scrollLeft, moved: false };
+});
+document.addEventListener('pointermove', (e) => {
+  if (!rowDrag) return;
+  const dx = e.clientX - rowDrag.x;
+  if (!rowDrag.moved && Math.abs(dx) < 6) return;
+  if (!rowDrag.moved) { rowDrag.moved = true; rowDrag.row.classList.add('dragging'); }
+  rowDrag.row.scrollLeft = rowDrag.left - dx;
+});
+document.addEventListener('pointerup', () => {
+  if (!rowDrag) return;
+  const { row, moved } = rowDrag;
+  rowDrag = null;
+  row.classList.remove('dragging');
+  if (moved) document.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
+});
+document.addEventListener('dragstart', (e) => { if (e.target.closest?.('#body .row')) e.preventDefault(); });
+document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('row')) syncRowNav(e.target); }, true);
+window.addEventListener('resize', syncRows);
+
+// Left/Right moves focus along a row; the row follows
+function stepRow(e) {
+  const card = document.activeElement?.closest?.('.row > .card');
+  if (!card) return false;
+  const next = e.key === 'ArrowRight' ? card.nextElementSibling : card.previousElementSibling;
+  if (next?.matches('.card')) {
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }
+  return true;
 }
 
 // Big grids render in pages; a sentinel near the bottom pulls in the next one
@@ -537,6 +598,7 @@ function render() {
   const body = $('#body');
   body.innerHTML = html;
   observeCovers(body);
+  syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
   if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
   renderAmbient();
@@ -795,6 +857,7 @@ document.addEventListener('click', (e) => {
   if (t.dataset.href) { e.preventDefault(); return api.openExternal(t.dataset.href); }
   if (t.dataset.view) return go(t.dataset.view, t.dataset.arg || null);
   if (t.dataset.go) return go(t.dataset.go, t.dataset.arg || null);
+  if (t.dataset.rowNav) return scrollRow(t);
   if (t.dataset.open) return openDetail(t.dataset.open, t.dataset.id);
   if (t.dataset.togglePort) return togglePort(t.dataset.togglePort);
   if (t.dataset.version && state.detail) {
@@ -830,6 +893,7 @@ $('#q').addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
   if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('#q').focus(); }
 });
 
