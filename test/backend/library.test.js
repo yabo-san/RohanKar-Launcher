@@ -31,7 +31,7 @@ test('games: add, favourite, notes, category, exe path, install, remove', (t) =>
   lib.setExePath('b', '/g/b.exe');
   assert.deepEqual({ ...lib.get('b'), added_at: 0 }, {
     identifier: 'b', install_dir: null, exe_path: '/g/b.exe', category: 'rpg', playtime_secs: 0,
-    added_at: 0, is_favorite: 1, notes: 'good', source: null,
+    added_at: 0, is_favorite: 1, notes: 'good', source: null, export_id: null, last_played_at: null,
   });
   lib.setNotes('b', '');
   lib.setExePath('b', '');
@@ -47,6 +47,24 @@ test('games: add, favourite, notes, category, exe path, install, remove', (t) =>
   lib.remove('c');
   assert.equal(lib.get('c'), null);
   assert.ok(changes.length >= 10);
+});
+
+test('Playnite fields: export id made once, last played, uninstall keeps the row, reinstall keeps both', (t) => {
+  const { lib } = open(t, () => ({}));
+  assert.equal(lib.exportId('nope'), null);
+  lib.add('mine', 'manual');
+  const id = lib.exportId('mine');
+  assert.match(id, /^[0-9a-f-]{36}$/);
+  assert.equal(lib.exportId('mine'), id);
+
+  lib.recordInstall('mine', '/g/mine', '/g/mine/m.exe');
+  lib.markPlayed('mine', 1234);
+  lib.setFavorite('mine', true);
+  lib.recordInstall('mine', '/g/mine2', null);
+  assert.deepEqual([lib.get('mine').export_id, lib.get('mine').last_played_at, lib.get('mine').install_dir], [id, 1234, '/g/mine2']);
+
+  assert.deepEqual(lib.clearInstall('mine'), { ok: true });
+  assert.deepEqual([lib.get('mine').install_dir, lib.get('mine').exe_path, lib.get('mine').export_id], [null, null, id]);
 });
 
 test('clearMissingInstalls clears rows whose folder is gone', (t) => {
@@ -118,9 +136,10 @@ test('an unopenable database reads empty and refuses writes', (t) => {
   assert.deepEqual(lib.clearMissingInstalls(), { cleared: 0 });
   for (const r of [lib.add('a'), lib.setCategory('a', 'c'), lib.setFavorite('a', 1), lib.setNotes('a', 'n'),
     lib.setExePath('a', 'e'), lib.recordInstall('a', 'd'), lib.adoptInstall('a', 'd'), lib.remove('a'),
-    lib.createCollection('x'), lib.deleteCollection(1)]) {
+    lib.createCollection('x'), lib.deleteCollection(1), lib.clearInstall('a'), lib.markPlayed('a')]) {
     assert.equal(r.ok, false);
   }
+  assert.equal(lib.exportId('a'), null);
   assert.match(logs[0], /no sqlite/);
   lib.close();
   t.diagnostic('closed twice is fine');

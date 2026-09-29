@@ -25,6 +25,7 @@ const playnite = require('./playnite');
 const disk = require('./disk');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
+const VERSION = require('../../package.json').version;
 const UPLOADERS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/uploaders.json';
 
 // OS actions when no Electron host is attached (standalone backend). Electron
@@ -50,6 +51,8 @@ function createBackend({
   overridesUrl = OVERRIDES_URL,
   uploadersUrl = UPLOADERS_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
+  version = VERSION,
+  playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
   sleep,
@@ -69,7 +72,7 @@ function createBackend({
   const library  = createLibrary({
     dbPath: path.join(dataDir, 'library.db'),
     legacyJsonPath: path.join(dataDir, 'library.json'),
-    onChange: (d) => emit('library', d),
+    onChange: (d) => { emit('library', d); schedulePlayniteExport(); },
     log,
   });
   const archive = createArchive({ base: archiveBase, log: netlog.log, ...(sleep ? { sleep } : {}) });
@@ -117,7 +120,9 @@ function createBackend({
       // Unblock on every launch: covers games installed before unblocking existed
       disk.unblockDirectory(library.get(identifier)?.install_dir || path.dirname(exePath), { platform, log });
       const errMsg = await os.openPath(exePath);
-      return errMsg ? { ok: false, error: errMsg } : { ok: true };
+      if (errMsg) return { ok: false, error: errMsg };
+      library.markPlayed(identifier);
+      return { ok: true };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -153,26 +158,79 @@ function createBackend({
     }
   }
 
-  async function exportPlaynite(file = path.join(dataDir, 'playnite-export.json')) {
-    const byId = {};
+  // Uninstall: the folder goes to the Recycle Bin, the entry stays in the library
+  async function uninstall(identifier) {
+    const row = library.get(identifier);
+    if (!row) return { ok: false, error: 'not_in_library' };
     try {
-      for (const it of (await items.list()).items) {
-        byId[it.id] = it;
-        for (const v of it.versions) byId[v.id] = it;
+      if (row.install_dir && fs.existsSync(row.install_dir)) {
+        await os.trashItem(row.install_dir);
+        log(`[uninstall] Moved to Recycle Bin: ${row.install_dir}`);
       }
-    } catch { /* sources down: export names fall back to identifiers */ }
+      library.clearInstall(identifier);
+      return { ok: true };
+    } catch (e) {
+      log(`[uninstall] Failed: ${e.message}`);
+      return { ok: false, error: e.message, code: e.code };
+    }
+  }
+
+  // ─── Playnite export ──────────────────────────────────────────────────────
+
+  const playniteFile = path.join(dataDir, 'playnite-export.json');
+
+  // loadItems: false uses only what is already loaded (and the last export for
+  // the rest), so a library change never fetches from archive.org
+  async function exportPlaynite(file = playniteFile, { loadItems = true } = {}) {
+    const byId = {};
+    const loaded = loadItems || items.loadedVersions().length > 0;
+    try {
+      const list = loaded ? (await items.list()).items : catalogs.items();
+      for (const it of list) {
+        byId[it.id] = it;
+        for (const v of it.versions || []) byId[v.id] = it;
+      }
+    } catch { /* sources down: names come from the last export, else identifiers */ }
+    let overrides = {};
+    try { overrides = await getOverrides(); } catch { /* no override art */ }
     const cols = library.collections();
-    const thumbDir = path.join(dataDir, 'thumbcache');
     const data = playnite.buildExport({
       rows: library.all(),
       items: byId,
       tagsFor: (id) => cols.filter(c => c.games.includes(id)).map(c => c.name),
-      coverPath: (id) => { const p = path.join(thumbDir, `${id}.jpg`); return fs.existsSync(p) ? p : null; },
+      art: (id, row) => covers.localArt(id, row.install_dir, overrides),
+      exportIdFor: (id) => library.exportId(id),
+      previous: playnite.readExport(file),
+      launcherVersion: version,
     });
     return { file: playnite.writeExport(file, data), count: data.games.length };
   }
 
+  // Every library change rewrites the export, batched so a scan writes it once
+  let exportTimer = null;
+  let exportRunning = Promise.resolve();
+  let closed = false;
+  function schedulePlayniteExport() {
+    if (closed) return;
+    clearTimeout(exportTimer);
+    exportTimer = setTimeout(() => { exportTimer = null; runPlayniteExport(); }, playniteExportDelayMs);
+    exportTimer.unref?.();
+  }
+  function runPlayniteExport() {
+    exportRunning = exportRunning
+      .then(() => (closed ? null : exportPlaynite(playniteFile, { loadItems: false })))
+      .catch(e => log(`[playnite] export failed: ${e.message}`));
+    return exportRunning;
+  }
+  // Writes a pending export now: the CLI calls this before it exits
+  function flushPlayniteExport() {
+    if (exportTimer) { clearTimeout(exportTimer); exportTimer = null; return runPlayniteExport(); }
+    return exportRunning;
+  }
+
   function close() {
+    closed = true;
+    clearTimeout(exportTimer);
     library.close();
     events.removeAllListeners();
   }
@@ -180,7 +238,7 @@ function createBackend({
   return {
     dataDir, appDir, events, emit, os,
     settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources,
-    launch, openFolder, removeFromLibrary, exportPlaynite, close,
+    launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }
 

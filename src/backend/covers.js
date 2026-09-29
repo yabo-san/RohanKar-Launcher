@@ -55,14 +55,33 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, log = () => {} 
     });
   }
 
+  // Where an override image lives on disk (bundled, or its cache file), or
+  // undefined when the title has no override for that field
+  function overridePath(overrides, identifier, field) {
+    const src = artSource(overrides?.[identifier]?.[field]);
+    if (!src) return undefined;
+    if (src.bundled) return { file: path.join(appDir, src.bundled) };
+    const name = crypto.createHash('sha1').update(src.remote).digest('hex').slice(0, 16);
+    return { file: path.join(cacheDir, `override-${name}.jpg`), remote: src.remote };
+  }
+
   // Path for an override image, null if it couldn't be fetched, or undefined
   // when the title has no override for that field
   async function overrideArt(identifier, field) {
-    const src = artSource((await getOverrides())[identifier]?.[field]);
-    if (!src) return undefined;
-    if (src.bundled) return path.join(appDir, src.bundled);
-    const name = crypto.createHash('sha1').update(src.remote).digest('hex').slice(0, 16);
-    return cacheImage(src.remote, path.join(cacheDir, `override-${name}.jpg`));
+    const p = overridePath(await getOverrides(), identifier, field);
+    if (!p) return undefined;
+    return p.remote ? cacheImage(p.remote, p.file) : p.file;
+  }
+
+  // Cover and hero already on disk, fetching nothing: what the Playnite export points at
+  function localArt(identifier, installDir, overrides) {
+    const onDisk = (p) => (p && fs.existsSync(p) ? p : null);
+    const cover = overridePath(overrides, identifier, 'artUrl');
+    const hero  = overridePath(overrides, identifier, 'hero');
+    return {
+      cover: cover ? onDisk(cover.file) : (safeName(identifier) ? onDisk(path.join(cacheDir, `${identifier}.jpg`)) : null),
+      hero:  (hero && onDisk(hero.file)) || installHero(installDir),
+    };
   }
 
   // Cover for an item. A title with an artUrl override never falls through to archive.org.
@@ -88,7 +107,7 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, log = () => {} 
     return (await overrideArt(identifier, 'hero')) ?? installHero(installDir);
   }
 
-  return { cacheImage, overrideArt, thumb, installHero, hero };
+  return { cacheImage, overrideArt, localArt, thumb, installHero, hero };
 }
 
 const fileUrl = (p) => (p ? 'file:///' + p.replace(/\\/g, '/') : p);
