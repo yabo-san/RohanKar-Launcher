@@ -32,8 +32,7 @@ def from_api(gid):
         return None
     a = g.get("author") or {}
     return {"url": g["url"], "width": g.get("width"), "height": g.get("height"),
-            "style": g.get("style"), "artist": a.get("name"), "steam64": a.get("steam64"),
-            "game": g.get("game") or g.get("game_id"), "fields": sorted(g)}
+            "style": g.get("style"), "artist": a.get("name"), "steam64": a.get("steam64")}
 
 
 def from_page(gid):
