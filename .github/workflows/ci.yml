@@ -5,6 +5,7 @@ on:
     # gh-pages PRs are update-channel files, no code to check
     branches:
       - main
+      - ci/split-proof
 
 permissions:
   contents: read
