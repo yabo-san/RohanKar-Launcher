@@ -3,7 +3,40 @@
     "title": "The Last Remnant",
     "artUrl": "assets/covers/the-last-remnant.jpg"
   },
-  "REPLACE-with-a-pstriple-identifier": {
-    "artUrl": "https://example.invalid/cover.jpg"
+  "folklore_rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e6f695e4175268eca28621fb6fe05fe1.png"
+  },
+  "siren-blood-curse-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/95bab1f0cc573a146587d7043dc2dd87.png"
+  },
+  "soul-calibur-iv-RPCS3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e7c8a1dc4cbc03da7b1f8e1bcf1a1f83.png"
+  },
+  "street-fighter-x-tekken-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/582eecdede9f699fb750b90b0f13b5cf.jpg"
+  },
+  "god-of-war-ascension-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/df3a3172863754332a5159727ed3e7da.png"
+  },
+  "pokemon-red-version-usa-europe_202608": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/963c0fb9a6ba92ee1ab254c5b8f8926c.png"
+  },
+  "uncharted-2-rpcs-3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/7f8d79e1bfaa36d8cd59830d559c5df3.png"
+  },
+  "infamous-2-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e238cbc37c2ce28891d7187fb2ef7c58.png"
+  },
+  "fight-night-champion-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/6ad929516b3ae9c2ad3b07f60612b1bb.jpg"
+  },
+  "ssx-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/f71d62eb4ea81ec091eb47efa4e627d8.png"
+  },
+  "all-stars-battle-royale": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/32edbf933aa62a264aabbda64627255e.png"
+  },
+  "killzone2-rpcs3": {
+    "artUrl": "https://cdn2.steamgriddb.com/grid/4d298f562e47760d2a52afb6fc553fb7.png"
   }
 }
