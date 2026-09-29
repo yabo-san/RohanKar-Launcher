@@ -3,88 +3,114 @@
     "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png"
   },
   "infamous-festival-of-blood-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/ccaab67c9ace343c21defc58bfed28f1.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/ccaab67c9ace343c21defc58bfed28f1.png",
+    "title": "Infamous: Festival of Blood"
   },
   "fat-princess-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/9317d9227c0bff46239c8d01cf64b870.jpg"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/9317d9227c0bff46239c8d01cf64b870.jpg",
+    "title": "Fat Princess"
   },
   "pcsx-2-sly-1": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/5f2c6c83d8629cb955c1b1ad53a2aecd.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/5f2c6c83d8629cb955c1b1ad53a2aecd.png",
+    "title": "Sly Cooper and the Thievius Raccoonus"
   },
   "hatsune-miku-project-diva-f-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/fdba654832c8c610f18259f903659075.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/fdba654832c8c610f18259f903659075.png",
+    "title": "Hatsune Miku: Project Diva F"
   },
   "dragon-ball-z-raging-blast-2-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/69bf9cd653bc84c1cbadac3ccf277e78.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/69bf9cd653bc84c1cbadac3ccf277e78.png",
+    "title": "Dragon Ball: Raging Blast 2"
   },
   "skate-3-recompiled": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/46dd013457bbe05b580eb48eb869be0c.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/46dd013457bbe05b580eb48eb869be0c.png",
+    "title": "Skate 3"
   },
   "wipeout-hd-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/c0ea824a9f8e262d0025fdde6e7c8906.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/c0ea824a9f8e262d0025fdde6e7c8906.png",
+    "title": "WipEout HD: Fury"
   },
   "IRONMAN-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/a3813859f1619152f4e2a36c853f89d2.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/a3813859f1619152f4e2a36c853f89d2.png",
+    "title": "Iron Man"
   },
   "pixel-junk-collection-rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/07e4abb34ca647b413095cbb910e5afa.png"
   },
   "INFAMOUS1RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/9198689b820fc4a59bdcaa334b8cfbd5.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/9198689b820fc4a59bdcaa334b8cfbd5.png",
+    "title": "Infamous"
   },
   "rpcs-3-latest-mod-nation-racers-online": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/2be66c4e7b31c5a3190826521f5fef26.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/2be66c4e7b31c5a3190826521f5fef26.png",
+    "title": "ModNation Racers"
   },
   "rag-doll-kung-fu-fists-of-plastic-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/5f3ff97f921bc25f88172cf33e03b3e5.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/5f3ff97f921bc25f88172cf33e03b3e5.png",
+    "title": "Rag Doll Kung Fu: Fists of Plastic"
   },
   "hack-versus-multiplayer-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/2b6263d0b58234374d4133627291dde3.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/2b6263d0b58234374d4133627291dde3.png",
+    "title": ".hack//Versus"
   },
   "legend-of-spyro-dawn-of-the-dragon-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/3066ec78c52033df8cfc6bb9ac7d311d.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/3066ec78c52033df8cfc6bb9ac7d311d.png",
+    "title": "The Legend of Spyro: Dawn of the Dragon"
   },
   "ratchet-and-clank-future-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/c67b9208c82da1210bc2b1f3390e59d8.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/c67b9208c82da1210bc2b1f3390e59d8.png",
+    "title": "Ratchet & Clank Future: Tools of Destruction"
   },
   "IronMan2-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/9e640dbc3d4761885ab4723d8d351773.jpg"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/9e640dbc3d4761885ab4723d8d351773.jpg",
+    "title": "Iron Man 2"
   },
   "SpidermanWOS": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/0fc85db957133bc497e287f3f8797c88.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/0fc85db957133bc497e287f3f8797c88.png",
+    "title": "Spider-Man: Web of Shadows"
   },
   "dragons-crown-rpcs-3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/ce9542d0ca697892fa4a86fb6bacfc79.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/ce9542d0ca697892fa4a86fb6bacfc79.png",
+    "title": "Dragon's Crown"
   },
   "TOKYOJUNGLERPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/f9d71ca7819be84f5ec83659fc8934d3.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/f9d71ca7819be84f5ec83659fc8934d3.png",
+    "title": "Tokyo Jungle"
   },
   "shadps-4-gr-2-branch": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/cee0281e36d843e932cbabe3aaa22d50.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/cee0281e36d843e932cbabe3aaa22d50.png",
+    "title": "Gravity Rush 2"
   },
   "battlefield-bad-company-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/c9fd7a90e9a62c6fb2ec4ad91fa9dc1c.jpg"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/c9fd7a90e9a62c6fb2ec4ad91fa9dc1c.jpg",
+    "title": "Battlefield: Bad Company"
   },
   "gen-1-recomp-guide-dramatic-shape-mod": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/accaf235b0edc5850498425a0c0fb36f.png"
   },
   "heavenly-sword-rpcs-3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/544e022ea5e99bc80269d7640419bf9f.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/544e022ea5e99bc80269d7640419bf9f.png",
+    "title": "Heavenly Sword"
   },
   "DemonsSoulsRPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/34309fe518caef116cae4c583cd5a746.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/34309fe518caef116cae4c583cd5a746.png",
+    "title": "Demon's Souls"
   },
   "ResistanceOnline": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/a675cdaaaea6d970edf507f9716e5227.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/a675cdaaaea6d970edf507f9716e5227.png",
+    "title": "Resistance: Fall of Man"
   },
   "Resistance2-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/28697b9d338e758abadda5817240dfca.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/28697b9d338e758abadda5817240dfca.png",
+    "title": "Resistance 2"
   },
   "MOTORSTORMPACIFICRIFTRPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/a4d5d98b0b7f5743bb6e33753774fbdc.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/a4d5d98b0b7f5743bb6e33753774fbdc.png",
+    "title": "MotorStorm: Pacific Rift"
   },
   "heavenly-sword-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/544e022ea5e99bc80269d7640419bf9f.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/544e022ea5e99bc80269d7640419bf9f.png",
+    "title": "Heavenly Sword"
   },
   "Spider-manedgeoftime": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png"
@@ -94,57 +120,74 @@
     "title": "Gravity Rush Remastered"
   },
   "folklore_rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/e6f695e4175268eca28621fb6fe05fe1.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e6f695e4175268eca28621fb6fe05fe1.png",
+    "title": "Folklore"
   },
   "siren-blood-curse-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/95bab1f0cc573a146587d7043dc2dd87.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/95bab1f0cc573a146587d7043dc2dd87.png",
+    "title": "Siren: Blood Curse"
   },
   "soul-calibur-iv-RPCS3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/e7c8a1dc4cbc03da7b1f8e1bcf1a1f83.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e7c8a1dc4cbc03da7b1f8e1bcf1a1f83.png",
+    "title": "SoulCalibur IV"
   },
   "street-fighter-x-tekken-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/582eecdede9f699fb750b90b0f13b5cf.jpg"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/582eecdede9f699fb750b90b0f13b5cf.jpg",
+    "title": "Street Fighter X Tekken"
   },
   "god-of-war-ascension-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/df3a3172863754332a5159727ed3e7da.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/df3a3172863754332a5159727ed3e7da.png",
+    "title": "God of War: Ascension"
   },
   "pokemon-red-version-usa-europe_202608": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/963c0fb9a6ba92ee1ab254c5b8f8926c.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/963c0fb9a6ba92ee1ab254c5b8f8926c.png",
+    "title": "Pokémon Red Version"
   },
   "uncharted-2-rpcs-3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/7f8d79e1bfaa36d8cd59830d559c5df3.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/7f8d79e1bfaa36d8cd59830d559c5df3.png",
+    "title": "Uncharted 2: Among Thieves"
   },
   "infamous-2-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/e238cbc37c2ce28891d7187fb2ef7c58.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/e238cbc37c2ce28891d7187fb2ef7c58.png",
+    "title": "Infamous 2"
   },
   "fight-night-champion-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/6ad929516b3ae9c2ad3b07f60612b1bb.jpg"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/6ad929516b3ae9c2ad3b07f60612b1bb.jpg",
+    "title": "Fight Night Champion"
   },
   "ssx-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/f71d62eb4ea81ec091eb47efa4e627d8.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/f71d62eb4ea81ec091eb47efa4e627d8.png",
+    "title": "SSX"
   },
   "all-stars-battle-royale": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/32edbf933aa62a264aabbda64627255e.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/32edbf933aa62a264aabbda64627255e.png",
+    "title": "PlayStation All-Stars Battle Royale"
   },
   "killzone2-rpcs3": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/4d298f562e47760d2a52afb6fc553fb7.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/4d298f562e47760d2a52afb6fc553fb7.png",
+    "title": "Killzone 2"
   },
   "twilight-princess-ddsk": {
     "title": "The Legend of Zelda: Twilight Princess (Dusklight)"
   },
   "BLUR-MULTIPLAYER": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/30e920df8099c4feb835211451c3aa62.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/30e920df8099c4feb835211451c3aa62.png",
+    "title": "Blur"
   },
   "BBLauncher": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/021399af062379408df9c358a1a83cdb.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/021399af062379408df9c358a1a83cdb.png",
+    "title": "Bloodborne"
   },
   "godzilla-shadps4": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png",
+    "title": "Godzilla"
   },
   "godzilla-shadps4_202607": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/256e2c0ff5c9722c514fca5e71eecdf3.png",
+    "title": "Godzilla"
   },
   "Pokestadia": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png",
+    "title": "Pokémon Stadium"
   }
 }

@@ -413,6 +413,15 @@
         "curated": false
       },
       {
+        "id": 848256,
+        "url": "https://cdn2.steamgriddb.com/grid/aeabe385549f9a7902d8cb36ec70deaa.png",
+        "artist": "Copernicus",
+        "steam64": "76561198255514657",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
         "id": 841118,
         "url": "https://cdn2.steamgriddb.com/grid/68267e7749851a63403ef93bbf7d7eb0.png",
         "artist": "Togo",
@@ -444,15 +453,6 @@
         "url": "https://cdn2.steamgriddb.com/grid/d50e23ce5bb56e5e3a2c790ca4e81368.png",
         "artist": "Glibbersh",
         "steam64": "76561198064199623",
-        "style": "alternate",
-        "votes": 0,
-        "curated": false
-      },
-      {
-        "id": 793066,
-        "url": "https://cdn2.steamgriddb.com/grid/c82e5fe2e826e435962eb15a91fe496f.png",
-        "artist": "mattthecat",
-        "steam64": "76561198130075070",
         "style": "alternate",
         "votes": 0,
         "curated": false
@@ -5116,15 +5116,105 @@
   },
   "dragon-ball-z-raging-blast-2-rpcs3": {
     "title": "Dragon Ball Z Raging Blast 2 RPCS 3",
-    "searched": "Dragon Ball Z Raging Blast 2",
+    "searched": "Dragon Ball: Raging Blast 2",
     "sgdb": {
-      "id": 38026,
-      "name": "Dragon Ball Z"
+      "id": 5259026,
+      "name": "Dragon Ball: Raging Blast 2"
     },
     "grids": [
       {
-        "id": 339502,
-        "url": "https://cdn2.steamgriddb.com/grid/1975072956057c9fa1f4f44dc9d85237.png",
+        "id": 226462,
+        "url": "https://cdn2.steamgriddb.com/grid/77bf4f0211ed98aece2f3a0030df2137.png",
+        "artist": "Kynd",
+        "steam64": "76561198095364901",
+        "style": "no_logo",
+        "votes": 0,
+        "curated": true
+      },
+      {
+        "id": 226463,
+        "url": "https://cdn2.steamgriddb.com/grid/69bf9cd653bc84c1cbadac3ccf277e78.png",
+        "artist": "Kynd",
+        "steam64": "76561198095364901",
+        "style": "alternate",
+        "votes": 0,
+        "curated": true
+      },
+      {
+        "id": 567631,
+        "url": "https://cdn2.steamgriddb.com/grid/b02961805f53738ffe508b26cbd38baa.png",
+        "artist": "Ryuuji_Hitsugaya",
+        "steam64": "76561199056228906",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 465430,
+        "url": "https://cdn2.steamgriddb.com/grid/53fc77d38dd8bdde1f1a1d99aeefad09.png",
+        "artist": "Nemix",
+        "steam64": "76561197999708005",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 737010,
+        "url": "https://cdn2.steamgriddb.com/grid/7f9a395a9d6c540b2f25c409c992732d.png",
+        "artist": "Birthed",
+        "steam64": "76561199037448066",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 233055,
+        "url": "https://cdn2.steamgriddb.com/grid/37dd01b418b0383d62629d192ac98e13.png",
+        "artist": "ScottishPenguin",
+        "steam64": "76561198799128917",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 784956,
+        "url": "https://cdn2.steamgriddb.com/grid/3c94537d742fe0759c786029568aa8d1.jpg",
+        "artist": "Thorntonamo",
+        "steam64": "76561199628098818",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 552030,
+        "url": "https://cdn2.steamgriddb.com/grid/06f160f244b72a0063e137285c457f68.png",
+        "artist": "Samcrossette",
+        "steam64": "76561198009610479",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 546366,
+        "url": "https://cdn2.steamgriddb.com/grid/800d3bb89906901eef87b57f57ceb728.png",
+        "artist": "kautin",
+        "steam64": "76561198269484352",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 451690,
+        "url": "https://cdn2.steamgriddb.com/grid/7e1fc98e0ff801e95900e888fa093c01.png",
+        "artist": "CHRISSY345",
+        "steam64": "76561199190175607",
+        "style": "alternate",
+        "votes": 0,
+        "curated": false
+      },
+      {
+        "id": 443447,
+        "url": "https://cdn2.steamgriddb.com/grid/ab22843472fa9535b9a3809cefe43b56.png",
         "artist": "Ichiron47",
         "steam64": "76561198105552646",
         "style": "alternate",
@@ -5132,8 +5222,8 @@
         "curated": false
       },
       {
-        "id": 257479,
-        "url": "https://cdn2.steamgriddb.com/grid/ad31922f3d85d59bd0c55ec3fc810a5a.png",
+        "id": 425599,
+        "url": "https://cdn2.steamgriddb.com/grid/fded13c0d4070f5db76aba75af9dccdc.png",
         "artist": "Ichiron47",
         "steam64": "76561198105552646",
         "style": "alternate",
@@ -5141,55 +5231,46 @@
         "curated": false
       },
       {
-        "id": 172160,
-        "url": "https://cdn2.steamgriddb.com/grid/55a67d2bc4da116daec02877043f5f6d.png",
-        "artist": "erlim",
-        "steam64": "76561197972136530",
+        "id": 304874,
+        "url": "https://cdn2.steamgriddb.com/grid/8302fc6a3e84575e5c1f856347cc5326.png",
+        "artist": "FunkeJosh",
+        "steam64": "76561198025465108",
         "style": "alternate",
         "votes": 0,
         "curated": false
       },
       {
-        "id": 84963,
-        "url": "https://cdn2.steamgriddb.com/grid/e52732dd6f487d77dfc098228406b646.png",
-        "artist": "Krissmed",
-        "steam64": "76561198069568438",
-        "style": "material",
-        "votes": 0,
-        "curated": false
-      },
-      {
-        "id": 827086,
-        "url": "https://cdn2.steamgriddb.com/grid/c2a906b882898a639219ec59d417a4c4.png",
-        "artist": "KrysRyouta",
-        "steam64": "76561198667570795",
+        "id": 233063,
+        "url": "https://cdn2.steamgriddb.com/grid/b7cfcb020582cde248b1364372fa8d49.png",
+        "artist": "ScottishPenguin",
+        "steam64": "76561198799128917",
         "style": "alternate",
         "votes": 0,
         "curated": false
       },
       {
-        "id": 445793,
-        "url": "https://cdn2.steamgriddb.com/grid/5970b84a9731d06a761edf2b7940c94d.png",
-        "artist": "Ichiron47",
-        "steam64": "76561198105552646",
+        "id": 130554,
+        "url": "https://cdn2.steamgriddb.com/grid/485fdac805990a665521d5a323cbd21b.png",
+        "artist": "Shadicluigi",
+        "steam64": "76561198089964603",
         "style": "alternate",
         "votes": 0,
         "curated": false
       },
       {
-        "id": 808101,
-        "url": "https://cdn2.steamgriddb.com/grid/a8dcd9bfe475c3ceb0cfac19ce0e37ac.png",
-        "artist": "PAfro",
-        "steam64": "76561198160887599",
+        "id": 129755,
+        "url": "https://cdn2.steamgriddb.com/grid/3dda2c6de477fde8100a2bece5b6708f.jpg",
+        "artist": "Dropkix",
+        "steam64": "76561198174165263",
         "style": "alternate",
         "votes": 0,
         "curated": false
       },
       {
-        "id": 442913,
-        "url": "https://cdn2.steamgriddb.com/grid/b1d0d2008047f7ba352971d05a0a31ae.png",
-        "artist": "Ichiron47",
-        "steam64": "76561198105552646",
+        "id": 572349,
+        "url": "https://cdn2.steamgriddb.com/grid/7df160adbfff2a8fe21f0e6626469882.png",
+        "artist": "Birthed",
+        "steam64": "76561199037448066",
         "style": "alternate",
         "votes": 0,
         "curated": false
@@ -5197,22 +5278,31 @@
     ],
     "heroes": [
       {
-        "id": 81303,
-        "url": "https://cdn2.steamgriddb.com/hero/338791ea8c95e151dda9101c69a8a0d5.png",
-        "artist": "Ichiron47",
-        "steam64": "76561198105552646",
+        "id": 56193,
+        "url": "https://cdn2.steamgriddb.com/hero/e97f4360f6ecf96cf0b3b580ad4c43eb.png",
+        "artist": "Kynd",
+        "steam64": "76561198095364901",
         "style": "alternate",
         "votes": 0,
-        "curated": false
+        "curated": true
       },
       {
-        "id": 181410,
-        "url": "https://cdn2.steamgriddb.com/hero/78d705691857b9f9f4c20ebe20e40d7d.png",
-        "artist": "MrDeKat",
-        "steam64": "76561198016814999",
+        "id": 56445,
+        "url": "https://cdn2.steamgriddb.com/hero/e732a37ee88a65aae3dabd172c4b6bdd.png",
+        "artist": "Kynd",
+        "steam64": "76561198095364901",
         "style": "alternate",
         "votes": 0,
-        "curated": false
+        "curated": true
+      },
+      {
+        "id": 56444,
+        "url": "https://cdn2.steamgriddb.com/hero/dcaf2a90da9b969145a3c20a54f9e00c.png",
+        "artist": "Kynd",
+        "steam64": "76561198095364901",
+        "style": "alternate",
+        "votes": 0,
+        "curated": true
       }
     ]
   },
@@ -10702,35 +10792,35 @@
   },
   "rag-doll-kung-fu-fists-of-plastic-rpcs3": {
     "title": "RAG DOLL KUNG FU",
-    "searched": "RAG DOLL KUNG FU",
+    "searched": "Rag Doll Kung Fu: Fists of Plastic",
     "sgdb": {
-      "id": 183,
-      "name": "Rag Doll Kung Fu"
+      "id": 5374718,
+      "name": "Rag Doll Kung Fu: Fists of Plastic"
     },
     "grids": [
       {
-        "id": 55910,
-        "url": "https://cdn2.steamgriddb.com/grid/794029ce0ca4a8ed5ab2250eade9b61f.png",
-        "artist": "goonbridge",
-        "steam64": "76561197967390094",
+        "id": 286568,
+        "url": "https://cdn2.steamgriddb.com/grid/5f3ff97f921bc25f88172cf33e03b3e5.png",
+        "artist": "Scoop",
+        "steam64": "76561198968011246",
+        "style": "alternate",
+        "votes": 0,
+        "curated": true
+      },
+      {
+        "id": 787701,
+        "url": "https://cdn2.steamgriddb.com/grid/4d6d2674d956db6b6c7d77d24a3e30c9.png",
+        "artist": "SerWolfy",
+        "steam64": "76561198079732277",
         "style": "alternate",
         "votes": 0,
         "curated": false
       },
       {
-        "id": 638042,
-        "url": "https://cdn2.steamgriddb.com/grid/a0797277d99cfe0cb17a26a41a6764a9.png",
-        "artist": "rafaelsguimaraes",
-        "steam64": "76561198160468371",
-        "style": "alternate",
-        "votes": 0,
-        "curated": false
-      },
-      {
-        "id": 433748,
-        "url": "https://cdn2.steamgriddb.com/grid/500d6dbaa3ee4a83c76b12a5146fde95.png",
-        "artist": "Kinsie",
-        "steam64": "76561197966497121",
+        "id": 715612,
+        "url": "https://cdn2.steamgriddb.com/grid/83899e253e2e3a371f557cc98cb4b210.png",
+        "artist": "owluitar",
+        "steam64": "76561198094701861",
         "style": "alternate",
         "votes": 0,
         "curated": false
@@ -10738,19 +10828,19 @@
     ],
     "heroes": [
       {
-        "id": 28182,
-        "url": "https://cdn2.steamgriddb.com/hero/abffbd61825be76adbbe7bf96233f42b.png",
-        "artist": "Onyx8011",
-        "steam64": "76561198125292564",
+        "id": 68571,
+        "url": "https://cdn2.steamgriddb.com/hero/87064c139c707be62972ced58b6c5f9f.png",
+        "artist": "Scoop",
+        "steam64": "76561198968011246",
         "style": "alternate",
         "votes": 0,
         "curated": true
       },
       {
-        "id": 12678,
-        "url": "https://cdn2.steamgriddb.com/hero/e99ce0cdd4f46110c2497ea4f5ead1f1.png",
-        "artist": "ABH20",
-        "steam64": "76561198058544946",
+        "id": 99956,
+        "url": "https://cdn2.steamgriddb.com/hero/39b9301d8c5ab083520c1af05f1b5a5a.png",
+        "artist": "hightowercactus",
+        "steam64": "76561199211196326",
         "style": "alternate",
         "votes": 0,
         "curated": false
