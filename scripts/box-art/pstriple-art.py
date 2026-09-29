@@ -13,6 +13,9 @@ Rules (K):
   artUrl, plus hero where a curated 1920x620 exists. Entries that already have
   art keep it. Never touches apps.json. Also writes a CSV report and batch.md
   (cover previews for the PR body).
+- Items with no curated cover get their top three portrait candidates by any
+  artist (no_logo first, then votes) in candidates.csv for K to pick from;
+  items with none at all are marked "needs art". Candidates are never written.
 
 Usage: python3 pstriple-art.py [--artists catalog/favorite-artists.json] [--overrides overrides.json]
 """
@@ -28,6 +31,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent.parent
 OUT = HERE / "pstriple-art.csv"
 BATCH = HERE / "batch.md"
+CANDIDATES = HERE / "candidates.csv"
 CACHE = HERE / "cache"
 CACHE.mkdir(exist_ok=True)
 
@@ -124,31 +128,45 @@ def curated(assets):
 
 
 def cover(term):
-    """(matched game name, cover grid, hero) for a search term; any of them may be None."""
+    """(matched game name, cover grid, hero, all portrait grids) for a search term."""
     s = sgdb("/search/autocomplete/" + urllib.parse.quote(term))
     # Skip emulator entries, which match any title that still mentions one.
     games = [g for g in (s or {}).get("data") or [] if "(Emulator)" not in g["name"]]
     if not games:
-        return None, None, None
+        return None, None, None, []
     game = games[0]
     grids = (sgdb(f"/grids/game/{game['id']}?dimensions=600x900&types=static") or {}).get("data") or []
     g = curated(grids)
     if not g:
-        return game["name"], None, None
+        return game["name"], None, None, grids
     heroes = (sgdb(f"/heroes/game/{game['id']}?dimensions=1920x620&types=static") or {}).get("data") or []
-    return game["name"], g, curated(heroes)
+    return game["name"], g, curated(heroes), grids
 
 
 def artist(asset):
     return NAME[str(asset["author"]["steam64"])] if asset else ""
 
 
+def votes(asset):
+    return asset.get("score", (asset.get("upvotes") or 0) - (asset.get("downvotes") or 0))
+
+
 rows = []
+candidates = []
 docs = items()
 print(f"{len(docs)} items from pstriple", flush=True)
 for d in docs:
     term = ALIASES.get(d["identifier"]) or game_name(d.get("title") or d["identifier"])
-    matched, g, h = cover(term)
+    matched, g, h, grids = cover(term)
+    if not g:
+        # No curated art: top three portrait grids by anyone, no_logo first, then votes, for K to pick from.
+        top = sorted(grids, key=lambda a: (a.get("style") != "no_logo", -votes(a)))[:3]
+        for i, a in enumerate(top, 1):
+            au = a.get("author") or {}
+            candidates.append([d["identifier"], d.get("title", ""), matched or "", i, au.get("name") or "",
+                               au.get("steam64") or "", a.get("style") or "", votes(a), a.get("url") or "", ""])
+        if not top:
+            candidates.append([d["identifier"], d.get("title", ""), matched or "", "", "", "", "", "", "", "needs art"])
     rows.append({
         "identifier": d["identifier"], "ia_title": d.get("title", ""), "searched": term,
         "sgdb_game": matched or "", "artist": artist(g), "style": (g or {}).get("style") or "",
@@ -159,6 +177,12 @@ with OUT.open("w", newline="", encoding="utf-8") as f:
     w = csv.DictWriter(f, fieldnames=list(rows[0]) if rows else ["identifier"])
     w.writeheader()
     w.writerows(rows)
+
+# Candidates only feed K's picks; nothing from them is written anywhere else.
+with CANDIDATES.open("w", newline="", encoding="utf-8") as f:
+    w = csv.writer(f)
+    w.writerow(["identifier", "ia_title", "sgdb_game", "rank", "artist", "steam64", "style", "votes", "url", "pick"])
+    w.writerows(candidates)
 
 # Approved rows into overrides.json; art already there (curated by hand or an earlier batch) wins.
 overrides = json.loads(args.overrides.read_text(encoding="utf-8"))

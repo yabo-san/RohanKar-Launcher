@@ -47,6 +47,9 @@ jobs:
       - name: Show report
         run: |
           cat scripts/box-art/pstriple-art.csv
+          echo '--- candidates.csv ---'
+          cat scripts/box-art/candidates.csv
+          echo '--- overrides.json diff ---'
           git diff overrides.json
           cat scripts/box-art/batch.md >> "$GITHUB_STEP_SUMMARY"
           { echo '```csv'; cat scripts/box-art/pstriple-art.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
@@ -56,6 +59,7 @@ jobs:
           name: pstriple-art
           path: |
             scripts/box-art/pstriple-art.csv
+            scripts/box-art/candidates.csv
             scripts/box-art/batch.md
 
       - name: Open batch PR
