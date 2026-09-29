@@ -3,7 +3,7 @@
   "version": "1.6.0-fork.3",
   "description": "RohanKar Game Launcher",
   "author": "Kilted-Kraken",
-  "main": "src/main/main.js",
+  "main": "src/electron/main.js",
   "scripts": {
     "start": "electron .",
     "lint": "eslint .",

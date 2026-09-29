@@ -4,34 +4,20 @@
  * before main.js (through the inspector; see packaged.smoke.js).
  *
  * - Points userData at E2E_USER_DATA so each run gets a fresh settings.json.
- * - Answers archive.org and raw.githubusercontent.com from fixtures.js
- *   instead of the network (CI never calls archive.org). The backend runs in
- *   this process and calls https.get at request time, so it sees the stub.
+ * - Starts the backend through backend-entry.js, which loads https-stub.js
+ *   into the backend process first, so archive.org and the catalog fetches
+ *   are answered from fixtures.js instead of the network.
  */
 
-const { app } = require('electron');
-const https   = require('https');
-const { EventEmitter } = require('events');
-const { Readable }     = require('stream');
-const { answer }       = require('./fixtures');
+const { app, utilityProcess } = require('electron');
+const path = require('path');
 
 if (process.env.E2E_USER_DATA) app.setPath('userData', process.env.E2E_USER_DATA);
 
-const realGet = https.get;
-const STUBBED_HOSTS = new Set(['archive.org', 'raw.githubusercontent.com']);
-
-https.get = function (target, ...rest) {
-  const url = new URL(String(target));
-  if (!STUBBED_HOSTS.has(url.hostname)) return realGet.call(this, target, ...rest);
-
-  const callback = rest.find(a => typeof a === 'function');
-  const req = new EventEmitter();
-  req.setTimeout = () => req;
-  req.destroy    = () => req;
-  const { status, type, body } = answer(url);
-  const res = Readable.from([body]);
-  res.statusCode = status;
-  res.headers    = { 'content-type': type, 'content-length': String(body.length), date: new Date().toUTCString() };
-  process.nextTick(() => callback?.(res));
-  return req;
+const realFork = utilityProcess.fork;
+utilityProcess.fork = function (modulePath, args, options = {}) {
+  return realFork.call(this, path.join(__dirname, 'backend-entry.js'), args, {
+    ...options,
+    env: { ...(options.env || process.env), E2E_BACKEND_MAIN: modulePath },
+  });
 };

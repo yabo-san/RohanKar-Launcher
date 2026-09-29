@@ -8,11 +8,11 @@ module.exports = [
   { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
   {
-    files: ['src/main/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
+    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
-    files: ['src/main/**/*.js'],
+    files: ['src/electron/**/*.js'],
     rules: {
       'no-unused-vars': 'off',            // baseline: unused imports/locals in main.js (spawn, start)
       'no-empty': 'off',                  // baseline: 13 intentional empty catch blocks in main.js

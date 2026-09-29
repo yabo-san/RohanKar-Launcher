@@ -1,54 +1,108 @@
 'use strict';
 /**
- * RohanKar Launcher — main.js
- * Starts the backend (src/backend/) in-process with its HTTP API on
- * 127.0.0.1, opens the window on src/frontend/ and hands it the port and
- * token. The OS side stays here: window controls, dialogs, the shell,
- * the auto-updater and Add to Steam, which the backend calls through `host`.
+ * RohanKar Launcher — src/electron/main.js
+ * A thin host. Starts the backend (src/backend/main.js) as a utility process,
+ * waits for it to report its port and token, then opens the window on
+ * src/frontend/ with both. The OS side stays here: window controls,
+ * dialogs, the shell, the auto-updater and Add to Steam, which the backend
+ * asks for over the process's message port (src/backend/parent.js).
+ * Quitting the app shuts the backend down.
  */
 
-const { app, BrowserWindow, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell, utilityProcess } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
-const { createBackend } = require('../backend');
-const { createServer } = require('../backend/server');
 
-// ─── Backend ─────────────────────────────────────────────────────────────────
-
-const USER_DATA = app.getPath('userData');
+const USER_DATA   = app.getPath('userData');
+const HEROES_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes');
+const BACKEND_MAIN = path.join(__dirname, '../backend/main.js');
 
 let mainWindow;
+let windowShown = false;
+let backendInfo = null;   // { port, token, url } once the backend is listening
 
-const backend = createBackend({
-  dataDir:    USER_DATA,
-  appDir:     app.getAppPath(),
-  heroesDir:  app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes'),
-  appVersion: app.getVersion(),
-  host: {
-    openPath:     (p) => shell.openPath(p),   // ShellExecute: handles UAC prompts, unlike execFile
-    trashItem:    (p) => shell.trashItem(p),
-    openExternal: (url) => shell.openExternal(url),
-    chooseFolder: async () => {
-      const res = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
-      return res.canceled ? null : res.filePaths[0];
-    },
-    window: (action) => {
-      if (action === 'minimize') mainWindow?.minimize();
-      else if (action === 'close') mainWindow?.close();
-      else if (mainWindow?.isMaximized()) mainWindow.unmaximize();
-      else mainWindow?.maximize();
-    },
-    addToSteam:     (opts) => addToSteam(opts),
-    updaterInstall: () => updaterInstall(),
+// ─── OS actions the backend asks for ─────────────────────────────────────────
+
+const host = {
+  openPath:     (p) => shell.openPath(p),   // ShellExecute: handles UAC prompts, unlike execFile
+  trashItem:    (p) => shell.trashItem(p),
+  openExternal: (url) => shell.openExternal(url),
+  chooseFolder: async () => {
+    const res = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
+    return res.canceled ? null : res.filePaths[0];
   },
-});
-const api = createServer(backend, { log: (msg) => console.error(msg) });
-const loadSettings = () => backend.settings.load();
+  window: (action) => {
+    if (action === 'minimize') mainWindow?.minimize();
+    else if (action === 'close') mainWindow?.close();
+    else if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+    else mainWindow?.maximize();
+  },
+  addToSteam:     (opts) => addToSteam(opts),
+  updaterInstall: () => updaterInstall(),
+};
+
+// ─── Backend process ─────────────────────────────────────────────────────────
+
+let backend = null;         // the utility process
+let backendExited = false;
+let quitting = false;
+
+// Resolves with { port, token, url } once the backend is listening
+function startBackend() {
+  backend = utilityProcess.fork(BACKEND_MAIN, ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR], {
+    serviceName: 'Launcher backend',
+    stdio:       'inherit',
+  });
+
+  backend.on('message', async (msg) => {
+    if (msg?.type !== 'host') return;
+    const reply = (res) => { if (!backendExited) backend.postMessage({ type: 'host-result', id: msg.id, ...res }); };
+    if (!Object.hasOwn(host, msg.method)) {
+      return reply({ ok: false, error: { message: `Unknown host action ${msg.method}`, code: 'unsupported' } });
+    }
+    try {
+      reply({ ok: true, value: (await host[msg.method](...(msg.args || []))) ?? null });
+    } catch (e) {
+      reply({ ok: false, error: { message: e.message, code: e.code } });
+    }
+  });
+
+  return new Promise((resolve, reject) => {
+    backend.on('message', (msg) => { if (msg?.type === 'listening') resolve(msg); });
+    backend.once('exit', (code) => {
+      backendExited = true;
+      reject(new Error(`the backend exited (code ${code}) before it was ready`));
+      if (!quitting) {
+        dialog.showErrorBox('RohanKar Launcher', `The launcher's backend stopped unexpectedly (code ${code}).`);
+        app.quit();
+      }
+    });
+  });
+}
+
+const setUpdaterStatus = (status) => { if (backend && !backendExited) backend.postMessage({ type: 'updater', status }); };
+
+// Settings, read through the API like any other client
+async function loadSettings() {
+  try {
+    const res = await fetch(`${backendInfo.url}/settings`, { headers: { authorization: `Bearer ${backendInfo.token}` } });
+    return res.ok ? await res.json() : {};
+  } catch {
+    return {};
+  }
+}
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-function createWindow({ url, token }) {
+// The new UI is the default; "ui": "legacy" in settings.json (the toggle in
+// either UI's Settings) or RK_UI=legacy opens the classic one
+async function useClassicUi() {
+  return process.env.RK_UI === 'legacy' || (await loadSettings()).ui === 'legacy';
+}
+
+async function createWindow({ url, token }) {
+  const classic = await useClassicUi();
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 800,
@@ -61,34 +115,40 @@ function createWindow({ url, token }) {
       additionalArguments: [`--launcher-api=${url}`, `--launcher-token=${token}`],
     },
   });
-  mainWindow.loadFile(path.join(__dirname, useClassicUi() ? '../frontend/index.html' : '../frontend/new/index.html'));
-}
-
-// The new UI is the default; "ui": "legacy" in settings.json (the toggle in
-// either UI's Settings) or RK_UI=legacy opens the classic one
-function useClassicUi() {
-  return process.env.RK_UI === 'legacy' || loadSettings().ui === 'legacy';
+  mainWindow.once('ready-to-show', () => { windowShown = true; });
+  mainWindow.loadFile(path.join(__dirname, classic ? '../frontend/index.html' : '../frontend/new/index.html'));
 }
 
 app.whenReady().then(async () => {
-  backend.getOverrides();
-  backend.getDefaultSources();
-  const info = await api.listen(0);
-  createWindow(info);
+  try {
+    backendInfo = await startBackend();
+  } catch (e) {
+    console.error(`[backend] ${e.message}`);
+    return;
+  }
+  await createWindow(backendInfo);
   setupAutoUpdater();
-  // Validate installs on every launch — clears DB entries whose folders were deleted
-  backend.library.clearMissingInstalls();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', async () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow({ url: `http://127.0.0.1:${api.server.address().port}/v1`, token: api.token });
+app.on('activate', () => {
+  if (backendInfo && BrowserWindow.getAllWindows().length === 0) createWindow(backendInfo);
 });
-app.on('will-quit', () => { api.close(); backend.close(); });
+
+// Let the backend close library.db and its server before the app exits
+app.on('will-quit', (event) => {
+  quitting = true;
+  if (!backend || backendExited) return;
+  event.preventDefault();
+  const force = setTimeout(() => backend.kill(), 3000);
+  backend.once('exit', () => { clearTimeout(force); app.quit(); });
+  backend.postMessage({ type: 'shutdown' });
+});
 
 // ─── Auto-updater ────────────────────────────────────────────────────────────
 //
 // electron-updater checks GitHub releases on launch, downloads in background,
-// and sends IPC events to the renderer so the UI can show a non-intrusive bar.
+// and reports through the backend (GET /os/updater and the `updater` event)
+// so the UI can show a non-intrusive bar.
 //
 // In development (app.isPackaged === false) we skip the update check entirely
 // so you don't get errors about missing release files.
@@ -99,13 +159,13 @@ const RELEASES_REPO = 'yabo-san/RohanKar-Launcher';
 const UPDATE_CHANNEL_BASE = 'https://yabo-san.github.io/RohanKar-Launcher';
 let availableVersion = null;
 
-function setupAutoUpdater() {
+async function setupAutoUpdater() {
   if (!app.isPackaged) {
     console.log('[updater] Dev mode — skipping update check');
     return;
   }
   // Off unless turned on in Settings
-  if (!loadSettings().checkForUpdates) {
+  if (!(await loadSettings()).checkForUpdates) {
     console.log('[updater] Update check disabled in settings');
     return;
   }
@@ -121,7 +181,7 @@ function setupAutoUpdater() {
   autoUpdater.autoDownload         = false; // don't auto-download — GitHub releases don't report progress
   autoUpdater.allowDowngrade        = false;
 
-  const channel = loadSettings().betaUpdates ? 'beta' : 'stable';
+  const channel = (await loadSettings()).betaUpdates ? 'beta' : 'stable';
   autoUpdater.setFeedURL({ provider: 'generic', url: `${UPDATE_CHANNEL_BASE}/${channel}/` });
   console.log(`[updater] Channel: ${channel}`);
 
@@ -154,7 +214,7 @@ function setupAutoUpdater() {
     });
 
     fetchNotes().then((releaseNotes) => {
-      backend.setUpdaterStatus({
+      setUpdaterStatus({
         status:       'available',
         version:      info.version,
         releaseNotes: releaseNotes || null,
@@ -178,16 +238,16 @@ function setupAutoUpdater() {
       return;
     }
     console.error('[updater] Error:', msg);
-    backend.setUpdaterStatus({
+    setUpdaterStatus({
       status:  'error',
       message: msg,
     });
   });
 
   // Check after the window is ready so the user sees the UI first
-  mainWindow?.once('ready-to-show', () => {
-    setTimeout(() => autoUpdater.checkForUpdates(), 3000);
-  });
+  const check = () => setTimeout(() => autoUpdater.checkForUpdates(), 3000);
+  if (windowShown) check();
+  else mainWindow?.once('ready-to-show', check);
 
 }  
 
