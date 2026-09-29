@@ -11,6 +11,7 @@ const https  = require('https');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { loadOverrides, artSource } = require('./overrides');
+const { createPortsFeed } = require('./ports-feed');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +65,18 @@ try {
     db.exec('ALTER TABLE collections ADD COLUMN color TEXT');
     console.log('DB migration: added column collections.color');
   }
+
+  // Ports the user added from a catalog shelf. Removing one drops the row and
+  // leaves any installed files alone.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS port_library (
+      id         TEXT PRIMARY KEY,
+      source     TEXT NOT NULL,
+      repository TEXT NOT NULL,
+      name       TEXT,
+      added_at   INTEGER
+    );
+  `);
 
   const existingCols = db.prepare('PRAGMA table_info(games)').all().map(r => r.name);
   const needed = {
@@ -137,8 +150,20 @@ function createWindow() {
       nodeIntegration:  false,
     },
   });
-  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  mainWindow.loadFile(path.join(__dirname, useLegacyUi() ? '../renderer/index.html' : '../ui/index.html'));
 }
+
+// The new UI is the default; RK_UI=legacy or "ui": "legacy" in settings.json
+// brings back the old one while the new one catches up.
+function useLegacyUi() {
+  return process.env.RK_UI === 'legacy' || loadSettings().ui === 'legacy';
+}
+
+ipcMain.handle('ui-switch', (_, { ui }) => {
+  saveSettings({ ui: ui === 'legacy' ? 'legacy' : 'new' });
+  mainWindow?.loadFile(path.join(__dirname, ui === 'legacy' ? '../renderer/index.html' : '../ui/index.html'));
+  return { ok: true };
+});
 
 app.whenReady().then(() => {
   getOverrides();
@@ -445,6 +470,37 @@ function getOverrides() {
 }
 
 ipcMain.handle('get-overrides', () => getOverrides());
+
+// ─── Ports: Quiver catalogs joined to the collision catalog ───────────────────
+
+const portsFeed = createPortsFeed({
+  fetchText: (url) => archiveGetText(url, 'ports', 15000)
+    .then(r => r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`))),
+  cacheDir:   path.join(USER_DATA, 'catalog-cache'),
+  bundledDir: path.join(app.getAppPath(), 'catalog'),
+  log: (msg) => console.log(msg),
+});
+
+ipcMain.handle('ports-get',       ()           => portsFeed.get());
+ipcMain.handle('ports-refresh',   ()           => portsFeed.refresh());
+ipcMain.handle('ports-review',    ()           => portsFeed.review());
+ipcMain.handle('ports-mark-seen', (_, { id } = {}) => portsFeed.markSeen(id));
+
+ipcMain.handle('ports-library-get', () => {
+  if (!db) return [];
+  return db.prepare('SELECT * FROM port_library ORDER BY added_at DESC').all();
+});
+ipcMain.handle('ports-library-add', (_, { id, source, repository, name }) => {
+  if (!db) return { ok: false, error: 'library database unavailable' };
+  db.prepare('INSERT OR IGNORE INTO port_library (id, source, repository, name, added_at) VALUES (?, ?, ?, ?, ?)')
+    .run(id, source, repository, name, Date.now());
+  return { ok: true };
+});
+ipcMain.handle('ports-library-remove', (_, { id }) => {
+  if (!db) return { ok: false, error: 'library database unavailable' };
+  db.prepare('DELETE FROM port_library WHERE id = ?').run(id);
+  return { ok: true };
+});
 
 // file:// URL for an override image, null if it couldn't be fetched, or
 // undefined when the title has no override for that field

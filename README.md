@@ -53,6 +53,18 @@ A desktop game launcher for the classic PC game collection uploaded to [Archive.
 
 ---
 
+## Interface
+
+The launcher opens in the new interface (`src/ui/`): a game wall from the curated archive.org
+uploaders, Ports shelves from Quiver's community catalogs joined to `catalog/collisions.json`, the
+library, and a Keep current view of what changed in the catalogs. See `docs/PRODUCT.md` and
+`docs/USER-LOOP.md`. The classic interface is one click away in Settings, or set `RK_UI=legacy`.
+
+To look at the interface without Windows, run `npm run ui` and open http://localhost:5174/. It
+serves `src/ui/` with a stub `window.electronAPI`: the shelves come from Quiver's live lists, the
+wall from archive.org (or the catalog's record of each uploader when archive.org can't be reached),
+and installs do nothing.
+
 ## Installation
 
 1. Go to the [latest release](https://github.com/Kilted-Kraken/-RohanKar-Launcher/releases/latest)

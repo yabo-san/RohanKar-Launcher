@@ -25,7 +25,7 @@ async function launch(settings) {
   const app = await electron.launch({
     args: ['-r', path.join(__dirname, 'archive-stub.js'), path.join(__dirname, '..'),
       ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
-    env:  { ...process.env, E2E_USER_DATA: userData },
+    env:  { ...process.env, E2E_USER_DATA: userData, RK_UI: 'legacy' },
   });
   const page = await app.firstWindow();
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[renderer] ${m.text()}`); });

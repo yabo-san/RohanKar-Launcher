@@ -70,4 +70,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHeroesPath:   () => ipcRenderer.invoke('heroes-path'),
   checkGameHero:   (opts) => ipcRenderer.invoke('check-game-hero', opts),
   openExternal:    (url) => ipcRenderer.send('open-external', url),
+
+  // Ports (Quiver catalogs + collisions) and the port side of the library
+  getPorts:           ()     => ipcRenderer.invoke('ports-get'),
+  refreshPorts:       ()     => ipcRenderer.invoke('ports-refresh'),
+  reviewPorts:        ()     => ipcRenderer.invoke('ports-review'),
+  markPortsSeen:      (opts) => ipcRenderer.invoke('ports-mark-seen', opts),
+  getPortLibrary:     ()     => ipcRenderer.invoke('ports-library-get'),
+  addPortToLibrary:   (opts) => ipcRenderer.invoke('ports-library-add', opts),
+  removePortFromLibrary: (opts) => ipcRenderer.invoke('ports-library-remove', opts),
+
+  // Switch between the new UI and the legacy one
+  switchUi:        (opts) => ipcRenderer.invoke('ui-switch', opts),
 });

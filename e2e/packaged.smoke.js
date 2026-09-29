@@ -62,7 +62,7 @@ async function launchPackaged(userData) {
   const proc = spawn(process.env.E2E_APP, [
     '--inspect-brk=0', '--remote-debugging-port=0',
     ...(process.platform === 'linux' ? ['--no-sandbox'] : []),
-  ], { env: { ...process.env, E2E_USER_DATA: userData }, stdio: ['ignore', 'ignore', 'pipe'] });
+  ], { env: { ...process.env, E2E_USER_DATA: userData, RK_UI: 'legacy' }, stdio: ['ignore', 'ignore', 'pipe'] });
   proc.stderr.setEncoding('utf8');
 
   const nodeWs = await waitForStderr(proc, /Debugger listening on (ws:\/\/\S+)/);

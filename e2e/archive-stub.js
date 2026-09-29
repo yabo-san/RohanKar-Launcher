@@ -7,7 +7,9 @@
  *   network (CI never calls archive.org): advanced search returns that
  *   uploader's docs, every item's metadata lists one <identifier>.zip, and
  *   downloading it returns fixtures/tiny.zip. Anything else (covers) gets a 404.
- * - Answers the overrides.json fetch with a 404, so the bundled copy is used.
+ * - Answers the overrides.json and catalog/ fetches with a 404, so the bundled
+ *   copies are used, and Quiver's lists from fixtures/quiver/ (a list with no
+ *   fixture is a 404, which the UI shows as an unreachable shelf).
  */
 
 const { app } = require('electron');
@@ -17,9 +19,10 @@ const { Readable }     = require('stream');
 
 if (process.env.E2E_USER_DATA) app.setPath('userData', process.env.E2E_USER_DATA);
 
+const fs       = require('fs');
 const path     = require('path');
 const fixtures = require('./fixtures/search.json');
-const tinyZip  = require('fs').readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
+const tinyZip  = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
 const realGet  = https.get;
 
 const respond = (status, body, contentType) => {
@@ -49,6 +52,12 @@ const search = (url) => {
   return respond(200, JSON.stringify(json), 'application/json');
 };
 
+// raw.githubusercontent.com/tgeorgiadis/quiver-community-app-catalog/main/community-app-catalog/<file>
+const quiver = (url) => {
+  const file = path.join(__dirname, 'fixtures', 'quiver', path.basename(url.pathname));
+  return fs.existsSync(file) ? respond(200, fs.readFileSync(file), 'application/json') : respond(404, 'no fixture', 'text/plain');
+};
+
 const STUBBED_HOSTS = new Set(['archive.org', 'raw.githubusercontent.com']);
 
 https.get = function (target, ...rest) {
@@ -59,7 +68,9 @@ https.get = function (target, ...rest) {
   const req = new EventEmitter();
   req.setTimeout = () => req;
   req.destroy    = () => req;
-  const res = url.pathname === '/advancedsearch.php' ? search(url) : item(url);
+  const res = url.pathname === '/advancedsearch.php' ? search(url)
+    : url.pathname.includes('/quiver-community-app-catalog/') ? quiver(url)
+    : item(url);
   process.nextTick(() => callback?.(res));
   return req;
 };

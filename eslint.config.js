@@ -8,7 +8,7 @@ module.exports = [
   { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
   js.configs.recommended,
   {
-    files: ['src/main/**/*.js', 'test/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
+    files: ['src/main/**/*.js', 'src/core/**/*.js', 'scripts/**/*.js', 'test/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
@@ -36,6 +36,11 @@ module.exports = [
         titleKey: 'readonly', preferredVersion: 'readonly', versionLabel: 'readonly',
       },
     },
+  },
+  {
+    // The new UI: a classic script after sources.js, no module system
+    files: ['src/ui/**/*.js', 'scripts/ui-preview-stub.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
   },
   {
     // module.exports is guarded by typeof, for the node:test suite
