@@ -102,6 +102,7 @@ ALIASES = {
     "INFAMOUS1RPCS3": "inFAMOUS",
     "IronMan2-RPCS3": "Iron Man 2",
     "shadps-4-gr-2-branch": "Gravity Rush 2",
+    "BBLauncher": "Bloodborne",  # Bloodborne on shadPS4, per catalog/uploaders.json
 }
 
 # Emulator names, build numbers and extras that bundle titles carry around the game.
