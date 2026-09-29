@@ -61,13 +61,14 @@ button { font: inherit; color: inherit; }
   border-bottom: 1px solid var(--border); -webkit-app-region: drag;
 }
 .chrome h1 { font-size: 15px; font-weight: 600; margin: 0; white-space: nowrap; }
-.search { margin-left: auto; width: 300px; -webkit-app-region: no-drag; }
+.search { margin: 0 0 10px; }
 .search input {
-  width: 100%; background: var(--fill); border: 1px solid var(--border); color: var(--text);
-  border-radius: 20px; padding: 8px 14px; font-size: 13px; outline: none;
+  width: 100%; background: var(--fill) no-repeat 11px 50% / 13px; color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--rad-ctl); padding: 7px 10px 7px 31px; font-size: 13px; outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%238e8e93' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l3.5 3.5'/%3E%3C/svg%3E");
 }
-.search input:focus { border-color: var(--key); background: var(--fill2); }
-.winctl { display: flex; height: 100%; -webkit-app-region: no-drag; }
+.search input:focus { border-color: var(--key); background-color: var(--fill2); }
+.winctl { display: flex; height: 100%; margin-left: auto; -webkit-app-region: no-drag; }
 .winctl button { width: 46px; border: 0; background: none; color: var(--text2); cursor: pointer; font-size: 12px; }
 .winctl button:hover { background: var(--fill2); color: var(--text); }
 .winctl button.close:hover { background: #e81123; color: #fff; }
@@ -283,5 +284,10 @@ button { font: inherit; color: inherit; }
   .navitem { justify-content: center; padding: 10px 6px; font-size: 0; }
   .navitem .dot { width: 10px; height: 10px; }
   .navitem .n, .navitem .state { display: none; }
-  .search { width: 180px; }
+  .search input { padding-right: 0; background-position: 50% 50%; }
+  .search input:not(:focus), .search input::placeholder { color: transparent; }
+  .search { position: relative; height: 32px; }
+  .sidebar:focus-within { overflow: visible; }
+  .search input:focus { position: absolute; top: 0; left: 0; width: 240px; z-index: 5; background-color: #2c2c2e; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); padding-right: 10px; background-position: 11px 50%; }
+  .search input:focus::placeholder { color: var(--text3); }
 }
