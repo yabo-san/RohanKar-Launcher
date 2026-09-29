@@ -344,10 +344,9 @@ curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://12
 
 ### `POST /export/playnite`
 
-Writes `playnite-export.json` (schema version 1: one record per library row with `id`, `name`,
-`source`, `installDir`, `exe`, `args`, `workingDir`, `installed`, `version`, `coverPath`,
-`heroPath`, `platform`, `tags`, `favorite`, `lastPlayed`, `playtimeSeconds`) next to `library.db`,
-or to an absolute `path`. Atomic: temp file, then rename.
+Writes `playnite-export.json` next to `library.db`, or to an absolute `path`. Atomic: temp file,
+then rename. The backend also rewrites it after every library change. Schema, ids and the
+matching CLI flags: [PLAYNITE-EXPORT.md](PLAYNITE-EXPORT.md).
 
 ```sh
 curl -X POST -d '{}' http://127.0.0.1:7777/v1/export/playnite
