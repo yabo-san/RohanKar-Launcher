@@ -17,10 +17,10 @@ function parseOverrides(text) {
 }
 
 // fetchText(url) resolves to the body or rejects; readBundled() returns the bundled text or throws
-async function loadOverrides({ fetchText, readBundled, log = () => {} }) {
+async function loadOverrides({ fetchText, readBundled, log = () => {}, url = OVERRIDES_URL }) {
   try {
-    const fetched = parseOverrides(await fetchText(OVERRIDES_URL));
-    log(`[overrides] ${Object.keys(fetched).length} from ${OVERRIDES_URL}`);
+    const fetched = parseOverrides(await fetchText(url));
+    log(`[overrides] ${Object.keys(fetched).length} from ${url}`);
     return fetched;
   } catch (e) {
     log(`[overrides] fetch failed (${e.message}), using bundled copy`);
