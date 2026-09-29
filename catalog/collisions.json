@@ -49,9 +49,9 @@
   },
   {
     "name": "Zelda: Twilight Princess (dusk)",
-    "repository": "TwilitRealm/dusk",
+    "repository": "TwilitRealm/dusklight",
     "iaIdentifier": "twilight-princess-ddsk",
-    "contentUrl": "https://archive.org/download/twilight-princess-ddsk/Twilight%20Princess%20Decompilation%20%28v1.0%29.zip",
+    "contentUrl": "https://archive.org/download/twilight-princess-ddsk/Dusklight%20%28v1.4.1%29.zip",
     "ingest": "place-file",
     "assetPattern": "(?i)win32-x86_64",
     "folderName": "TwilitRealm.dusk",
