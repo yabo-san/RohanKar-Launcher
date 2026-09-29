@@ -108,6 +108,8 @@ function createApi(backend) {
     return item;
   };
 
+  // The hand-picked games and ports that lead the New page, in order
+  route('GET', '/featured', async () => ({ body: { picks: await backend.getFeatured() } }));
   route('GET', '/items/:id', async ({ params }) => ({ body: await findItem(params.id) }));
 
   route('GET', '/items/:id/files', async ({ params }) => {

@@ -4,7 +4,8 @@
  *   - one HTTP server that is archive.org (fixtures.js) and also serves
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
- *     pointed at that server for archive.org, overrides.json and uploaders.json
+ *     pointed at that server for archive.org, overrides.json, uploaders.json
+ *     and featured.json
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -52,6 +53,7 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--archive-base', fixtures.base,
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
+    '--featured-url', `${fixtures.base}/featured.json`,
   ], {}, () => {});
   for (const c of catalogs) {
     await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });

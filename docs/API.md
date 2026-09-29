@@ -94,6 +94,19 @@ curl http://127.0.0.1:7777/v1/health
 # {"ok":true,"api":"v1","version":"1.6.0"}
 ```
 
+### `GET /featured`
+
+The hand-picked games and ports that lead the New page, in display order, from
+`catalog/featured.json` (the copy on main at launch, the bundled one if that fails). Each pick names
+an archive.org item by `identifier` or a port by `repository` (lowercase `owner/repo`); `blurb`, when
+set, replaces the item's own description on its card. A pick that isn't on the wall is skipped by
+the page.
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7777/v1/featured
+# {"picks":[{"identifier":"devil-may-cry-4_202603","blurb":null},{"repository":"perfect-dark-pc-port/perfect_dark","blurb":null}]}
+```
+
 ### `GET /items`
 
 All items. Filters, all optional and combinable: `source` (uploader email, source label or catalog

@@ -8,6 +8,10 @@
  *   collisions.json; a list that can't be fetched shows as unreachable.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
+ * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
+ *   the Left/Right keys, and a drag doesn't open a card.
+ * - New leads with the featured picks (a wall game and a port), then a
+ *   compact list of the latest uploads, newest first.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -51,6 +55,66 @@ test('the wall shows every shipped uploader, grouped by title', async () => {
   for (const s of ENABLED) {
     await expect(page.locator(`#nav-uploaders [data-arg="${s.uploader}"] .n`)).toHaveText(String(fixtures[s.uploader].length));
   }
+});
+
+test("Home's rows scroll without a scrollbar", async () => {
+  await page.setViewportSize({ width: 900, height: 800 });
+  await page.locator('[data-view="home"]').click();
+  const section = page.locator('#body .section.has-row').first();
+  const row = section.locator('.row');
+  const prev = section.locator('.row-nav .prev');
+  const next = section.locator('.row-nav .next');
+  await expect(prev).toBeDisabled();
+  await expect(next).toBeEnabled();
+  expect(await row.evaluate(r => r.offsetHeight - r.clientHeight)).toBe(0);
+  const left = () => row.evaluate(r => r.scrollLeft);
+
+  await next.click();
+  await expect.poll(left).toBeGreaterThan(0);
+  await expect(prev).toBeEnabled();
+  await prev.click();
+  await expect.poll(left).toBe(0);
+
+  const box = await row.boundingBox();
+  await page.mouse.move(box.x + 300, box.y + 100);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 100, box.y + 100, { steps: 5 });
+  await page.mouse.up();
+  expect(await left()).toBe(200);
+  await expect(page.locator('#detail')).toHaveClass(/hidden/);
+
+  await row.locator('.card').first().focus();
+  for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+  await expect(row.locator('.card').nth(5)).toBeFocused();
+  await page.keyboard.press('ArrowLeft');
+  await expect(row.locator('.card').nth(4)).toBeFocused();
+  await page.setViewportSize({ width: 1280, height: 800 });
+});
+
+test('New leads with the picks, then the latest uploads newest first', async () => {
+  await page.locator('[data-view="new"]').click();
+  await expect(page.locator('#heading')).toHaveText('New');
+  // featured.json: Halo, an item not on the wall (skipped), Banjo from the Nintendo list
+  const features = page.locator('#body .feature-card');
+  await expect(features).toHaveCount(2);
+  await expect(features.nth(0).locator('.title')).toHaveText('Halo: Combat Evolved');
+  await expect(features.nth(0).locator('.eyebrow')).toHaveText('y4bo pick');
+  await expect(features.nth(0).locator('p')).toHaveText('The one that started it all.');
+  await expect(features.nth(1).locator('.title')).toHaveText('Banjo-Kazooie');
+  await expect(features.nth(1).locator('.eyebrow')).toHaveText('y4bo pick · port');
+
+  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
+  const items = page.locator('#body .list-item');
+  await expect(items).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
+  const dates = await items.locator('.sub').evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
+  expect(dates).toEqual([...dates].sort().reverse());
+
+  await items.first().click();
+  await expect(page.locator('#detail')).not.toHaveClass(/hidden/);
+  await page.keyboard.press('Escape');
+  await features.nth(1).click();
+  await expect(page.locator('#detail')).toContainText('Banjo');
+  await page.keyboard.press('Escape');
 });
 
 test('a Ports shelf comes from its Quiver list, joined to the collision catalog', async () => {
