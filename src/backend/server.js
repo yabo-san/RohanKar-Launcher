@@ -285,7 +285,13 @@ function createApi(backend) {
   route('POST', '/installs', async ({ body }) => {
     const { id, files } = requireObject(body);
     requireString(id, 'id');
-    if (id.startsWith('quiver:')) throw new HttpError(501, 'unsupported', 'Installing catalog ports is not built yet');
+    if (id.startsWith('quiver:')) {
+      const item = catalogs.items().find(i => i.id === id);
+      if (!item) throw new HttpError(404, 'not_found', `No catalog item ${id}`);
+      const r = installs.startPort({ item });
+      if (!r.ok) throw new HttpError(422, r.error, r.detail);
+      return { status: 202, body: { installs: r.jobs } };
+    }
     if (files !== undefined && !(Array.isArray(files) && files.every(f => typeof f === 'string'))) {
       throw new HttpError(400, 'bad_request', 'files must be an array of file names');
     }

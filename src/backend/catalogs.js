@@ -157,7 +157,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
         icon:        e.appIconUrl || null,
         tags:        Array.isArray(e.tags) ? e.tags : [],
         description: e.description || null,
-        data:        data && { iaIdentifier: data.iaIdentifier || null, contentUrl: data.contentUrl || null, dataFiles: data.dataFiles || [] },
+        data:        data && { iaIdentifier: data.iaIdentifier || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null, dataFiles: data.dataFiles || [] },
         entry:       e,
       };
     }));

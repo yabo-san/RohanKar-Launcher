@@ -41,8 +41,9 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base`, `--overrides-url` and `--uploaders-url` point archive.org and the two catalog
-fetches elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api` and `--collisions-file`
+point archive.org, the catalog fetches, the GitHub API and the collision catalog elsewhere
+(fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
 the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
@@ -323,7 +324,16 @@ curl -X PUT http://127.0.0.1:7777/v1/collections/1/items/rk-e2e-halo-ce
 Start installing an archive.org item: `{ id, files? }`. One job per file. An item with several
 archives needs `files` (`409 choose_files` lists `choices`); each then extracts into its own
 `_GAME_<name>` folder, as the desktop app's collection picker does. Returns `202` at once; follow
-progress on `/events` or poll `/installs/:id`. Catalog ports answer `501` until port installs land.
+progress on `/events` or poll `/installs/:id`.
+
+A catalog port (`quiver:` id) is one job in two steps. `step: "binary"` takes the latest
+non-draft, non-prerelease GitHub release of the port's repository and picks its Windows asset:
+the collision catalog's `assetPattern` wins, then Quiver's `releaseAssetFilter`, then a Windows
+heuristic. It downloads and extracts into `<install folder>/<folderName>`. When the collision
+catalog lists game data, `step: "data"` downloads the archive.org file named by `contentUrl`,
+extracts it, copies each `dataFiles` entry to its `targetSubpath` and checks its sha1 (`status:
+"verifying"`). A mismatch fails the job and names the file; `optional` files may be missing.
+Unknown ports answer `404`, ports that can't start (no repository) `422`.
 
 ```sh
 curl -X POST -d '{"id":"rk-e2e-halo-ce"}' http://127.0.0.1:7777/v1/installs
@@ -332,7 +342,7 @@ curl -X POST -d '{"id":"rk-e2e-halo-ce"}' http://127.0.0.1:7777/v1/installs
 
 ### `GET /installs`, `GET /installs/:id`
 
-A job: `status` is `downloading`, `extracting`, `done`, `error` or `cancelled`; `percent`,
+A job: `status` is `downloading`, `extracting`, `verifying` (ports), `done`, `error` or `cancelled`; `step` (ports); `percent`,
 `error`, and when done `installDir` and `exePath` (null when there are several to choose from).
 
 ```sh

@@ -4,8 +4,9 @@
  *   - one HTTP server that is archive.org (fixtures.js) and also serves
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
- *     pointed at that server for archive.org, overrides.json, uploaders.json
- *     and featured.json
+ *     pointed at that server for archive.org, overrides.json, uploaders.json,
+ *     featured.json and GitHub's releases, with the collision catalog from
+ *     fixtures/
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -30,7 +31,7 @@ async function startFixtures() {
       res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream' });
       return res.end(fs.readFileSync(file));
     }
-    const { status, type, body } = answer(url);
+    const { status, type, body } = answer(url, `http://127.0.0.1:${server.address().port}`);
     res.writeHead(status, { 'content-type': type, 'content-length': body.length });
     res.end(body);
   });
@@ -53,6 +54,8 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--archive-base', fixtures.base,
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
+    '--github-api', fixtures.base,
+    '--collisions-file', path.join(__dirname, 'fixtures', 'collisions.json'),
     '--featured-url', `${fixtures.base}/featured.json`,
   ], {}, () => {});
   for (const c of catalogs) {

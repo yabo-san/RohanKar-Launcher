@@ -250,7 +250,13 @@ test('installs: start, progress over SSE, get, list, cancel, errors', async (t) 
   assert.deepEqual([choose.status, choose.body.error, choose.body.choices.length], [409, 'choose_files', 2]);
   assert.equal((await call('POST', '/installs', { id: 'coll', files: ['c.zip'] })).status, 400);
   assert.equal((await call('POST', '/installs', { id: 'coll', files: 'a.zip' })).status, 400);
-  assert.equal((await call('POST', '/installs', { id: 'quiver:x:y' })).status, 501);
+  assert.equal((await call('POST', '/installs', { id: 'quiver:x:y' })).status, 404);
+  backend.catalogs.items = () => [{ id: 'quiver:x:norepo', title: 'No Repo', repository: null }, { id: 'quiver:x:o/r', title: 'Port', repository: 'o/r', entry: {}, data: null }];
+  const norepo = await call('POST', '/installs', { id: 'quiver:x:norepo' });
+  assert.deepEqual([norepo.status, norepo.body.error], [422, 'no_repository']);
+  const port = await call('POST', '/installs', { id: 'quiver:x:o/r' });
+  assert.deepEqual([port.status, port.body.installs[0].step], [202, 'binary']);
+  await backend.installs.wait(port.body.installs[0].id);
   fake.files.docs = [{ name: 'manual.pdf' }];
   assert.equal((await call('POST', '/installs', { id: 'docs' })).status, 422);
 

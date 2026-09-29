@@ -1,20 +1,23 @@
 'use strict';
 /**
  * Install engine: download an archive.org file, extract it, find its
- * executable, record it in library.db. The pieces (download, extract) are
- * also exported one by one for the IPC calls the current renderer makes.
+ * executable, record it in library.db. Ports (catalog items) take the latest
+ * GitHub release's Windows build and, when the collision catalog names one,
+ * stage their game data from archive.org and check its sha1 (ports.js).
  */
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
-const { getFollow } = require('./net');
+const { getFollow, getText } = require('./net');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
+const ports = require('./ports');
 
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
+const GITHUB_API = 'https://api.github.com';
 
-function createInstalls({ settings, library, archive, gamesDir, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP }) {
+function createInstalls({ settings, library, archive, gamesDir, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -96,18 +99,26 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
       return { ok: true, installDir: destDir, parentInstallDir: parentDir };
     };
 
+    const r = await extractTo(filePath, destDir);
+    return r.ok ? done() : r;
+  }
+
+  // Unpacks an archive into destDir: 7-Zip when installed (zip/7z/rar),
+  // extract-zip for .zip otherwise. Resolves { ok } or { ok: false, error }.
+  async function extractTo(filePath, destDir) {
+    fs.mkdirSync(destDir, { recursive: true });
     const lower = filePath.toLowerCase();
     if (/\.(zip|7z|rar)$/.test(lower) && fs.existsSync(sevenZip)) {
       return new Promise((resolve) => {
         execFile(sevenZip, ['x', filePath, `-o${destDir}`, '-y'], (err) => {
-          resolve(err ? { ok: false, error: err.message } : done());
+          resolve(err ? { ok: false, error: err.message } : { ok: true });
         });
       });
     }
     if (lower.endsWith('.zip')) {
       try {
-        await require('extract-zip')(filePath, { dir: destDir });
-        return done();
+        await require('extract-zip')(filePath, { dir: path.resolve(destDir) });
+        return { ok: true };
       } catch (e) {
         return { ok: false, error: e.message };
       }
@@ -117,8 +128,9 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
 
   // ─── Jobs (POST /installs) ────────────────────────────────────────────────
 
+  // step: 'binary' or 'data' while a port installs, null for archive.org items
   const view = (job) => ({
-    id: job.id, itemId: job.itemId, file: job.file, status: job.status, percent: job.percent,
+    id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
     startedAt: job.startedAt, finishedAt: job.finishedAt,
   });
@@ -190,6 +202,119 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     return { ok: true, jobs: started };
   }
 
+  // ─── Ports (POST /installs with a catalog item id) ─────────────────────────
+
+  const isRunning = (j) => ['downloading', 'extracting', 'verifying'].includes(j.status);
+
+  // item: a catalog item from catalogs.items(). Resolves { ok, jobs } or
+  // { ok: false, error, detail }.
+  function startPort({ item }) {
+    if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository to install from.` };
+    const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
+    if (running) return { ok: true, jobs: [view(running)] };
+    const job = {
+      id: crypto.randomUUID(), itemId: item.id, file: null, status: 'downloading', step: 'binary', percent: 0, error: null,
+      installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null,
+    };
+    jobs.set(job.id, job);
+    emit('install', view(job));
+    job.done = runPortJob(job, item).catch(e => update(job, { status: 'error', error: e.message }));
+    return { ok: true, jobs: [view(job)] };
+  }
+
+  async function latestRelease(repository) {
+    const r = await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
+      kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (r.status !== 200) throw new Error(`Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})`);
+    const release = ports.pickRelease(JSON.parse(r.body));
+    if (!release) throw new Error(`${repository} has no published release`);
+    return release;
+  }
+
+  async function runPortJob(job, item) {
+    const entry = item.entry || {};
+    const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
+    const dest = path.join(installDir(), folderName);
+    const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
+    const downloads = [];
+
+    // 1. The binary: the latest release's Windows build, unpacked into dest
+    const release = await latestRelease(item.repository);
+    const pick = ports.pickAsset(release.assets, { pattern: item.data?.assetPattern, filter: entry.releaseAssetFilter });
+    if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
+    update(job, { file: pick.asset.name });
+    const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
+    if (job.status === 'cancelled') return;
+    if (!bin.ok) return update(job, { status: 'error', error: bin.error });
+    downloads.push(bin.filePath);
+    update(job, { status: 'extracting', percent: 100 });
+    fs.mkdirSync(dest, { recursive: true });
+    if (ports.ARCHIVE_EXT.test(bin.filePath)) {
+      const x = await extractTo(bin.filePath, dest);
+      if (!x.ok) return update(job, { status: 'error', error: x.error });
+    } else {
+      fs.copyFileSync(bin.filePath, path.join(dest, path.basename(bin.filePath)));
+    }
+    for (const f of [].concat(entry.filesToAdd || [])) {
+      const target = ports.inside(dest, f);
+      if (target && !fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, ''); }
+    }
+
+    // 2. The game data, when the collision catalog says where it is
+    const dataFiles = item.data?.dataFiles || [];
+    if (dataFiles.length) {
+      const src = ports.archiveFile(item.data.contentUrl);
+      if (!src) throw new Error(`The collision catalog's data link for ${item.title} isn't an archive.org download`);
+      update(job, { status: 'downloading', step: 'data', percent: 0, file: path.basename(src.file) });
+      const got = await download({ key: job.id, identifier: src.identifier, url: archive.downloadUrl(src.identifier, src.file), fileName: src.file, onProgress: progress });
+      if (job.status === 'cancelled') return;
+      if (!got.ok) return update(job, { status: 'error', error: got.error });
+      downloads.push(got.filePath);
+      update(job, { status: 'extracting', percent: 100 });
+      let staging = null;
+      if (ports.ARCHIVE_EXT.test(got.filePath)) {
+        staging = path.join(path.dirname(got.filePath), '_staging');
+        fs.rmSync(staging, { recursive: true, force: true });
+        const x = await extractTo(got.filePath, staging);
+        if (!x.ok) return update(job, { status: 'error', error: x.error });
+      }
+      try {
+        update(job, { status: 'verifying' });
+        for (const df of dataFiles) {
+          const found = (staging && ports.findFile(staging, df.name))
+            || (path.basename(got.filePath).toLowerCase() === String(df.name).toLowerCase() ? got.filePath : null);
+          if (!found) {
+            if (df.optional) continue;
+            return update(job, { status: 'error', error: `${df.name} isn't in ${src.file}` });
+          }
+          if (df.patch) return update(job, { status: 'error', error: `${df.name} needs a patch (${df.patch}), which isn't supported yet` });
+          const target = ports.inside(dest, df.targetSubpath, df.name);
+          if (!target) return update(job, { status: 'error', error: `${df.name} would land outside the install folder` });
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.copyFileSync(found, target);
+          if (df.sha1) {
+            const sum = await ports.sha1File(target);
+            if (sum !== String(df.sha1).toLowerCase()) {
+              fs.rmSync(target, { force: true });
+              return update(job, { status: 'error', error: `${df.name} doesn't match the catalog (sha1 ${sum}, expected ${df.sha1})` });
+            }
+          }
+        }
+      } finally {
+        if (staging) fs.rmSync(staging, { recursive: true, force: true });
+      }
+    }
+
+    // 3. Record it against the catalog item, keeping its library row
+    if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
+    disk.unblockDirectory(dest, { platform, log });
+    const exes = disk.findExes(dest);
+    const exePath = exes.length === 1 ? exes[0] : null;
+    library.adoptInstall(item.id, dest, exePath);
+    update(job, { status: 'done', step: null, installDir: dest, exePath });
+  }
+
   const get  = (id) => (jobs.has(id) ? view(jobs.get(id)) : null);
   const list = () => [...jobs.values()].map(view);
   const wait = (id) => jobs.get(id)?.done;
@@ -198,7 +323,7 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     const job = jobs.get(id);
     if (!job) return null;
     if (job.status === 'downloading') {
-      update(job, { status: 'cancelled', error: 'Cancelled' });
+      update(job, { status: 'cancelled', step: null, error: 'Cancelled' });
       cancelDownload(id);
     }
     return view(job);
@@ -221,7 +346,7 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     return { found };
   }
 
-  return { download, cancelDownload, extract, start, get, list, wait, cancel, scan };
+  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
 }
 
-module.exports = { createInstalls, SEVEN_ZIP };
+module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API };

@@ -5,6 +5,9 @@
  *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip
  *   - Quiver's lists (…/quiver-community-app-catalog/…/<file>, or /quiver/<file>) come
  *     from fixtures/quiver/; a list with no fixture is a 404
+ *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
+ *     lists one Windows zip holding pd.exe, and its archive.org data item holds
+ *     PD_ROM, which fixtures/collisions.json expects by sha1
  *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
  *     that isn't on the wall
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -16,9 +19,14 @@ const path = require('path');
 
 const SEARCH   = require('./fixtures/search.json');
 const TINY_ZIP = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
+const { makeZip } = require('../test/backend/helpers');
+const PD_ROM   = 'PERFECT DARK FIXTURE ROM\n';
+const PD_BUILD = makeZip({ 'pd.exe': 'MZ', 'data/.keep': '' });
+const PD_DATA  = makeZip({ 'Perfect Dark/pd.ntsc-final.z64': PD_ROM, 'Perfect Dark/readme.txt': 'fixture' });
 
-// URL → { status, type, body }
-function answer(url) {
+// URL → { status, type, body }; base is where this server answers, for the
+// asset links in a release
+function answer(url, base = '') {
   const reply = (status, body, type) => ({ status, type, body: Buffer.from(body) });
 
   if (url.pathname === '/advancedsearch.php') {
@@ -36,6 +44,15 @@ function answer(url) {
     return fs.existsSync(fixture) ? reply(200, fs.readFileSync(fixture), 'application/json') : reply(404, 'no fixture', 'text/plain');
   }
 
+  if (url.pathname === '/repos/perfect-dark-pc-port/perfect_dark/releases') {
+    return reply(200, JSON.stringify([{ tag_name: 'v1.0', assets: [
+      { name: 'pd-x86_64-linux.tar.gz', browser_download_url: `${base}/gh/pd-x86_64-linux.tar.gz` },
+      { name: 'pd-x86_64-windows.zip', browser_download_url: `${base}/gh/pd-x86_64-windows.zip` },
+    ] }]), 'application/json');
+  }
+  if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
+  if (decodeURIComponent(url.pathname) === '/download/perfect-dark-pc-port_202510/Perfect Dark PC Port.zip') return reply(200, PD_DATA, 'application/zip');
+
   if (url.pathname === '/featured.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
   }
@@ -45,4 +62,4 @@ function answer(url) {
   return reply(404, 'not in fixtures', 'text/plain');
 }
 
-module.exports = { answer, SEARCH, TINY_ZIP };
+module.exports = { answer, SEARCH, TINY_ZIP, PD_ROM };
