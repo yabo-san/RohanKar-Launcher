@@ -16,6 +16,7 @@
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let allGames      = [];   // one entry per title (first version of each group)
+let pendingOpenItem = null;  // identifier Playnite asked to show, until the games load
 let allVersions   = [];   // every fetched item, across all sources
 let defaultSources = [];   // from catalog/uploaders.json, used when settings has no `sources`
 let sources       = [];
@@ -569,6 +570,12 @@ async function init() {
     }
   });
 
+  // Playnite: Play on a game that isn't installed opens it here
+  window.electronAPI.onOpenItem?.(({ identifier }) => {
+    pendingOpenItem = identifier;
+    showPendingItem();
+  });
+
   // Auto-updater
   window.electronAPI.onUpdaterStatus((data) => {
     if (!updateBar) return;
@@ -877,6 +884,7 @@ async function fetchGames() {
     renderLibraryGrid();
     updateFilterSortLabel();
     showHomeView();
+    showPendingItem();
   } catch (e) {
     libraryGrid.innerHTML = `<p class="loading-msg error">Failed to load games: ${e.message}</p>`;
   }
@@ -2462,6 +2470,16 @@ function showHomeView() {
   document.getElementById('hero').style.display = 'none';
   document.getElementById('btn-home').classList.add('active');
   renderHomeScreen();
+}
+
+// An item asked for (Playnite) before the games loaded waits in pendingOpenItem
+function showPendingItem() {
+  if (!pendingOpenItem || !allGames.length) return;
+  const id = pendingOpenItem;
+  const game = allGames.find(g => g.identifier === id || g._versions?.some(v => v.identifier === id));
+  if (!game) return;
+  pendingOpenItem = null;
+  showDetailView(game);
 }
 
 function showDetailView(game) {

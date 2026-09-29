@@ -71,4 +71,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getHeroesPath:   () => ipcRenderer.invoke('heroes-path'),
   checkGameHero:   (opts) => ipcRenderer.invoke('check-game-hero', opts),
   openExternal:    (url) => ipcRenderer.send('open-external', url),
+
+  // Playnite: show one item
+  onOpenItem:      (cb) => ipcRenderer.on('open-item', (_, data) => cb(data)),
 });

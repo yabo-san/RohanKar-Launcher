@@ -4,6 +4,10 @@
  * Window, auto-updater and Add-to-Steam. Everything else (sources, library.db,
  * downloads, extraction, covers, the net log) lives in src/backend/; the IPC
  * handlers below are thin wrappers over it, same channels and replies as before.
+ *
+ * Started with a Playnite command (--install, --uninstall, --launch,
+ * --export-playnite; see src/backend/cli.js) it runs that without a window
+ * and exits, unless the command needs the window, which then opens on that item.
  */
 
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
@@ -13,12 +17,15 @@ const https  = require('https');
 const { createBackend } = require('../backend');
 const { fileUrl } = require('../backend/covers');
 const disk = require('../backend/disk');
+const { parseCli, runCli } = require('../backend/cli');
+const { findRow } = require('../backend/playnite');
 
 // ─── Backend ─────────────────────────────────────────────────────────────────
 
 const USER_DATA = app.getPath('userData');
 
 let mainWindow;
+const cli = parseCli(process.argv.slice(1));
 
 const backend = createBackend({
   dataDir: USER_DATA,
@@ -52,13 +59,41 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
 }
 
-app.whenReady().then(() => {
+// Shows one item in the window (Play in Playnite on a game that isn't installed)
+function openItem(identifier) {
+  if (!mainWindow || !identifier) return;
+  const send = () => mainWindow.webContents.send('open-item', { identifier });
+  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', send);
+  else send();
+}
+
+// Playnite asking a running launcher to show an item: argv of the second start
+app.on('second-instance', (_, argv) => {
+  if (!mainWindow) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.focus();
+  const c = parseCli(argv.slice(1));
+  if (c?.value) openItem(findRow(library.all(), c.value)?.identifier || c.value);
+});
+
+app.whenReady().then(async () => {
+  let open = null;
+  if (cli) {
+    const r = await runCli(cli, backend);
+    if (!r.open) { backend.close(); app.exit(r.code); return; }
+    open = r.open;
+  }
+  // One window: a second start hands its argv to this one and quits
+  if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   backend.getOverrides();
   backend.getDefaultSources();
   createWindow();
   setupAutoUpdater();
   // Validate installs on every launch — clears DB entries whose folders were deleted
   library.clearMissingInstalls();
+  // playnite-export.json is rewritten on every library change; this covers a first run
+  backend.exportPlaynite(undefined, { loadItems: false }).catch(() => {});
+  openItem(open);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });

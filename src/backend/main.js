@@ -8,6 +8,7 @@
 const path = require('path');
 const { createBackend } = require('./index');
 const { createServer, newToken } = require('./server');
+const { parseCli, runCli } = require('./cli');
 
 function parseArgs(argv) {
   const out = {};
@@ -28,6 +29,18 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['overrides-url'] ? { overridesUrl: args['overrides-url'] } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),
   });
+
+  const cli = parseCli(argv);
+  if (cli) {
+    let r = await runCli(cli, backend, { print });
+    if (r.open) {
+      print(JSON.stringify({ ok: false, error: 'needs_window', id: r.open }) + '\n');
+      r = { code: 3 };
+    }
+    backend.close();
+    return { exitCode: r.code };
+  }
+
   const api = createServer(backend, { token: env.LAUNCHER_TOKEN || newToken(), log: (msg) => process.stderr.write(msg + '\n') });
   const info = await api.listen(Number(args.port || env.LAUNCHER_PORT || 0));
   print(JSON.stringify(info) + '\n');
@@ -37,7 +50,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
 }
 
 if (require.main === module) {
-  run().then(({ stop }) => {
+  run().then(({ stop, exitCode }) => {
+    if (exitCode !== undefined) process.exit(exitCode);
     const quit = () => stop().then(() => process.exit(0));
     process.on('SIGINT', quit);
     process.on('SIGTERM', quit);
