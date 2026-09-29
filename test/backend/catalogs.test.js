@@ -1,0 +1,129 @@
+'use strict';
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs   = require('fs');
+const path = require('path');
+const { createCatalogs, parseCatalog, parseCollisions, diffEntries, entryKey } = require('../../src/backend/catalogs');
+const { createSettings } = require('../../src/backend/settings');
+const { fakeArchive, tmpDir } = require('./helpers');
+
+// Cut from catalog/collisions.json
+const COLLISIONS = JSON.parse(fs.readFileSync(path.join(__dirname, '../../catalog/collisions.json'), 'utf8')).slice(0, 2);
+
+async function setup(t) {
+  const catalog = { apps: [
+    { name: 'Banjo Recomp', repository: 'BanjoRecomp/BanjoRecomp', appIconUrl: 'https://i/b.png', tags: ['n64'] },
+    { name: 'Ship of Harkinian', repository: 'HarbourMasters/Shipwright' },
+  ] };
+  const fake = await fakeArchive(t, {
+    routes: {
+      '/nintendo.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); },
+      '/broken.json':   (req, res) => { res.writeHead(200); res.end('{"nope": 1}'); },
+    },
+  });
+  const dir = tmpDir(t);
+  const collisionsFile = path.join(dir, 'collisions.json');
+  fs.writeFileSync(collisionsFile, JSON.stringify(COLLISIONS));
+  const settings = createSettings(path.join(dir, 'settings.json'));
+  const netLog = [];
+  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, collisionsFile, netLog: (...a) => netLog.push(a) });
+  return { fake, dir, settings, catalogs, catalog, netLog };
+}
+
+test('parse: apps wrapper or bare array; collisions as array or keyed object', () => {
+  assert.equal(parseCatalog('[{"name":"a"},{"x":1},null]').length, 1);
+  assert.equal(parseCatalog('{"apps":[{"repository":"a/b"}]}').length, 1);
+  assert.throws(() => parseCatalog('{"x":[]}'), /array/);
+  const keyed = parseCollisions(JSON.stringify({ _comment: 'x', 'Owner/Repo': { iaIdentifier: 'i' } }));
+  assert.deepEqual([...keyed.keys()], ['owner/repo']);
+  assert.equal(parseCollisions('[{"repository":"  A/B "},{"name":"no repo"}]').size, 1);
+  assert.equal(entryKey({ repository: 'A/B' }), 'a/b');
+  assert.equal(entryKey({ name: 'N' }), 'name:N');
+});
+
+test('diffEntries: new, changed, removed by repository', () => {
+  const d = diffEntries(
+    [{ repository: 'a/a', v: 1 }, { repository: 'b/b', v: 1 }, { name: 'gone' }],
+    [{ repository: 'A/A', v: 2 }, { repository: 'b/b', v: 1 }, { name: 'fresh' }]);
+  assert.deepEqual(d.new.map(e => e.name), ['fresh']);
+  assert.deepEqual(d.changed.map(e => e.v), [2]);
+  assert.deepEqual(d.removed.map(e => e.name), ['gone']);
+});
+
+test('subscribe: fetches, caches, logs, and is idempotent per URL', async (t) => {
+  const { fake, catalogs, settings, netLog } = await setup(t);
+  const url = `${fake.base}/nintendo.json`;
+  const r = await catalogs.subscribe({ url, shelf: 'Nintendo' });
+  assert.equal(r.created, true);
+  assert.equal(r.catalog.entries, 2);
+  assert.equal(r.catalog.name, 'nintendo');
+  assert.equal(r.catalog.shelf, 'Nintendo');
+  assert.equal(netLog[0][0], 'catalog');
+  const again = await catalogs.subscribe({ url });
+  assert.equal(again.created, false);
+  assert.equal(settings.load().catalogs.length, 1);
+  assert.deepEqual(catalogs.review(r.catalog.id), { new: [], changed: [], removed: [] });
+  assert.equal((await catalogs.subscribe({ url: 'ftp://x/y.json' })).error, 'bad_url');
+  assert.equal((await catalogs.subscribe({ url: 'not a url' })).error, 'bad_url');
+});
+
+test('refresh and review: changes since last seen; a failed fetch keeps the last copy', async (t) => {
+  const { fake, catalogs, catalog } = await setup(t);
+  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  catalog.apps[0].tags = ['n64', 'recomp'];
+  catalog.apps.pop();
+  catalog.apps.push({ name: '2Ship2Harkinian', repository: 'HarbourMasters/2ship2harkinian' });
+  await catalogs.refresh(sub.id);
+  const review = catalogs.review(sub.id);
+  assert.deepEqual([review.new.length, review.changed.length, review.removed.length], [1, 1, 1]);
+  assert.equal(catalogs.markSeen(sub.id), true);
+  assert.deepEqual(catalogs.review(sub.id), { new: [], changed: [], removed: [] });
+
+  fake.routes['/nintendo.json'] = (req, res) => { res.writeHead(503); res.end(); };
+  const failed = await catalogs.refresh(sub.id);
+  assert.equal(failed.error, 'HTTP 503');
+  assert.equal(failed.entries, 2);
+  assert.equal(catalogs.list()[0].error, 'HTTP 503');
+  assert.equal(await catalogs.refresh('nope'), null);
+  assert.equal(catalogs.review('nope'), null);
+  assert.equal(catalogs.markSeen('nope'), false);
+  assert.equal(catalogs.get('nope'), null);
+});
+
+test('a catalog that is not a catalog is an error with no entries', async (t) => {
+  const { fake, catalogs } = await setup(t);
+  const r = await catalogs.subscribe({ url: `${fake.base}/broken.json` });
+  assert.match(r.catalog.error, /array/);
+  assert.equal(r.catalog.entries, 0);
+  const down = await catalogs.subscribe({ url: 'http://127.0.0.1:1/x.json' });
+  assert.ok(down.catalog.error);
+});
+
+test('items: one per entry, joined to collisions on repository only', async (t) => {
+  const { fake, catalogs } = await setup(t);
+  assert.deepEqual(catalogs.items(), []);
+  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  const items = catalogs.items();
+  assert.equal(items.length, 2);
+  const banjo = items.find(i => i.title === 'Banjo Recomp');
+  assert.equal(banjo.id, `quiver:${sub.id}:banjorecomp/banjorecomp`);
+  assert.equal(banjo.shelf, 'Nintendo');
+  assert.equal(banjo.icon, 'https://i/b.png');
+  assert.equal(banjo.data.iaIdentifier, COLLISIONS[0].iaIdentifier);
+  assert.equal(banjo.data.dataFiles[0].sha1, COLLISIONS[0].dataFiles[0].sha1);
+  assert.equal(items.find(i => i.title === 'Ship of Harkinian').data, null);
+  assert.equal(catalogs.unsubscribe(sub.id), true);
+  assert.equal(catalogs.unsubscribe(sub.id), false);
+  assert.deepEqual(catalogs.list(), []);
+});
+
+test('an unreadable collisions file joins nothing', async (t) => {
+  const { fake, dir, settings } = await setup(t);
+  const logs = [];
+  const catalogs = createCatalogs({ dir: path.join(dir, 'c2'), settings, collisionsFile: path.join(dir, 'missing.json'), log: m => logs.push(m) });
+  await catalogs.subscribe({ url: `${fake.base}/nintendo.json` });
+  assert.ok(catalogs.items().every(i => i.data === null));
+  assert.match(logs[0], /collisions unreadable/);
+  const none = createCatalogs({ dir: path.join(dir, 'c3'), settings });
+  assert.ok(none.items().every(i => i.data === null));
+});

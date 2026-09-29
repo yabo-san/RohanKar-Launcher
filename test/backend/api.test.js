@@ -1,0 +1,300 @@
+'use strict';
+/**
+ * The HTTP API against fixtures: every endpoint, the token, and the error
+ * shape. Requests go through real sockets with fetch, supertest style.
+ */
+const { test } = require('node:test');
+const assert = require('node:assert/strict');
+const fs   = require('fs');
+const path = require('path');
+const http = require('http');
+const { testApi, JPEG } = require('./helpers');
+const { run, parseArgs } = require('../../src/backend/main');
+
+test('token: required on every request, as a Bearer header or ?token=', async (t) => {
+  const { call, info } = await testApi(t);
+  assert.deepEqual((await call('GET', '/health', undefined, { token: null })).body.error, 'unauthorized');
+  assert.equal((await call('GET', '/health', undefined, { token: 'wrong' })).status, 401);
+  assert.equal((await call('GET', '/health', undefined, { token: 'test-token-but-longer' })).status, 401);
+  assert.deepEqual((await call('GET', '/health')).body, { ok: true, api: 'v1' });
+  assert.equal((await fetch(`${info.url}/health?token=test-token`)).status, 200);
+  assert.match(info.url, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+});
+
+test('CORS preflight, unknown routes, wrong methods, bad bodies', async (t) => {
+  const { call, info } = await testApi(t);
+  const pre = await fetch(`${info.url}/items`, { method: 'OPTIONS' });
+  assert.equal(pre.status, 204);
+  assert.equal(pre.headers.get('access-control-allow-origin'), '*');
+  assert.deepEqual((await call('GET', '/nope')).body, { error: 'not_found', detail: 'No route /v1/nope' });
+  assert.equal((await fetch(`${info.url.replace('/v1', '/v2')}/items?token=test-token`)).status, 404);
+  const wrong = await call('PUT', '/items');
+  assert.equal(wrong.status, 405);
+  assert.equal(wrong.headers.get('allow'), 'GET');
+  assert.equal((await call('POST', '/library', '{oops')).body.error, 'bad_json');
+  assert.equal((await call('POST', '/library', '[1]')).body.error, 'bad_request');
+  assert.equal((await call('POST', '/library', {})).body.detail, 'id is required');
+  assert.equal((await call('PUT', '/settings', 'x'.repeat(1024 * 1024 + 1)).catch(() => ({ status: 413 }))).status, 413);
+});
+
+test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (t) => {
+  const { call, backend, info } = await testApi(t);
+  const all = await call('GET', '/items');
+  assert.equal(all.status, 200);
+  assert.equal(all.body.items.length, 6);
+  assert.deepEqual(all.body.errors, []);
+  assert.equal((await call('GET', '/items?search=tycoon&source=pstriple')).body.items.length, 2);
+  assert.equal((await call('GET', '/items?installed=true')).body.items.length, 0);
+
+  const zoo = await call('GET', '/items/rk-e2e-zoo-tycoon-pstriple');
+  assert.equal(zoo.body.id, 'rk-e2e-zoo-tycoon');
+  assert.equal((await call('GET', '/items/nope')).status, 404);
+
+  const files = await call('GET', '/items/rk-e2e-halo-ce/files');
+  assert.deepEqual(files.body.installable.map(f => f.name), ['rk-e2e-halo-ce.zip']);
+  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/reviews')).body.reviews.length, 1);
+
+  const cover = await fetch(`${info.url}/items/rk-e2e-halo-ce/cover?token=test-token`);
+  assert.equal(cover.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await cover.arrayBuffer()).byteLength, JPEG.length);
+  assert.equal((await call('GET', '/items/missing-x/cover')).body.error, 'no_image');
+
+  const install = path.join(backend.dataDir, 'hero-game');
+  fs.mkdirSync(install);
+  fs.writeFileSync(path.join(install, 'hero.png'), 'png');
+  backend.library.recordInstall('rk-e2e-halo-ce', install, null);
+  const hero = await fetch(`${info.url}/items/rk-e2e-halo-ce/hero?token=test-token`);
+  assert.equal(hero.headers.get('content-type'), 'image/png');
+  assert.equal((await call('GET', '/items/rk-e2e-the-sims/hero')).status, 404);
+});
+
+test('items: sources down is a 502 with the per-source errors', async (t) => {
+  const { call, backend, fake } = await testApi(t);
+  backend.settings.save({ sources: [{ uploader: 'nobody@x' }] });
+  const r = await call('GET', '/items');
+  assert.equal(r.status, 502);
+  assert.equal(r.body.error, 'sources_failed');
+  assert.equal(r.body.errors[0].source, 'nobody@x');
+  assert.equal((await call('GET', '/items/anything')).status, 502);
+  fake.routes['/metadata/x'] = (req, res) => { res.writeHead(200); res.end('junk'); };
+  assert.equal((await call('GET', '/items/x/files')).status, 502);
+  assert.equal((await call('POST', '/library/scan', { dir: backend.dataDir })).status, 502);
+});
+
+test('catalogs: subscribe, list, get, refresh, review, seen, unsubscribe', async (t) => {
+  const { call, fake } = await testApi(t);
+  let apps = [{ name: 'A', repository: 'o/a' }];
+  fake.routes['/cat.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify({ apps })); };
+  const url = `${fake.base}/cat.json`;
+
+  assert.equal((await call('POST', '/catalogs', { url: 'nope' })).body.error, 'bad_url');
+  assert.equal((await call('POST', '/catalogs', {})).status, 400);
+  const sub = await call('POST', '/catalogs', { url, name: 'Other' });
+  assert.equal(sub.status, 201);
+  assert.equal((await call('POST', '/catalogs', { url })).status, 200);
+  const id = sub.body.id;
+  assert.equal((await call('GET', '/catalogs')).body.catalogs.length, 1);
+  assert.equal((await call('GET', `/catalogs/${id}`)).body.entries, 1);
+  assert.equal((await call('GET', '/items?shelf=Other')).body.items[0].title, 'A');
+
+  apps = [...apps, { name: 'B', repository: 'o/b' }];
+  assert.equal((await call('POST', `/catalogs/${id}/refresh`)).body.entries, 2);
+  assert.deepEqual((await call('GET', `/catalogs/${id}/review`)).body.new.map(e => e.name), ['B']);
+  assert.equal((await call('POST', `/catalogs/${id}/seen`)).status, 204);
+  assert.deepEqual((await call('GET', `/catalogs/${id}/review`)).body.new, []);
+  assert.equal((await call('DELETE', `/catalogs/${id}`)).status, 204);
+  for (const [m, p] of [['GET', ''], ['DELETE', ''], ['POST', '/refresh'], ['GET', '/review'], ['POST', '/seen']]) {
+    assert.equal((await call(m, `/catalogs/${id}${p}`)).status, 404, `${m} ${p}`);
+  }
+});
+
+test('library: add, get, patch, exes, readme, launch, reveal, delete', async (t) => {
+  const opened = [];
+  const { call, backend } = await testApi(t, {
+    host: { openPath: async (p) => { opened.push(p); return ''; }, revealPath: () => opened.push('reveal'), trashItem: async () => {} },
+  });
+  assert.deepEqual((await call('GET', '/library')).body, { library: {} });
+  const added = await call('POST', '/library', { id: 'quiver:abc:o/a', source: 'https://c/x.json' });
+  assert.equal(added.status, 201);
+  assert.equal(added.body.source, 'https://c/x.json');
+  assert.equal((await call('POST', '/library', { id: 'quiver:abc:o/a' })).status, 200);
+  assert.equal((await call('GET', `/library/${encodeURIComponent('quiver:abc:o/a')}`)).body.identifier, 'quiver:abc:o/a');
+  assert.equal((await call('GET', '/library/nope')).status, 404);
+
+  assert.equal((await call('PATCH', '/library/nope', { category: 'x' })).status, 404);
+  const fav = await call('PATCH', '/library/fresh', { favorite: true, notes: 'hi' });
+  assert.deepEqual([fav.body.is_favorite, fav.body.notes], [1, 'hi']);
+  assert.equal((await call('PATCH', '/library/fresh', { category: 'rpg', exePath: '/x.exe' })).body.category, 'rpg');
+  assert.equal((await call('PATCH', '/library/fresh', { color: 'x' })).body.detail, 'Unknown fields: color');
+
+  assert.equal((await call('GET', '/library/fresh/exes')).body.error, 'not_installed');
+  const dir = path.join(backend.dataDir, 'g');
+  fs.mkdirSync(path.join(dir, 'Game'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'Game', 'a.exe'), '');
+  fs.writeFileSync(path.join(dir, 'readme.txt'), 'read me');
+  backend.library.recordInstall('g', dir, null);
+  assert.deepEqual((await call('GET', '/library/g/exes')).body.exes, [path.join(dir, 'Game', 'a.exe')]);
+  assert.deepEqual((await call('GET', '/library/g/readme')).body, { text: 'read me', fileName: 'readme.txt' });
+
+  const launched = await call('POST', '/library/g/launch', {});
+  assert.deepEqual(launched.body, { ok: true, exePath: path.join(dir, 'Game', 'a.exe') });
+  fs.writeFileSync(path.join(dir, 'Game', 'b.exe'), '');
+  const choose = await call('POST', '/library/g/launch');
+  assert.deepEqual([choose.status, choose.body.error, choose.body.choices.length], [409, 'choose_exe', 2]);
+  assert.equal((await call('POST', '/library/g/launch', { exePath: path.join(dir, 'nope.exe') })).body.error, 'launch_failed');
+  assert.equal((await call('POST', '/library/g/reveal')).body.ok, true);
+  assert.equal(opened.length, 2);
+
+  const empty = path.join(backend.dataDir, 'empty');
+  fs.mkdirSync(empty);
+  backend.library.recordInstall('e', empty, null);
+  assert.equal((await call('POST', '/library/e/launch')).body.error, 'no_exe');
+  fs.rmSync(empty, { recursive: true });
+  assert.equal((await call('GET', '/library/e/readme')).status, 404);
+  assert.equal((await call('POST', '/library/e/reveal')).status, 404);
+
+  assert.equal((await call('DELETE', '/library/g?files=trash')).status, 204);
+  assert.equal(backend.library.get('g'), null);
+  assert.equal((await call('DELETE', '/library/g')).status, 404);
+});
+
+test('library: delete with trash needs the desktop app when standalone', async (t) => {
+  const { call, backend } = await testApi(t);
+  backend.library.recordInstall('g', backend.dataDir, null);
+  const r = await call('DELETE', '/library/g?files=trash');
+  assert.deepEqual([r.status, r.body.error], [501, 'unsupported']);
+  assert.equal((await call('DELETE', '/library/g')).status, 204, 'without files=trash the folder stays');
+  assert.equal((await call('POST', '/os/choose-folder')).status, 501);
+});
+
+test('library: failing trash is a 500; chooseFolder from the host', async (t) => {
+  const { call, backend } = await testApi(t, { host: { trashItem: async () => { throw new Error('EPERM'); }, chooseFolder: async () => '/picked' } });
+  backend.library.recordInstall('g', backend.dataDir, null);
+  assert.deepEqual((await call('DELETE', '/library/g?files=trash')).body, { error: 'delete_failed', detail: 'EPERM' });
+  assert.deepEqual((await call('POST', '/os/choose-folder')).body, { path: '/picked' });
+});
+
+test('POST /library/scan adopts folders named after items', async (t) => {
+  const { call, backend } = await testApi(t);
+  assert.equal((await call('POST', '/library/scan', {})).status, 400);
+  const dir = path.join(backend.dataDir, 'scan');
+  fs.mkdirSync(path.join(dir, 'Halo_ Combat Evolved'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'rk-e2e-the-sims'), { recursive: true });
+  backend.settings.save({ installPath: dir });
+  const r = await call('POST', '/library/scan', {});
+  assert.deepEqual(r.body.found.map(f => [f.identifier, f.matchedBy]).sort(), [['rk-e2e-halo-ce', 'title'], ['rk-e2e-the-sims', 'identifier']]);
+});
+
+test('collections: create, rename, colour, add and remove items, delete', async (t) => {
+  const { call } = await testApi(t);
+  const c = await call('POST', '/collections', { name: 'Faves' });
+  assert.equal(c.status, 201);
+  assert.equal((await call('POST', '/collections', { name: 'Faves' })).status, 409);
+  assert.equal((await call('POST', '/collections', {})).status, 400);
+  const other = (await call('POST', '/collections', { name: 'Other' })).body;
+  assert.equal((await call('PATCH', `/collections/${other.id}`, { name: 'Faves' })).status, 409);
+  const p = await call('PATCH', `/collections/${c.body.id}`, { name: 'Best', color: '#0f0' });
+  assert.deepEqual([p.body.name, p.body.color], ['Best', '#0f0']);
+  assert.equal((await call('PUT', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
+  assert.deepEqual((await call('GET', '/collections')).body.collections.find(x => x.id === c.body.id).games, ['rk-e2e-halo-ce']);
+  assert.equal((await call('DELETE', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
+  assert.equal((await call('DELETE', `/collections/${c.body.id}`)).status, 204);
+  assert.equal((await call('PATCH', `/collections/${c.body.id}`, {})).status, 404);
+  assert.equal((await call('DELETE', '/collections/abc')).status, 404);
+});
+
+test('installs: start, progress over SSE, get, list, cancel, errors', async (t) => {
+  const { call, backend, fake, info } = await testApi(t);
+  backend.settings.save({ installPath: path.join(backend.dataDir, 'games') });
+
+  const events = [];
+  const sse = await new Promise((resolve) => {
+    const req = http.get(`${info.url}/events?token=test-token`, (res) => {
+      res.setEncoding('utf8');
+      let buf = '';
+      res.on('data', (c) => {
+        buf += c;
+        let i;
+        while ((i = buf.indexOf('\n\n')) >= 0) {
+          const block = buf.slice(0, i);
+          buf = buf.slice(i + 2);
+          const type = /^event: (.+)$/m.exec(block)?.[1];
+          if (type) events.push({ type, data: JSON.parse(/^data: (.+)$/m.exec(block)[1]) });
+        }
+      });
+      resolve({ req, res });
+    });
+  });
+  assert.equal(sse.res.headers['content-type'], 'text/event-stream');
+
+  const start = await call('POST', '/installs', { id: 'rk-e2e-halo-ce' });
+  assert.equal(start.status, 202);
+  const job = start.body.installs[0];
+  await backend.installs.wait(job.id);
+  const done = await call('GET', `/installs/${job.id}`);
+  assert.equal(done.body.status, 'done');
+  assert.ok(done.body.exePath.endsWith('game.exe'));
+  assert.equal((await call('GET', '/installs')).body.installs.length, 1);
+  await new Promise(r => setTimeout(r, 50));
+  assert.ok(events.some(e => e.type === 'install' && e.data.status === 'done'));
+  assert.ok(events.some(e => e.type === 'library' && e.data.identifier === 'rk-e2e-halo-ce'));
+  sse.req.destroy();
+
+  fake.files.coll = [{ name: 'a.zip' }, { name: 'b.zip' }];
+  const choose = await call('POST', '/installs', { id: 'coll' });
+  assert.deepEqual([choose.status, choose.body.error, choose.body.choices.length], [409, 'choose_files', 2]);
+  assert.equal((await call('POST', '/installs', { id: 'coll', files: ['c.zip'] })).status, 400);
+  assert.equal((await call('POST', '/installs', { id: 'coll', files: 'a.zip' })).status, 400);
+  assert.equal((await call('POST', '/installs', { id: 'quiver:x:y' })).status, 501);
+  fake.files.docs = [{ name: 'manual.pdf' }];
+  assert.equal((await call('POST', '/installs', { id: 'docs' })).status, 422);
+
+  fake.routes['/download/slow/slow.zip'] = () => {};
+  const slow = (await call('POST', '/installs', { id: 'slow' })).body.installs[0];
+  assert.equal((await call('DELETE', `/installs/${slow.id}`)).body.status, 'cancelled');
+  assert.equal((await call('GET', '/installs/nope')).status, 404);
+  assert.equal((await call('DELETE', '/installs/nope')).status, 404);
+});
+
+test('settings and Playnite export', async (t) => {
+  const { call, backend } = await testApi(t);
+  assert.deepEqual((await call('GET', '/settings')).body, {});
+  assert.deepEqual((await call('PUT', '/settings', { betaUpdates: true })).body, { betaUpdates: true });
+  assert.deepEqual((await call('PUT', '/settings', { checkForUpdates: false })).body, { betaUpdates: true, checkForUpdates: false });
+  assert.equal((await call('PUT', '/settings', [1])).status, 400);
+
+  backend.library.add('solo');
+  const r = await call('POST', '/export/playnite', {});
+  assert.equal(r.body.count, 1);
+  assert.ok(fs.existsSync(r.body.file));
+  const target = path.join(backend.dataDir, 'out', 'p.json');
+  assert.equal((await call('POST', '/export/playnite', { path: target })).body.file, target);
+  assert.equal((await call('POST', '/export/playnite', { path: 'relative.json' })).status, 400);
+});
+
+test('an unexpected error is a 500 with the error shape', async (t) => {
+  const { call, backend } = await testApi(t);
+  backend.library.all = () => { throw new Error('disk on fire'); };
+  assert.deepEqual((await call('GET', '/library')).body, { error: 'internal', detail: 'disk on fire' });
+});
+
+test('library.db unavailable is a 503', async (t) => {
+  const { call, backend } = await testApi(t);
+  backend.library.close();
+  assert.equal((await call('POST', '/library', { id: 'x' })).status, 503);
+  assert.equal((await call('POST', '/collections', { name: 'x' })).status, 503);
+});
+
+test('standalone: prints port and token, serves the API, stops cleanly', async (t) => {
+  assert.deepEqual(parseArgs(['loose', '--data-dir', '/d', '--port=5', '--flag']), { 'data-dir': '/d', port: '5', flag: 'true' });
+  const dataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-standalone-'));
+  t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
+  const writes = [];
+  const srv = await run(['--data-dir', dataDir, '--archive-base', 'http://127.0.0.1:1', '--overrides-url', 'http://127.0.0.1:1/o.json'],
+    { LAUNCHER_TOKEN: 'fixed' }, (line) => writes.push(line));
+  const printed = JSON.parse(writes[0]);
+  assert.deepEqual([printed.token, printed.port], ['fixed', srv.port]);
+  const res = await fetch(`${printed.url}/settings`, { headers: { authorization: 'Bearer fixed' } });
+  assert.equal(res.status, 200);
+  await srv.stop();
+});
