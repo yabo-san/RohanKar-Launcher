@@ -1,22 +1,11 @@
 'use strict';
 /**
  * RohanKar Launcher — sources.js
- * Pure helpers for sources and duplicate grouping. Loaded as a plain <script>
- * before renderer.js, and required as CommonJS by the node:test suite.
+ * Pure display helpers for titles, versions and the Settings sources text.
+ * Default sources and grouping by title come from the backend (/v1/sources,
+ * /v1/items). Loaded as a plain <script> before renderer.js, and required as
+ * CommonJS by the node:test suite.
  */
-
-// Default sources from catalog/uploaders.json. An entry is on only when it is
-// marked launcher: true, not track: false, and has an uploaderEmail (what
-// archive.org's uploader: field matches); everything else ships off.
-function sourcesFromCatalog(data) {
-  const list = Array.isArray(data?.uploaders) ? data.uploaders : [];
-  return list.map(u => {
-    const uploader = u?.uploaderEmail || u?.handle;
-    if (!uploader) return null;
-    const enabled = u.launcher === true && u.track !== false && !!u.uploaderEmail;
-    return { uploader, label: u.handle || uploader.split('@')[0], enabled };
-  }).filter(Boolean);
-}
 
 // An overrides.json title (attached as _override) replaces the archive.org one
 function getTitle(game) {
@@ -39,15 +28,6 @@ function formatSources(list) {
   return list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`).join('\n');
 }
 
-// Same game from different uploaders → one entry. Key is the title with case,
-// punctuation, "the", and trailing bracketed tags like "(v1.2)" removed.
-function titleKey(game) {
-  return getTitle(game).toLowerCase()
-    .replace(/[\(\[][^\)\]]*[\)\]]/g, ' ')
-    .replace(/^the\s+/, '')
-    .replace(/[^a-z0-9]+/g, '');
-}
-
 // The version to show for a grouped entry: the installed one if any, else the entry itself
 function preferredVersion(game, library) {
   const versions = game._versions || [game];
@@ -60,5 +40,5 @@ function versionLabel(v) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { sourcesFromCatalog, getTitle, parseSources, formatSources, titleKey, preferredVersion, versionLabel };
+  module.exports = { getTitle, parseSources, formatSources, preferredVersion, versionLabel };
 }

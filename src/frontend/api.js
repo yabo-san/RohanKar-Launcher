@@ -1,0 +1,182 @@
+'use strict';
+/**
+ * RohanKar Launcher — api.js
+ * The frontend's only way out: fetch and EventSource against the backend's
+ * /v1 API (docs/API.md). Where it runs:
+ *   - the desktop app: preload.js sets window.launcher = { apiBase, token }
+ *   - a plain browser: index.html?api=http://127.0.0.1:<port>/v1&token=<token>
+ * Loaded as a plain <script> before renderer.js, which calls `api.*`.
+ */
+
+const api = (() => {
+  const params = new URLSearchParams(location.search);
+  const apiBase = window.launcher?.apiBase || params.get('api') || '';
+  const token   = window.launcher?.token   || params.get('token') || '';
+
+  const enc = encodeURIComponent;
+  const url = (p, query = {}) => {
+    const q = new URLSearchParams({ ...query, token }).toString();
+    return `${apiBase}${p}?${q}`;
+  };
+
+  // JSON request. Resolves { ok, status, body }; never rejects on HTTP errors.
+  async function call(method, p, body, query) {
+    try {
+      const res = await fetch(url(p, query), {
+        method,
+        headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, body: text ? JSON.parse(text) : null };
+    } catch (e) {
+      return { ok: false, status: 0, body: { error: 'network', detail: e.message } };
+    }
+  }
+  const failure = (r) => ({ ok: false, error: r.body?.detail || r.body?.error || `HTTP ${r.status}` });
+
+  // An image as an object URL, or null when the backend has none
+  async function image(p, query) {
+    try {
+      const res = await fetch(url(p, query));
+      return res.ok ? URL.createObjectURL(await res.blob()) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // One EventSource shared by every listener
+  let events = null;
+  const listeners = {};
+  function on(type, cb) {
+    if (!events) events = new EventSource(url('/events'));
+    if (!listeners[type]) {
+      listeners[type] = [];
+      events.addEventListener(type, (e) => {
+        const data = JSON.parse(e.data);
+        for (const fn of listeners[type]) fn(data);
+      });
+    }
+    listeners[type].push(cb);
+  }
+
+  // Installs report progress over /events; finished jobs resolve waiters
+  const jobWaiters = new Map();   // job id → { onProgress, resolve }
+  let watchingInstalls = false;
+  function watchInstalls() {
+    if (watchingInstalls) return;
+    watchingInstalls = true;
+    on('install', (job) => {
+      const w = jobWaiters.get(job.id);
+      if (!w) return;
+      if (job.status === 'downloading') w.onProgress(job.percent);
+      if (job.status === 'extracting') w.onExtracting();
+      if (['done', 'error', 'cancelled'].includes(job.status)) {
+        jobWaiters.delete(job.id);
+        w.resolve(job);
+      }
+    });
+  }
+
+  return {
+    apiBase, token, url,
+
+    // Window and OS (the desktop app does these; a browser tab has none)
+    windowMinimize: () => call('POST', '/os/window', { action: 'minimize' }),
+    windowMaximize: () => call('POST', '/os/window', { action: 'maximize' }),
+    windowClose:    () => call('POST', '/os/window', { action: 'close' }),
+    openExternal:   (href) => call('POST', '/os/open-external', { url: href }),
+    chooseFolder:   async () => (await call('POST', '/os/choose-folder')).body?.path || null,
+    addToSteam:     async (opts) => { const r = await call('POST', '/os/add-to-steam', opts); return r.ok ? r.body : failure(r); },
+    getAppVersion:  async () => (await call('GET', '/health')).body?.version || '',
+    updaterInstall: () => call('POST', '/os/updater-install'),
+    // Reports the latest status now, if any, then each new one
+    onUpdaterStatus: (cb) => {
+      on('updater', cb);
+      call('GET', '/os/updater').then(r => { if (r.body?.status) cb(r.body.status); });
+    },
+    // Playnite asking to show an item: the pending request now, if any, then each new one
+    onOpenItem: (cb) => {
+      on('open-item', cb);
+      call('GET', '/os/open-item').then(r => { if (r.body?.identifier) cb({ identifier: r.body.identifier }); });
+    },
+    clearOpenItem: () => call('DELETE', '/os/open-item'),
+
+    // Settings and sources
+    getSettings:  async () => (await call('GET', '/settings')).body || {},
+    saveSettings: (s) => call('PUT', '/settings', s),
+    getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
+
+    // Items: { items, errors }; throws when every source failed
+    getItems: async (query = {}) => {
+      const r = await call('GET', '/items', undefined, query);
+      if (!r.ok) throw new Error(r.body?.detail || `HTTP ${r.status}`);
+      return r.body;
+    },
+    fetchFileList: async ({ identifier }) => {
+      const r = await call('GET', `/items/${enc(identifier)}/files`);
+      return r.ok ? { ok: true, files: r.body.files } : { ...failure(r), files: [] };
+    },
+    fetchReviews: async ({ identifier }) => (await call('GET', `/items/${enc(identifier)}/reviews`)).body?.reviews || [],
+    getThumb:        ({ identifier }) => image(`/items/${enc(identifier)}/cover`),
+    getOverrideHero: ({ identifier }) => image(`/items/${enc(identifier)}/hero`, { from: 'override' }),
+    getInstallHero:  ({ identifier }) => image(`/items/${enc(identifier)}/hero`, { from: 'install' }),
+    // A URL to try as an <img> src: the hero shipped with the app, 404 if none
+    bundledHeroUrl:  (identifier) => url(`/items/${enc(identifier)}/hero`, { from: 'bundled' }),
+
+    // Library
+    getLibrary:  async () => (await call('GET', '/library')).body?.library || {},
+    setFavorite: ({ identifier, isFavorite }) => call('PATCH', `/library/${enc(identifier)}`, { favorite: !!isFavorite }),
+    setNotes:    ({ identifier, notes }) => call('PATCH', `/library/${enc(identifier)}`, { notes }),
+    setExePath:  ({ identifier, exePath }) => call('PATCH', `/library/${enc(identifier)}`, { exePath }),
+    // Out of the library; with trash, the install folder goes to the Recycle Bin
+    deleteGame: async ({ identifier, trash }) => {
+      const r = await call('DELETE', `/library/${enc(identifier)}`, undefined, trash ? { files: 'trash' } : {});
+      return r.ok || r.status === 404 ? { ok: true } : failure(r);
+    },
+    findExes:   async ({ identifier }) => (await call('GET', `/library/${enc(identifier)}/exes`)).body?.exes || [],
+    readReadme: async ({ identifier }) => {
+      const r = await call('GET', `/library/${enc(identifier)}/readme`);
+      return r.ok ? { ok: true, ...r.body } : { ok: false, text: null };
+    },
+    launchGame: async ({ identifier, exePath }) => {
+      const r = await call('POST', `/library/${enc(identifier)}/launch`, { exePath });
+      return r.ok ? { ok: true } : failure(r);
+    },
+    openGameLocation: ({ identifier }) => call('POST', `/library/${enc(identifier)}/reveal`),
+    scanForGames: async () => {
+      const r = await call('POST', '/library/scan', {});
+      return r.ok ? r.body : { found: [], error: r.body?.detail };
+    },
+
+    // Collections
+    getCollections:   async () => (await call('GET', '/collections')).body?.collections || [],
+    createCollection: async ({ name }) => { const r = await call('POST', '/collections', { name }); return r.ok ? { ok: true, id: r.body.id } : failure(r); },
+    deleteCollection: ({ id }) => call('DELETE', `/collections/${id}`),
+    renameCollection: async ({ id, name }) => { const r = await call('PATCH', `/collections/${id}`, { name }); return r.ok ? { ok: true } : failure(r); },
+    setCollectionColor: ({ id, color }) => call('PATCH', `/collections/${id}`, { color: color || null }),
+    addGameToCollection:      ({ collectionId, identifier }) => call('PUT', `/collections/${collectionId}/items/${enc(identifier)}`),
+    removeGameFromCollection: ({ collectionId, identifier }) => call('DELETE', `/collections/${collectionId}/items/${enc(identifier)}`),
+
+    // Installs one file of an item: download, extract, record. Resolves the
+    // finished job ({ status: done | error | cancelled, error, ... }).
+    // onStart(job) gets the job at once, so the caller can cancel it.
+    install: async ({ identifier, fileName, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
+      watchInstalls();
+      const r = await call('POST', '/installs', { id: identifier, files: [fileName] });
+      if (!r.ok) return { status: 'error', error: r.body?.detail || `HTTP ${r.status}` };
+      const job = r.body.installs[0];
+      onStart(job);
+      const finished = new Promise(resolve => jobWaiters.set(job.id, { onProgress, onExtracting, resolve }));
+      // The job may have finished before the listener was in place
+      const now = await call('GET', `/installs/${job.id}`);
+      if (now.ok && ['done', 'error', 'cancelled'].includes(now.body.status)) {
+        jobWaiters.delete(job.id);
+        return now.body;
+      }
+      return finished;
+    },
+    cancelInstall: ({ jobId }) => call('DELETE', `/installs/${jobId}`),
+  };
+})();
+

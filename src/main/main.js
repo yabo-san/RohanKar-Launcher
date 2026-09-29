@@ -1,22 +1,23 @@
 'use strict';
 /**
  * RohanKar Launcher — main.js
- * Window, auto-updater and Add-to-Steam. Everything else (sources, library.db,
- * downloads, extraction, covers, the net log) lives in src/backend/; the IPC
- * handlers below are thin wrappers over it, same channels and replies as before.
+ * Starts the backend (src/backend/) in-process with its HTTP API on
+ * 127.0.0.1, opens the window on src/frontend/ and hands it the port and
+ * token. The OS side stays here: window controls, dialogs, the shell,
+ * the auto-updater and Add to Steam, which the backend calls through `host`.
  *
  * Started with a Playnite command (--install, --uninstall, --launch,
- * --export-playnite; see src/backend/cli.js) it runs that without a window
- * and exits, unless the command needs the window, which then opens on that item.
+ * --export-playnite; see src/backend/cli.js) it runs that against the
+ * backend without a window and exits, unless the command needs the window,
+ * which then opens on that item.
  */
 
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, dialog, shell } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
 const { createBackend } = require('../backend');
-const { fileUrl } = require('../backend/covers');
-const disk = require('../backend/disk');
+const { createServer } = require('../backend/server');
 const { parseCli, runCli } = require('../backend/cli');
 const { findRow } = require('../backend/playnite');
 
@@ -28,8 +29,10 @@ let mainWindow;
 const cli = parseCli(process.argv.slice(1));
 
 const backend = createBackend({
-  dataDir: USER_DATA,
-  appDir:  app.getAppPath(),
+  dataDir:    USER_DATA,
+  appDir:     app.getAppPath(),
+  heroesDir:  app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes'),
+  appVersion: app.getVersion(),
   host: {
     openPath:     (p) => shell.openPath(p),   // ShellExecute: handles UAC prompts, unlike execFile
     trashItem:    (p) => shell.trashItem(p),
@@ -38,14 +41,22 @@ const backend = createBackend({
       const res = await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] });
       return res.canceled ? null : res.filePaths[0];
     },
+    window: (action) => {
+      if (action === 'minimize') mainWindow?.minimize();
+      else if (action === 'close') mainWindow?.close();
+      else if (mainWindow?.isMaximized()) mainWindow.unmaximize();
+      else mainWindow?.maximize();
+    },
+    addToSteam:     (opts) => addToSteam(opts),
+    updaterInstall: () => updaterInstall(),
   },
 });
-const { library, archive, covers, installs } = backend;
+const api = createServer(backend, { log: (msg) => console.error(msg) });
 const loadSettings = () => backend.settings.load();
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-function createWindow() {
+function createWindow({ url, token }) {
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 800,
@@ -54,17 +65,11 @@ function createWindow() {
       preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration:  false,
+      // Read by preload.js and handed to the page as window.launcher
+      additionalArguments: [`--launcher-api=${url}`, `--launcher-token=${token}`],
     },
   });
-  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-}
-
-// Shows one item in the window (Play in Playnite on a game that isn't installed)
-function openItem(identifier) {
-  if (!mainWindow || !identifier) return;
-  const send = () => mainWindow.webContents.send('open-item', { identifier });
-  if (mainWindow.webContents.isLoading()) mainWindow.webContents.once('did-finish-load', send);
-  else send();
+  mainWindow.loadFile(path.join(__dirname, '../frontend/index.html'));
 }
 
 // Playnite asking a running launcher to show an item: argv of the second start
@@ -73,7 +78,7 @@ app.on('second-instance', (_, argv) => {
   if (mainWindow.isMinimized()) mainWindow.restore();
   mainWindow.focus();
   const c = parseCli(argv.slice(1));
-  if (c?.value) openItem(findRow(library.all(), c.value)?.identifier || c.value);
+  if (c?.value) backend.requestOpen(findRow(backend.library.all(), c.value)?.identifier || c.value);
 });
 
 app.whenReady().then(async () => {
@@ -87,97 +92,20 @@ app.whenReady().then(async () => {
   if (!app.requestSingleInstanceLock()) { app.quit(); return; }
   backend.getOverrides();
   backend.getDefaultSources();
-  createWindow();
+  const info = await api.listen(0);
+  createWindow(info);
   setupAutoUpdater();
   // Validate installs on every launch — clears DB entries whose folders were deleted
-  library.clearMissingInstalls();
+  backend.library.clearMissingInstalls();
   // playnite-export.json is rewritten on every library change; this covers a first run
   backend.exportPlaynite(undefined, { loadItems: false }).catch(() => {});
-  openItem(open);
+  if (open) backend.requestOpen(open);
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
-app.on('will-quit', () => backend.close());
-
-// ─── Window controls ─────────────────────────────────────────────────────────
-
-ipcMain.handle('app-version', () => app.getVersion());
-ipcMain.handle('heroes-path', () => {
-  if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'heroes');
-  }
-  return path.join(__dirname, '../../assets/heroes');
+app.on('activate', async () => {
+  if (BrowserWindow.getAllWindows().length === 0) createWindow({ url: `http://127.0.0.1:${api.server.address().port}/v1`, token: api.token });
 });
-
-ipcMain.on('open-external', (_, url) => {
-  shell.openExternal(url);
-});
-
-ipcMain.on('window-minimize', () => mainWindow?.minimize());
-ipcMain.on('window-maximize', () => {
-  if (mainWindow?.isMaximized()) mainWindow.unmaximize();
-  else mainWindow?.maximize();
-});
-ipcMain.on('window-close', () => mainWindow?.close());
-
-// ─── Settings ─────────────────────────────────────────────────────────────────
-
-ipcMain.handle('settings-get',  ()     => loadSettings());
-ipcMain.handle('settings-save', (_, s) => { backend.settings.save(s); return { ok: true }; });
-ipcMain.handle('choose-folder', ()     => backend.os.chooseFolder());
-
-// ─── Library ──────────────────────────────────────────────────────────────────
-
-ipcMain.handle('library-get',          ()                              => library.all());
-ipcMain.handle('library-get-game',     (_, { identifier })             => library.get(identifier));
-ipcMain.handle('library-set-category', (_, { identifier, category })   => library.setCategory(identifier, category));
-ipcMain.handle('library-set-favorite', (_, { identifier, isFavorite }) => library.setFavorite(identifier, isFavorite));
-ipcMain.handle('library-set-notes',    (_, { identifier, notes })      => library.setNotes(identifier, notes));
-ipcMain.handle('install-game',         (_, { identifier, installDir, exePath }) => library.recordInstall(identifier, installDir, exePath));
-ipcMain.handle('set-exe-path',         (_, { identifier, exePath })    => library.setExePath(identifier, exePath));
-ipcMain.handle('delete-game',          (_, { identifier, installDir }) => backend.removeFromLibrary(identifier, { installDir, trash: true }));
-ipcMain.handle('scan-for-games',       (_, opts)                       => installs.scan(opts));
-
-// ─── Collections ──────────────────────────────────────────────────────────────
-
-ipcMain.handle('collections-get',         ()                                => library.collections());
-ipcMain.handle('collections-create',      (_, { name })                     => library.createCollection(name));
-ipcMain.handle('collections-delete',      (_, { id })                       => library.deleteCollection(id));
-ipcMain.handle('collections-rename',      (_, { id, name })                 => library.renameCollection(id, name));
-ipcMain.handle('collections-set-color',   (_, { id, color })                => library.setCollectionColor(id, color));
-ipcMain.handle('collections-add-game',    (_, { collectionId, identifier }) => library.addToCollection(collectionId, identifier));
-ipcMain.handle('collections-remove-game', (_, { collectionId, identifier }) => library.removeFromCollection(collectionId, identifier));
-
-// ─── archive.org ──────────────────────────────────────────────────────────────
-
-ipcMain.handle('archive-search',  (_, { params })     => archive.search(params));
-ipcMain.handle('fetch-file-list', (_, { identifier }) => archive.fileList(identifier));
-ipcMain.handle('fetch-reviews',   (_, { identifier }) => archive.reviews(identifier));
-
-// ─── Covers ───────────────────────────────────────────────────────────────────
-
-ipcMain.handle('get-overrides',       ()                  => backend.getOverrides());
-ipcMain.handle('get-default-sources', ()                  => backend.getDefaultSources());
-ipcMain.handle('get-thumb',         async (_, { identifier }) => fileUrl(await covers.thumb(identifier)));
-ipcMain.handle('get-override-hero', async (_, { identifier }) => fileUrl((await covers.overrideArt(identifier, 'hero')) ?? null));
-ipcMain.handle('check-game-hero',   (_, { installDir })  => fileUrl(covers.installHero(installDir)));
-
-// ─── Download / extract / launch ──────────────────────────────────────────────
-
-ipcMain.handle('download-start', (event, { identifier, downloadUrl, fileName }) => installs.download({
-  key: identifier, identifier, url: downloadUrl, fileName,
-  onProgress: (percent) => {
-    try {
-      if (!event.sender.isDestroyed()) event.sender.send('download-progress', { identifier, percent });
-    } catch {}
-  },
-}));
-ipcMain.handle('download-cancel',    (_, { identifier }) => installs.cancelDownload(identifier));
-ipcMain.handle('extract-archive',    (_, opts)           => installs.extract(opts));
-ipcMain.handle('find-exes',          (_, { installDir }) => disk.findExes(installDir));
-ipcMain.handle('launch-game',        (_, { identifier, exePath }) => backend.launch(identifier, exePath));
-ipcMain.handle('open-game-location', (_, { installDir }) => backend.openFolder(installDir));
-ipcMain.handle('read-readme',        (_, { installDir }) => disk.readReadme(installDir));
+app.on('will-quit', () => { api.close(); backend.close(); });
 
 // ─── Auto-updater ────────────────────────────────────────────────────────────
 //
@@ -248,7 +176,7 @@ function setupAutoUpdater() {
     });
 
     fetchNotes().then((releaseNotes) => {
-      mainWindow?.webContents.send('updater-status', {
+      backend.setUpdaterStatus({
         status:       'available',
         version:      info.version,
         releaseNotes: releaseNotes || null,
@@ -272,7 +200,7 @@ function setupAutoUpdater() {
       return;
     }
     console.error('[updater] Error:', msg);
-    mainWindow?.webContents.send('updater-status', {
+    backend.setUpdaterStatus({
       status:  'error',
       message: msg,
     });
@@ -285,13 +213,12 @@ function setupAutoUpdater() {
 
 }  
 
-// IPC: renderer asks to download update — always registered, opens GitHub releases page.
+// The frontend's Install button opens the GitHub release page.
 // Fork releases are GitHub pre-releases, which /releases/latest skips, so link the tag.
-ipcMain.removeHandler('updater-install');
-ipcMain.handle('updater-install', () => {
+function updaterInstall() {
   const page = availableVersion ? `tag/v${availableVersion}` : 'latest';
   shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/${page}`);
-});
+}
 
 // ─── Add to Steam ───────────────────────────────────────────────────────────
 //
@@ -495,7 +422,7 @@ function generateNonSteamAppId() {
   return (rand | 0x80000000) >>> 0;
 }
 
-ipcMain.handle('add-to-steam', async (_, { appName, exePath, startDir, iconPath }) => {
+async function addToSteam({ appName, exePath, startDir }) {
   try {
     const steamPath = findSteamPath();
     if (!steamPath) return { ok: false, error: 'Steam installation not found.' };
@@ -587,4 +514,4 @@ ipcMain.handle('add-to-steam', async (_, { appName, exePath, startDir, iconPath 
     console.error('[add-to-steam] Error:', e.message);
     return { ok: false, error: e.message };
   }
-});
+}

@@ -16,7 +16,8 @@ test('token: required on every request, as a Bearer header or ?token=', async (t
   assert.deepEqual((await call('GET', '/health', undefined, { token: null })).body.error, 'unauthorized');
   assert.equal((await call('GET', '/health', undefined, { token: 'wrong' })).status, 401);
   assert.equal((await call('GET', '/health', undefined, { token: 'test-token-but-longer' })).status, 401);
-  assert.deepEqual((await call('GET', '/health')).body, { ok: true, api: 'v1' });
+  const health = (await call('GET', '/health')).body;
+  assert.deepEqual(health, { ok: true, api: 'v1', version: require('../../package.json').version });
   assert.equal((await fetch(`${info.url}/health?token=test-token`)).status, 200);
   assert.match(info.url, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
 });
@@ -290,7 +291,7 @@ test('standalone: prints port and token, serves the API, stops cleanly', async (
   const dataDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-standalone-'));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   const writes = [];
-  const srv = await run(['--data-dir', dataDir, '--archive-base', 'http://127.0.0.1:1', '--overrides-url', 'http://127.0.0.1:1/o.json'],
+  const srv = await run(['--data-dir', dataDir, '--archive-base', 'http://127.0.0.1:1', '--overrides-url', 'http://127.0.0.1:1/o.json', '--uploaders-url', 'http://127.0.0.1:1/u.json'],
     { LAUNCHER_TOKEN: 'fixed' }, (line) => writes.push(line));
   const printed = JSON.parse(writes[0]);
   assert.deepEqual([printed.token, printed.port], ['fixed', srv.port]);
@@ -318,4 +319,63 @@ test('GET /sources: catalog defaults, fetched from main or bundled; a saved list
   const none = createBackend({ dataDir: backend.dataDir + '-3', appDir: backend.dataDir, archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });
   t.after(() => { none.close(); fs.rmSync(backend.dataDir + '-3', { recursive: true, force: true }); });
   assert.deepEqual(await none.getDefaultSources(), [], 'empty fetch and no bundled copy: no defaults');
+});
+
+test('os: window, open-external, add-to-steam, updater go to the host; 501 standalone', async (t) => {
+  const calls = [];
+  const { call, backend } = await testApi(t, {
+    host: {
+      window: (a) => calls.push(['window', a]),
+      openExternal: async (u) => calls.push(['open', u]),
+      addToSteam: async (o) => { calls.push(['steam', o.appName]); return { ok: true, alreadyAdded: false, updatedUsers: 1 }; },
+      updaterInstall: () => calls.push(['update']),
+    },
+  });
+  assert.equal((await call('POST', '/os/window', { action: 'maximize' })).body.ok, true);
+  assert.equal((await call('POST', '/os/window', { action: 'fly' })).status, 400);
+  assert.equal((await call('POST', '/os/open-external', { url: 'https://archive.org/donate' })).status, 200);
+  assert.equal((await call('POST', '/os/open-external', { url: 'file:///etc/passwd' })).status, 400);
+  assert.deepEqual((await call('POST', '/os/add-to-steam', { appName: 'Halo', exePath: 'C:\\g\\h.exe', startDir: 'C:\\g' })).body, { ok: true, alreadyAdded: false, updatedUsers: 1 });
+  assert.equal((await call('POST', '/os/add-to-steam', { appName: 'Halo' })).status, 400);
+  assert.deepEqual((await call('GET', '/os/updater')).body, { status: null });
+  backend.setUpdaterStatus({ status: 'available', version: '9.9.9' });
+  assert.equal((await call('GET', '/os/updater')).body.status.version, '9.9.9');
+  assert.equal((await call('POST', '/os/updater-install')).body.ok, true);
+  const opened = [];
+  backend.events.on('event', (e) => { if (e.type === 'open-item') opened.push(e.data.identifier); });
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: null });
+  backend.requestOpen('rk-e2e-halo-ce');
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: 'rk-e2e-halo-ce' });
+  assert.equal((await call('DELETE', '/os/open-item')).status, 204);
+  assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: null });
+  assert.deepEqual(opened, ['rk-e2e-halo-ce']);
+  assert.deepEqual(calls, [['window', 'maximize'], ['open', 'https://archive.org/donate'], ['steam', 'Halo'], ['update']]);
+});
+
+test('os: standalone answers 501 for window, browser, Steam and updater', async (t) => {
+  const { call } = await testApi(t);
+  assert.equal((await call('POST', '/os/window', { action: 'close' })).status, 501);
+  assert.equal((await call('POST', '/os/open-external', { url: 'https://x' })).status, 501);
+  assert.equal((await call('POST', '/os/add-to-steam', { appName: 'a', exePath: 'b', startDir: 'c' })).status, 501);
+  assert.equal((await call('POST', '/os/updater-install')).status, 501);
+});
+
+test('GET /items/:id/hero?from= picks one source; the bundled hero ships with the app', async (t) => {
+  const { call, backend } = await testApi(t, { heroesDir: path.join(__dirname, 'no-heroes-here') });
+  const install = path.join(backend.dataDir, 'g');
+  fs.mkdirSync(install);
+  fs.writeFileSync(path.join(install, 'hero.jpg'), 'x');
+  backend.library.recordInstall('rk-e2e-halo-ce', install, null);
+  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=install', undefined, { raw: true })).res.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=override', undefined, { raw: true })).status, 404);
+  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=bundled', undefined, { raw: true })).status, 404);
+  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=moon', undefined, { raw: true })).status, 400);
+
+  const heroes = path.join(backend.dataDir, 'heroes');
+  fs.mkdirSync(heroes);
+  fs.writeFileSync(path.join(heroes, 'rk-e2e-the-sims.png'), 'png');
+  const { call: call2 } = await testApi(t, { heroesDir: heroes });
+  assert.equal((await call2('GET', '/items/rk-e2e-the-sims/hero?from=bundled', undefined, { raw: true })).res.headers.get('content-type'), 'image/png');
+  assert.equal((await call2('GET', '/items/rk-e2e-the-sims/hero', undefined, { raw: true })).status, 200, 'the chain ends at the bundled hero');
+  assert.equal((await call2('GET', '/items/..%2Fx/hero?from=bundled', undefined, { raw: true })).status, 404);
 });

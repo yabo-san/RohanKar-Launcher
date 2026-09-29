@@ -25,11 +25,14 @@ const playnite = require('./playnite');
 const disk = require('./disk');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
-const VERSION = require('../../package.json').version;
+
+const readVersion = (dir) => {
+  try { return JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8')).version || null; } catch { return null; }
+};
 const UPLOADERS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/uploaders.json';
 
 // OS actions when no Electron host is attached (standalone backend). Electron
-// replaces openPath, trashItem and chooseFolder with shell/dialog calls.
+// replaces them with shell, dialog, window, Steam and updater calls.
 function defaultHost(platform = process.platform) {
   const opener = platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
   const unsupported = (what) => () => { const e = new Error(`${what} needs the desktop app`); e.code = 'unsupported'; throw e; };
@@ -38,20 +41,24 @@ function defaultHost(platform = process.platform) {
       execFile(opener, [p], (err) => resolve(err ? err.message : ''));
     }),
     revealPath: (p) => { execFile(opener, [p]); },
-    trashItem:    unsupported('Moving files to the trash'),
-    chooseFolder: unsupported('Choosing a folder'),
-    openExternal: unsupported('Opening a browser'),
+    trashItem:      unsupported('Moving files to the trash'),
+    chooseFolder:   unsupported('Choosing a folder'),
+    openExternal:   unsupported('Opening a browser'),
+    window:         unsupported('Window controls'),
+    addToSteam:     unsupported('Add to Steam'),
+    updaterInstall: unsupported('Updating'),
   };
 }
 
 function createBackend({
   dataDir,
   appDir = REPO_ROOT,
+  heroesDir = path.join(appDir, 'assets', 'heroes'),
+  appVersion = readVersion(appDir),
   archiveBase = 'https://archive.org',
   overridesUrl = OVERRIDES_URL,
   uploadersUrl = UPLOADERS_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
-  version = VERSION,
   playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
@@ -107,7 +114,7 @@ function createBackend({
     }
   })());
 
-  const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, log: netlog.log });
+  const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, heroesDir, archive, getOverrides, log: netlog.log });
   const installs = createInstalls({ settings, library, archive, gamesDir, emit, log, netLog: netlog.log, platform });
   const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, netLog: netlog.log, log });
   const items    = createItems({ archive, settings, catalogs, library, getOverrides, getDefaultSources, emit, log });
@@ -201,7 +208,7 @@ function createBackend({
       art: (id, row) => covers.localArt(id, row.install_dir, overrides),
       exportIdFor: (id) => library.exportId(id),
       previous: playnite.readExport(file),
-      launcherVersion: version,
+      launcherVersion: appVersion,
     });
     return { file: playnite.writeExport(file, data), count: data.games.length };
   }
@@ -228,6 +235,22 @@ function createBackend({
     return exportRunning;
   }
 
+  // The desktop app's updater reports here; the frontend reads it over SSE,
+  // or from GET /os/updater if it connected after the report
+  let updaterStatus = null;
+  function setUpdaterStatus(status) {
+    updaterStatus = status;
+    emit('updater', status);
+  }
+
+  // Playnite asked the window to show an item (--launch on one not installed);
+  // the frontend reads it over SSE, or from GET /os/open-item if it connected later
+  let openRequest = null;
+  function requestOpen(identifier) {
+    openRequest = identifier;
+    emit('open-item', { identifier });
+  }
+
   function close() {
     closed = true;
     clearTimeout(exportTimer);
@@ -236,7 +259,9 @@ function createBackend({
   }
 
   return {
-    dataDir, appDir, events, emit, os,
+    dataDir, appDir, appVersion, events, emit, os,
+    setUpdaterStatus, get updaterStatus() { return updaterStatus; },
+    requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };

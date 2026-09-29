@@ -20,7 +20,6 @@ let pendingOpenItem = null;  // identifier Playnite asked to show, until the gam
 let allVersions   = [];   // every fetched item, across all sources
 let defaultSources = [];   // from catalog/uploaders.json, used when settings has no `sources`
 let sources       = [];
-let overrides     = {};   // overrides.json, keyed by identifier
 let library       = {};
 let collections   = [];
 let selectedGame  = null;
@@ -34,6 +33,7 @@ let activeCollection   = '';
 // Download queue: identifier → { identifier, title, percent, status }
 // status: 'downloading' | 'extracting' | 'done' | 'error'
 const downloadQueue = new Map();
+const installJobs   = new Map();   // queue key → backend install job id
 
 // Download history: session-persistent record of all downloads
 // { identifier, title, status, percent, startedAt, finishedAt }
@@ -153,7 +153,7 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
-// getTitle, parseSources, formatSources, titleKey, preferredVersion and
+// getTitle, parseSources, formatSources, preferredVersion and
 // versionLabel live in sources.js (loaded before this file).
 function loadSourcesSetting(s) {
   return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : defaultSources;
@@ -187,7 +187,7 @@ async function resolveThumb(identifier) {
   if (thumbUrlCache[identifier]) return thumbUrlCache[identifier];
   if (thumbFailed.has(identifier)) return null;
   // Re-renders reuse the pending request instead of queueing another
-  thumbInFlight[identifier] ??= withThumbSlot(() => window.electronAPI.getThumb({ identifier }))
+  thumbInFlight[identifier] ??= withThumbSlot(() => api.getThumb({ identifier }))
     .catch(() => null)
     .finally(() => { delete thumbInFlight[identifier]; });
   const url = await thumbInFlight[identifier];
@@ -219,12 +219,9 @@ function applyThumb(imgEl, identifier) {
   if (!thumbFailed.has(identifier)) thumbObserver.observe(imgEl);
 }
 
+// The hero shipped with the app, as a URL to try: it 404s when there is none
 function getLocalHero(identifier) {
-  try {
-    const base = window._heroBasePath;
-    if (!base) return null;
-    return `${base}/${identifier}.png`;
-  } catch { return null; }
+  return api.bundledHeroUrl(identifier);
 }
 
 function truncate(str, max) {
@@ -336,7 +333,7 @@ function closeChangelog() {
 async function openAbout() {
   if (!aboutModal) return;
   if (!aboutVersion.textContent) {
-    const v = await window.electronAPI.getAppVersion();
+    const v = await api.getAppVersion();
     aboutVersion.textContent = `Version ${v}`;
   }
   aboutModal.classList.remove('hidden');
@@ -409,9 +406,9 @@ function getSortedGames(games) {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 async function init() {
   // Window controls
-  btnMinimize.addEventListener('click', () => window.electronAPI.windowMinimize());
-  btnMaximize.addEventListener('click', () => window.electronAPI.windowMaximize());
-  btnClose.addEventListener('click',    () => window.electronAPI.windowClose());
+  btnMinimize.addEventListener('click', () => api.windowMinimize());
+  btnMaximize.addEventListener('click', () => api.windowMaximize());
+  btnClose.addEventListener('click',    () => api.windowClose());
 
   // Search + clear button
   searchInput.addEventListener('input', () => {
@@ -447,7 +444,7 @@ async function init() {
       }
       if (btn.dataset.tab === 'readme' && selectedGame) {
         const lib = library[selectedGame.identifier];
-        if (lib?.install_dir) loadReadme(lib.install_dir);
+        if (lib?.install_dir) loadReadme(selectedGame.identifier);
         else if (readmeEmpty) readmeEmpty.style.display = 'block';
       }
     });
@@ -505,20 +502,12 @@ async function init() {
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
 
-  const initSettings = await window.electronAPI.getSettings();
-  overrides          = await window.electronAPI.getOverrides().catch(() => ({}));
-  defaultSources     = await window.electronAPI.getDefaultSources().catch(() => []);
+  const initSettings = await api.getSettings();
+  defaultSources     = (await api.getSources()).defaults;
   sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
   applyInstalledBadgeSetting();
-
-  try {
-    const heroesDir = await window.electronAPI.getHeroesPath();
-    window._heroBasePath = 'file:///' + heroesDir.replace(/\\/g, '/');
-  } catch {
-    window._heroBasePath = null;
-  }
 
   document.getElementById('btn-downloads').addEventListener('click', openDownloadsModal);
   document.getElementById('btn-close-downloads').addEventListener('click', closeDownloadsModal);
@@ -541,16 +530,16 @@ async function init() {
   document.querySelectorAll('#about-links a').forEach(a => {
     a.addEventListener('click', (e) => {
       e.preventDefault();
-      window.electronAPI.openExternal(a.href);
+      api.openExternal(a.href);
     });
   });
   settingsCloseBtn.addEventListener('click', closeSettings);
   btnChooseDownload.addEventListener('click', async () => {
-    const p = await window.electronAPI.chooseFolder();
+    const p = await api.chooseFolder();
     if (p) downloadPathInput.value = p;
   });
   btnChooseInstall.addEventListener('click', async () => {
-    const p = await window.electronAPI.chooseFolder();
+    const p = await api.chooseFolder();
     if (p) installPathInput.value = p;
   });
   document.getElementById('btn-save-settings').addEventListener('click', saveSettings);
@@ -558,26 +547,14 @@ async function init() {
   // Scan for pre-existing installs
   document.getElementById('btn-scan-games').addEventListener('click', onScanForGames);
 
-  // Download progress
-  window.electronAPI.onDownloadProgress(({ identifier, percent }) => {
-    // Strictly ignore if not in queue or not actively downloading
-    const entry = downloadQueue.get(identifier);
-    if (!entry || entry.status !== 'downloading') return;
-    dqSet(identifier, { percent });
-    if (selectedGame?.identifier === identifier) {
-      progressBar.style.width  = percent + '%';
-      progressText.textContent = percent + '%';
-    }
-  });
-
   // Playnite: Play on a game that isn't installed opens it here
-  window.electronAPI.onOpenItem?.(({ identifier }) => {
+  api.onOpenItem(({ identifier }) => {
     pendingOpenItem = identifier;
     showPendingItem();
   });
 
   // Auto-updater
-  window.electronAPI.onUpdaterStatus((data) => {
+  api.onUpdaterStatus((data) => {
     if (!updateBar) return;
     updateBar.classList.remove('error');
     btnUpdateInstall.classList.add('hidden');
@@ -615,13 +592,13 @@ async function init() {
     }
   });
 
-  btnUpdateInstall.addEventListener('click', () => window.electronAPI.updaterInstall());
+  btnUpdateInstall.addEventListener('click', () => api.updaterInstall());
   btnUpdateDismiss.addEventListener('click', () => updateBar.classList.add('hidden'));
   btnCloseChangelog.addEventListener('click',   closeChangelog);
   btnChangelogClose.addEventListener('click',   closeChangelog);
   btnChangelogInstall.addEventListener('click', () => {
     closeChangelog();
-    window.electronAPI.updaterInstall();
+    api.updaterInstall();
   });
   changelogModal.addEventListener('click', (e) => {
     if (e.target === changelogModal) closeChangelog();
@@ -636,7 +613,7 @@ async function init() {
     renderHomeRandomPick(true);
   });
 
-  collections = await window.electronAPI.getCollections();
+  collections = await api.getCollections();
   renderCollectionFilter();
 
   await fetchGames();
@@ -696,7 +673,7 @@ function updateSearchClear() {
 // ─── Settings modal ───────────────────────────────────────────────────────────
 async function openSettings() {
   gpModalFocusIdx = 0;
-  const s = await window.electronAPI.getSettings();
+  const s = await api.getSettings();
   downloadPathInput.value           = s.downloadPath || '';
   installPathInput.value            = s.installPath  || '';
   deleteAfterInstallCheck.checked   = !!s.deleteAfterInstall;
@@ -715,7 +692,7 @@ function closeSettings() {
 async function saveSettings() {
   const newSources     = parseSources(document.getElementById('setting-sources').value);
   const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
-  await window.electronAPI.saveSettings({
+  await api.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),
     deleteAfterInstall:  deleteAfterInstallCheck.checked,
@@ -731,7 +708,7 @@ async function saveSettings() {
   closeSettings();
   if (sourcesChanged) {
     sources = newSources;
-    fetchGames();
+    fetchGames({ refresh: true });
   } else {
     renderLibraryGrid();
   }
@@ -752,7 +729,7 @@ async function onScanForGames() {
   }
 
   // Determine scan directory: use install path from settings, then download path, then default
-  const s       = await window.electronAPI.getSettings();
+  const s       = await api.getSettings();
   const scanDir = s.installPath || s.downloadPath || null;
   if (!scanDir) {
     resultEl.textContent = 'Set an Install Folder in settings first.';
@@ -765,17 +742,8 @@ async function onScanForGames() {
   resultEl.textContent = '';
   resultEl.className   = '';
 
-  const knownIdentifiers = allVersions.map(g => g.identifier);
-
-  // Build title → identifier map for matching folders named after game titles
-  // (e.g. "Zoo Tycoon - Complete Collection" downloaded directly from archive.org)
-  const titleMap = {};
-  for (const game of allVersions) {
-    const t = Array.isArray(game.title) ? game.title[0] : game.title;
-    if (t && String(t).trim()) titleMap[String(t).trim()] = game.identifier;
-  }
-
-  const result = await window.electronAPI.scanForGames({ scanDir, knownIdentifiers, titleMap });
+  // The backend matches folders against the items it has loaded
+  const result = await api.scanForGames();
 
   btn.disabled    = false;
   btn.textContent = '🔍 Scan Install Folder';
@@ -787,7 +755,7 @@ async function onScanForGames() {
   }
 
   // Refresh library so the UI reflects the newly registered games
-  library = await window.electronAPI.getLibrary();
+  library = await api.getLibrary();
   renderLibraryGrid();
   renderHomeStats();
 
@@ -795,92 +763,45 @@ async function onScanForGames() {
   resultEl.className   = '';
 }
 
-// ─── Fetch games from archive.org ─────────────────────────────────────────────
-const SEARCH_PAGE_SIZE = 500;
-const SEARCH_MAX_ITEMS = 10000;  // advancedsearch won't page past this
-const SEARCH_RETRIES   = 3;
-
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-// Advanced search via the main process (30s timeout, responses logged to
-// archive-net.log). Retries 429/5xx/network errors, waiting Retry-After when
-// archive.org sends it and backing off 2s/4s/8s when it doesn't.
-async function searchWithRetry(params) {
-  let lastErr;
-  for (let attempt = 0; attempt <= SEARCH_RETRIES; attempt++) {
-    const r = await window.electronAPI.archiveSearch({ params });
-    if (r.status === 200 && r.json) return r.json;
-    lastErr = new Error(
-      r.status === 429 ? 'rate limited by archive.org (HTTP 429)'
-      : r.status        ? `HTTP ${r.status}`
-      :                   (r.error || 'network error'));
-    const retryable = r.status === 0 || r.status === 429 || r.status >= 500 || r.status === 200;
-    if (!retryable) throw lastErr;
-    if (attempt < SEARCH_RETRIES) await sleep(r.retryAfter ? r.retryAfter * 1000 : 2000 * 2 ** attempt);
-  }
-  throw lastErr;
+// ─── Games from the backend ───────────────────────────────────────────────────
+// GET /items does the fetching (one source at a time, with retries) and the
+// grouping by title. Each item becomes the renderer's shape: the first version
+// stands for the group, and every version carries the group as _versions.
+function versionFromItem(v) {
+  return {
+    identifier:   v.id,
+    title:        v.originalTitle ?? v.title,
+    description:  v.description,
+    date:         v.date,
+    addeddate:    v.addeddate,
+    downloads:    v.downloads,
+    subject:      v.subject,
+    _sourceLabel: v.source?.label || v.source?.uploader,
+    _override:    v.override || undefined,
+  };
 }
 
-// All items for one uploader, paging past the per-request row limit
-async function fetchSource(src) {
-  const docs = [];
-  for (let page = 1; docs.length < SEARCH_MAX_ITEMS; page++) {
-    const json  = await searchWithRetry({
-      q:      `uploader:${src.uploader} mediatype:software`,
-      fl:     'identifier,title,description,date,addeddate,downloads,subject',
-      rows:   String(SEARCH_PAGE_SIZE),
-      page:   String(page),
-      output: 'json',
-    });
-    const batch = json?.response?.docs || [];
-    docs.push(...batch);
-    if (batch.length < SEARCH_PAGE_SIZE || docs.length >= (json?.response?.numFound || 0)) break;
-  }
-  return docs.map(d => ({ ...d, _sourceLabel: src.label || src.uploader }));
-}
-
-async function fetchGames() {
+// refresh: refetch the sources (after they changed in Settings)
+async function fetchGames({ refresh = false } = {}) {
   renderSkeletonCards(8);
   try {
-    // One source at a time so archive.org sees a trickle, not a burst
-    const enabled = sources.filter(s => s.enabled !== false);
-    const results = [];
-    for (const src of enabled) {
-      try {
-        results.push({ status: 'fulfilled', value: await fetchSource(src) });
-      } catch (e) {
-        console.warn(`Source ${src.uploader} failed:`, e);
-        results.push({ status: 'rejected', reason: e, src });
+    const { items, errors } = await api.getItems(refresh ? { refresh: 'true', shelf: 'wall' } : { shelf: 'wall' });
+    if (errors.length) {
+      showToast(`Couldn't load ${errors.map(e => e.label).join(', ')}: ${errors[0].error}`, 8000);
+    }
+
+    allVersions = [];
+    allGames = items.map(item => {
+      const versions = item.versions.map(versionFromItem);
+      for (const v of versions) {
+        v._groupKey = item.id;
+        v._versions = versions;
       }
-    }
-    const failed = results.filter(r => r.status === 'rejected');
-    if (enabled.length && failed.length === enabled.length) throw failed[0].reason;
-    if (failed.length) {
-      showToast(`Couldn't load ${failed.map(r => r.src.label || r.src.uploader).join(', ')}: ${failed[0].reason.message}`, 8000);
-    }
-
-    // Flatten in source order, drop repeated identifiers, then group by title
-    const seen = new Set();
-    allVersions = results.flatMap(r => r.status === 'fulfilled' ? r.value : []).filter(g => {
-      if (seen.has(g.identifier)) return false;
-      seen.add(g.identifier);
-      return true;
+      allVersions.push(...versions);
+      return versions[0];
     });
-    for (const g of allVersions) {
-      if (overrides[g.identifier]) g._override = overrides[g.identifier];
-    }
 
-    const groups = new Map();
-    for (const g of allVersions) {
-      const key = titleKey(g) || g.identifier;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(g);
-      g._groupKey = key;
-      g._versions = groups.get(key);
-    }
-    allGames = [...groups.values()].map(versions => versions[0]);
-
-    library = await window.electronAPI.getLibrary();
+    library = await api.getLibrary();
     renderLibraryGrid();
     updateFilterSortLabel();
     showHomeView();
@@ -1205,8 +1126,8 @@ function makeDmItem(entry, isActive) {
     cancelBtn.addEventListener('click', async () => {
       const id = entry.identifier;
       console.log('[cancel-modal] clicked, id=', id, 'queue has:', downloadQueue.has(id), 'queue size:', downloadQueue.size);
-      // Delete from queue FIRST — before the IPC round-trip — so the
-      // onDownload async flow sees it's gone the moment downloadStart resolves
+      // Delete from queue FIRST — before the API round-trip — so the
+      // install flow sees it's gone the moment its job settles
       downloadQueue.delete(id);
       const hi = downloadHistory.findIndex(h => h.identifier === id);
       if (hi >= 0) {
@@ -1222,7 +1143,8 @@ function makeDmItem(entry, isActive) {
       }
       renderLibraryGrid();
       // Send cancel signal AFTER cleaning up state
-      await window.electronAPI.downloadCancel({ identifier: id });
+      const jobId = installJobs.get(id);
+      if (jobId) await api.cancelInstall({ jobId });
     });
     item.appendChild(cancelBtn);
   } else if (game) {
@@ -1259,9 +1181,9 @@ async function selectGame(game) {
 
   const libEntry   = library[game.identifier];
   const installDir = libEntry?.install_dir || null;
-  const overrideHero = await window.electronAPI.getOverrideHero({ identifier: game.identifier });
+  const overrideHero = await api.getOverrideHero({ identifier: game.identifier });
   const gameHeroUrl = !overrideHero && installDir
-    ? await window.electronAPI.checkGameHero({ installDir })
+    ? await api.getInstallHero({ identifier: game.identifier })
     : null;
 
   if (overrideHero) {
@@ -1325,7 +1247,7 @@ async function selectGame(game) {
   if (fileListCache[game.identifier]) {
     updateSize(fileListCache[game.identifier].size);
   } else {
-    window.electronAPI.fetchFileList({ identifier: game.identifier }).then(result => {
+    api.fetchFileList({ identifier: game.identifier }).then(result => {
       if (!result.ok || !result.files.length) return;
       const preferred = result.files.find(f => /\.zip$/i.test(f.name))
                      || result.files.find(f => /\.7z$/i.test(f.name))
@@ -1377,18 +1299,18 @@ async function selectGame(game) {
   refreshButtonStates();
   resetProgressUI();
 
-  if (libEntryPt?.install_dir) loadReadme(libEntryPt.install_dir);
+  if (libEntryPt?.install_dir) loadReadme(game.identifier);
 
   detailPanel.classList.remove('hidden');
 }
 
 // ─── Readme ───────────────────────────────────────────────────────────────────
-async function loadReadme(installDir) {
+async function loadReadme(identifier) {
   if (!readmeContent || !readmeEmpty) return;
   readmeContent.textContent = '';
   readmeEmpty.style.display = 'none';
   try {
-    const result = await window.electronAPI.readReadme({ installDir });
+    const result = await api.readReadme({ identifier });
     if (!result.ok || !result.text) {
       readmeEmpty.style.display = 'block';
       return;
@@ -1406,7 +1328,7 @@ async function loadReviews(identifier) {
   reviewsLoading.style.display = 'block';
   reviewsEmpty.style.display   = 'none';
   try {
-    const reviews = await window.electronAPI.fetchReviews({ identifier });
+    const reviews = await api.fetchReviews({ identifier });
     reviewsLoading.style.display = 'none';
     if (!reviews.length) {
       reviewsEmpty.style.display = 'block';
@@ -1471,7 +1393,7 @@ async function refreshButtonStates() {
     document.getElementById('btn-add-to-steam')?.classList.add('hidden');
   }
   if (installed && lib?.exe_path) {
-    const exePaths = await window.electronAPI.findExes({ installDir: lib.install_dir });
+    const exePaths = await api.findExes({ identifier: selectedGame.identifier });
     if (exePaths.length > 1) btnClearDefault.classList.remove('hidden');
     else                     btnClearDefault.classList.add('hidden');
   } else {
@@ -1481,8 +1403,8 @@ async function refreshButtonStates() {
 
 async function onClearDefault() {
   if (!selectedGame) return;
-  await window.electronAPI.setExePath({ identifier: selectedGame.identifier, exePath: null });
-  library = await window.electronAPI.getLibrary();
+  await api.setExePath({ identifier: selectedGame.identifier, exePath: null });
+  library = await api.getLibrary();
   refreshButtonStates();
 }
 
@@ -1490,7 +1412,7 @@ async function onOpenLocation() {
   if (!selectedGame) return;
   const lib = library[selectedGame.identifier];
   if (!lib?.install_dir) return;
-  await window.electronAPI.openGameLocation({ installDir: lib.install_dir });
+  await api.openGameLocation({ identifier: selectedGame.identifier });
 }
 
 function resetProgressUI() {
@@ -1514,7 +1436,7 @@ async function onDownload() {
     if (fileListCache[identifier]?.files) {
       files = fileListCache[identifier].files;
     } else {
-      const result = await window.electronAPI.fetchFileList({ identifier });
+      const result = await api.fetchFileList({ identifier });
       if (!result.ok || !result.files.length) {
         alert('Failed to fetch file list: ' + (result.error || 'No files found'));
         return;
@@ -1670,9 +1592,6 @@ async function startSingleDownload(queueKey, title, file, parentId) {
   const identifier = parentId || queueKey;
   if (downloadQueue.has(queueKey)) return;
 
-  const encodedName = file.name.split('/').map(encodeURIComponent).join('/');
-  const fileUrl     = `https://archive.org/download/${identifier}/${encodedName}`;
-
   dqSet(queueKey, { identifier: queueKey, title, percent: 0, status: 'downloading', startedAt: Date.now() });
 
   // Only show inline progress bar for single-game installs (not collection items)
@@ -1684,67 +1603,53 @@ async function startSingleDownload(queueKey, title, file, parentId) {
     progressText.textContent = '0%';
   }
 
-  const result = await window.electronAPI.downloadStart({
-    identifier: queueKey,
-    downloadUrl: fileUrl,
-    fileName:    file.name,
+  // The backend downloads, extracts (a collection's games each into their own
+  // folder) and records the install; progress comes back over /events
+  const job = await api.install({
+    identifier,
+    fileName: file.name,
+    onStart: (j) => installJobs.set(queueKey, j.id),
+    onProgress: (percent) => {
+      const entry = downloadQueue.get(queueKey);
+      if (!entry || entry.status !== 'downloading') return;
+      dqSet(queueKey, { percent });
+      if (isPrimary && selectedGame?.identifier === queueKey) {
+        progressBar.style.width  = percent + '%';
+        progressText.textContent = percent + '%';
+      }
+    },
+    onExtracting: () => {
+      if (!downloadQueue.has(queueKey)) return;
+      dqSet(queueKey, { status: 'extracting', percent: 100 });
+      if (isPrimary) {
+        progressBar.style.width  = '100%';
+        progressText.textContent = '100%';
+      }
+    },
   });
+  installJobs.delete(queueKey);
 
   if (!downloadQueue.has(queueKey)) {
     if (isPrimary) { progressWrap.classList.add('hidden'); refreshButtonStates(); }
     return;
   }
 
-  if (!result.ok) {
-    dqSet(queueKey, { status: 'error', finishedAt: Date.now() });
-    setTimeout(() => { downloadQueue.delete(queueKey); updateDownloadsButton(); }, 4000);
-    if (isPrimary) { progressWrap.classList.add('hidden'); refreshButtonStates(); }
-    return;
-  }
-
-  dqSet(queueKey, { status: 'extracting', percent: 100 });
-  if (isPrimary) {
-    progressBar.style.width  = '100%';
-    progressText.textContent = '100%';
-  }
-
-  // Collection items: extract into a named subfolder inside the parent identifier's
-  // install directory. e.g. ni-ghts-into-dreams_202511/Crazy Taxi/
-  // Single games: extract into the identifier folder as normal.
-  const extractResult = await window.electronAPI.extractArchive({
-    filePath:    result.filePath,
-    identifier:  identifier,           // always the archive.org identifier for the parent dir
-    subFolder:   parentId ? title : null, // subfolder name = game title for collection items
-  });
-
   if (isPrimary) progressWrap.classList.add('hidden');
 
-  if (!extractResult.ok) {
-    dqSet(queueKey, { status: 'error' });
-    setTimeout(() => { downloadQueue.delete(queueKey); }, 4000);
+  if (job.status !== 'done') {
+    dqSet(queueKey, { status: 'error', finishedAt: Date.now() });
+    setTimeout(() => { downloadQueue.delete(queueKey); updateDownloadsButton(); }, 4000);
+    if (isPrimary) refreshButtonStates();
     return;
   }
 
-  // For both single games and collection items, register the parent identifier
-  // pointing to the parent install dir. findExesInDir will recurse into subfolders
-  // to find all executables across all games in the collection.
-  const parentInstallDir = extractResult.parentInstallDir || extractResult.installDir;
-  const exePaths = await window.electronAPI.findExes({ installDir: parentInstallDir });
-  const exePath  = exePaths.length === 1 ? exePaths[0] : null;
-
-  await window.electronAPI.installGame({
-    identifier: identifier,
-    installDir: parentInstallDir,
-    exePath,
-  });
-
-  library = await window.electronAPI.getLibrary();
+  library = await api.getLibrary();
   dqDone(queueKey);
 
   if (selectedGame?.identifier === identifier) {
     refreshButtonStates();
     const installed = library[identifier];
-    if (installed?.install_dir) loadReadme(installed.install_dir);
+    if (installed?.install_dir) loadReadme(identifier);
   }
   renderLibraryGrid();
 }
@@ -1760,7 +1665,8 @@ async function onCancelDownload() {
   updateDownloadsButton();
   progressWrap.classList.add('hidden');
   refreshButtonStates();
-  await window.electronAPI.downloadCancel({ identifier });
+  const jobId = installJobs.get(identifier);
+  if (jobId) await api.cancelInstall({ jobId });
 }
 
 // ─── Launch ───────────────────────────────────────────────────────────────────
@@ -1770,7 +1676,7 @@ async function onLaunch() {
   if (!lib?.install_dir) return;
 
   if (lib.exe_path) {
-    const result = await window.electronAPI.launchGame({
+    const result = await api.launchGame({
       identifier: selectedGame.identifier,
       exePath:    lib.exe_path,
     });
@@ -1778,13 +1684,13 @@ async function onLaunch() {
     return;
   }
 
-  const exePaths = await window.electronAPI.findExes({ installDir: lib.install_dir });
+  const exePaths = await api.findExes({ identifier: selectedGame.identifier });
   if (!exePaths.length) {
     alert('No executable found. Try re-installing the game.');
     return;
   }
   if (exePaths.length === 1) {
-    const result = await window.electronAPI.launchGame({
+    const result = await api.launchGame({
       identifier: selectedGame.identifier,
       exePath:    exePaths[0],
     });
@@ -1793,7 +1699,7 @@ async function onLaunch() {
   }
   const picked = await showExePicker(exePaths, lib.install_dir, selectedGame.identifier);
   if (!picked) return;
-  const result = await window.electronAPI.launchGame({
+  const result = await api.launchGame({
     identifier: selectedGame.identifier,
     exePath:    picked,
   });
@@ -1894,8 +1800,8 @@ function showExePicker(exePaths, installDir, identifier) {
     launchBtn.addEventListener('click', async () => {
       if (!selectedExe) return;
       if (defaultCheck.checked && identifier) {
-        await window.electronAPI.setExePath({ identifier, exePath: selectedExe });
-        library = await window.electronAPI.getLibrary();
+        await api.setExePath({ identifier, exePath: selectedExe });
+        library = await api.getLibrary();
         refreshButtonStates();
       }
       cleanup();
@@ -1927,15 +1833,15 @@ async function onDelete() {
   const lib = library[selectedGame.identifier];
   const installDir = lib?.install_dir || null;
   if (!confirm(`Delete ${getTitle(selectedGame)}? This will remove all game files from disk. This cannot be undone.`)) return;
-  const result = await window.electronAPI.deleteGame({
+  const result = await api.deleteGame({
     identifier: selectedGame.identifier,
-    installDir,
+    trash:      !!installDir,
   });
   if (!result.ok) {
     alert('Delete failed: ' + (result.error || 'Unknown error'));
     return;
   }
-  library = await window.electronAPI.getLibrary();
+  library = await api.getLibrary();
   refreshButtonStates();
   renderLibraryGrid();
   renderHomeStats();
@@ -1946,8 +1852,8 @@ async function onToggleFavorite() {
   if (!selectedGame) return;
   const lib    = library[selectedGame.identifier];
   const newVal = lib?.is_favorite ? 0 : 1;
-  await window.electronAPI.setFavorite({ identifier: selectedGame.identifier, isFavorite: !!newVal });
-  library = await window.electronAPI.getLibrary();
+  await api.setFavorite({ identifier: selectedGame.identifier, isFavorite: !!newVal });
+  library = await api.getLibrary();
   updateFavoriteButton();
   renderLibraryGrid();
 }
@@ -1991,7 +1897,7 @@ async function onAddToSteam() {
 
   // Always find all exes and show the picker — even if there's only one,
   // so the user knows exactly which exe is being added to Steam.
-  const exes = await window.electronAPI.findExes({ installDir: lib.install_dir });
+  const exes = await api.findExes({ identifier: selectedGame.identifier });
   if (!exes.length) {
     alert('Cannot add to Steam: no executable found in the install folder.');
     return;
@@ -2007,7 +1913,7 @@ async function onAddToSteam() {
   try {
     // StartDir must be the folder containing the exe, not the root install dir
     const startDir = picked.substring(0, picked.lastIndexOf('\\'));
-    const result = await window.electronAPI.addToSteam({
+    const result = await api.addToSteam({
       appName:  getTitle(selectedGame),
       exePath:  picked,
       startDir: startDir,
@@ -2177,8 +2083,8 @@ async function onSaveNotes() {
   if (!selectedGame) return;
   const notesInput = document.getElementById('notes-input');
   const indicator  = document.getElementById('notes-saved-indicator');
-  await window.electronAPI.setNotes({ identifier: selectedGame.identifier, notes: notesInput.value });
-  library = await window.electronAPI.getLibrary();
+  await api.setNotes({ identifier: selectedGame.identifier, notes: notesInput.value });
+  library = await api.getLibrary();
   indicator.textContent = '✓ Saved';
   indicator.classList.add('show');
   setTimeout(() => indicator.classList.remove('show'), 2000);
@@ -2362,8 +2268,8 @@ function renderCollectionsList() {
     if (!c.color) colorInput.dataset.unset = 'true';
     colorInput.addEventListener('change', async () => {
       delete colorInput.dataset.unset;
-      await window.electronAPI.setCollectionColor({ id: c.id, color: colorInput.value });
-      collections = await window.electronAPI.getCollections();
+      await api.setCollectionColor({ id: c.id, color: colorInput.value });
+      collections = await api.getCollections();
       renderCollectionFilter();
       renderCollectionChips(selectedGame?.identifier || null);
     });
@@ -2374,8 +2280,8 @@ function renderCollectionsList() {
     renameBtn.addEventListener('click', async () => {
       const newName = prompt(`Rename "${c.name}" to:`, c.name);
       if (!newName || newName.trim() === c.name) return;
-      await window.electronAPI.renameCollection({ id: c.id, name: newName });
-      collections = await window.electronAPI.getCollections();
+      await api.renameCollection({ id: c.id, name: newName });
+      collections = await api.getCollections();
       renderCollectionFilter();
       renderCollectionsList();
     });
@@ -2384,9 +2290,9 @@ function renderCollectionsList() {
     deleteBtn.textContent = '🗑 Delete';
     deleteBtn.addEventListener('click', async () => {
       if (!confirm(`Delete collection "${c.name}"? This will not delete the games.`)) return;
-      await window.electronAPI.deleteCollection({ id: c.id });
+      await api.deleteCollection({ id: c.id });
       if (String(activeCollection) === String(c.id)) { activeCollection = ''; }
-      collections = await window.electronAPI.getCollections();
+      collections = await api.getCollections();
       renderCollectionFilter();
       renderCollectionsList();
       renderLibraryGrid();
@@ -2404,10 +2310,10 @@ async function onCreateCollection() {
   const input = document.getElementById('new-collection-input');
   const name  = input.value.trim();
   if (!name) return;
-  const result = await window.electronAPI.createCollection({ name });
+  const result = await api.createCollection({ name });
   if (!result.ok) { alert('Could not create collection: ' + (result.error || 'name already exists')); return; }
   input.value = '';
-  collections = await window.electronAPI.getCollections();
+  collections = await api.getCollections();
   renderCollectionFilter();
   renderCollectionsList();
 }
@@ -2433,11 +2339,11 @@ async function onAddToCollection() {
     span.textContent = c.name;
     cb.addEventListener('change', async () => {
       if (cb.checked) {
-        await window.electronAPI.addGameToCollection({ collectionId: c.id, identifier: selectedGame.identifier });
+        await api.addGameToCollection({ collectionId: c.id, identifier: selectedGame.identifier });
       } else {
-        await window.electronAPI.removeGameFromCollection({ collectionId: c.id, identifier: selectedGame.identifier });
+        await api.removeGameFromCollection({ collectionId: c.id, identifier: selectedGame.identifier });
       }
-      collections = await window.electronAPI.getCollections();
+      collections = await api.getCollections();
       renderCollectionFilter();
       renderCollectionChips(selectedGame?.identifier || null);
       if (activeCollection) renderLibraryGrid();
@@ -2479,6 +2385,7 @@ function showPendingItem() {
   const game = allGames.find(g => g.identifier === id || g._versions?.some(v => v.identifier === id));
   if (!game) return;
   pendingOpenItem = null;
+  api.clearOpenItem();
   showDetailView(game);
 }
 
@@ -2531,7 +2438,7 @@ function renderHomeBanner(game) {
     bannerBg.style.backgroundImage = 'none';
   };
 
-  window.electronAPI.getOverrideHero({ identifier: game.identifier }).then(overrideHero => {
+  api.getOverrideHero({ identifier: game.identifier }).then(overrideHero => {
     if (overrideHero) {
       showBannerLocal(overrideHero);
     } else if (localHero) {
@@ -2573,7 +2480,7 @@ async function crossfadeBanner(game) {
   if (!bg2) { homeFeaturedGame = game; renderHomeBanner(game); return; }
 
   // Override hero, else the disk-cached cover; never a live archive.org image
-  const art = await window.electronAPI.getOverrideHero({ identifier: game.identifier })
+  const art = await api.getOverrideHero({ identifier: game.identifier })
     || await resolveThumb(game.identifier);
   const newUrl = art ? `url("${art}")` : 'none';
   bg2.style.backgroundImage = newUrl;
