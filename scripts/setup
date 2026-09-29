@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Run once when the dev container is created (postCreateCommand)
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+mise trust --yes
+mise install
+eval "$(mise env -s bash)"
+npm ci
+pre-commit install --hook-type pre-commit --hook-type commit-msg

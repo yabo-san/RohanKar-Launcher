@@ -1,0 +1,15 @@
+repos:
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.19.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: npx --no-install eslint
+        language: system
+        types: [javascript]
+        stages: [pre-commit]
