@@ -8,7 +8,7 @@
  *   collisions.json; a list that can't be fetched shows as unreachable.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
- * - Home's rows have no scrollbar; they scroll with the arrows, a drag and
+ * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
  *   the Left/Right keys, and a drag doesn't open a card.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
@@ -58,17 +58,19 @@ test('the wall shows every shipped uploader, grouped by title', async () => {
 test("Home's rows scroll without a scrollbar", async () => {
   await page.setViewportSize({ width: 900, height: 800 });
   await page.locator('[data-view="home"]').click();
-  const wrap = page.locator('#body .row-wrap').first();
-  const row = wrap.locator('.row');
-  await expect(wrap).toHaveClass(/can-next/);
+  const section = page.locator('#body .section.has-row').first();
+  const row = section.locator('.row');
+  const prev = section.locator('.row-nav .prev');
+  const next = section.locator('.row-nav .next');
+  await expect(prev).toBeDisabled();
+  await expect(next).toBeEnabled();
   expect(await row.evaluate(r => r.offsetHeight - r.clientHeight)).toBe(0);
   const left = () => row.evaluate(r => r.scrollLeft);
 
-  await row.hover();
-  await wrap.locator('.row-nav.next').click();
+  await next.click();
   await expect.poll(left).toBeGreaterThan(0);
-  await expect(wrap).toHaveClass(/can-prev/);
-  await wrap.locator('.row-nav.prev').click();
+  await expect(prev).toBeEnabled();
+  await prev.click();
   await expect.poll(left).toBe(0);
 
   const box = await row.boundingBox();

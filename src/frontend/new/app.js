@@ -301,34 +301,36 @@ const skeletons = (n) => Array.from({ length: n }, () =>
   '<div class="card skel"><div class="art"></div><div class="title">.</div><div class="sub">.</div></div>').join('');
 
 function section(title, body, { count, sub, seeAll, cls = 'grid' } = {}) {
-  return `<section class="section"><div class="section-head"><h2>${esc(title)}</h2>
+  const isRow = cls.split(' ')[0] === 'row';
+  return `<section class="section${isRow ? ' has-row' : ''}"><div class="section-head"><h2>${esc(title)}</h2>
     ${count != null ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
-    ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}</div>
-    ${cls.split(' ')[0] === 'row' ? rowWrap(cls, body) : `<div class="${cls}">${body}</div>`}</section>`;
+    ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}
+    ${isRow ? rowNav : ''}</div>
+    <div class="${cls}">${body}</div></section>`;
 }
 
 // ─── horizontal rows ─────────────────────────────────────────────────────────
-// No scrollbar: rows scroll with the arrow buttons, a mouse drag, a sideways
-// wheel or trackpad swipe, and Left/Right between focused cards.
+// No scrollbar: rows scroll with the round arrows in their header (as in
+// Cider), a mouse drag, a sideways wheel or trackpad swipe, and Left/Right
+// between focused cards.
 
-function rowWrap(cls, body) {
-  return `<div class="row-wrap">
-    <button class="row-nav prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
-    <div class="${cls}">${body}</div>
-    <button class="row-nav next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button></div>`;
-}
+const rowNav = `<span class="row-nav">
+  <button class="prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
+  <button class="next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button></span>`;
 
-// Arrows only where there's more to see
+// Arrows only on rows that overflow, each disabled at its end
 function syncRowNav(row) {
-  const wrap = row.parentElement;
-  if (!wrap?.classList.contains('row-wrap')) return;
-  wrap.classList.toggle('can-prev', row.scrollLeft > 1);
-  wrap.classList.toggle('can-next', row.scrollLeft + row.clientWidth < row.scrollWidth - 1);
+  const nav = row.closest('.section')?.querySelector('.row-nav');
+  if (!nav) return;
+  const max = row.scrollWidth - row.clientWidth;
+  nav.hidden = max <= 1;
+  nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
+  nav.querySelector('.next').disabled = row.scrollLeft >= max - 1;
 }
 const syncRows = () => document.querySelectorAll('#body .row').forEach(syncRowNav);
 
 function scrollRow(btn) {
-  const row = btn.parentElement.querySelector('.row');
+  const row = btn.closest('.section').querySelector('.row');
   row.scrollBy({ left: Number(btn.dataset.rowNav) * row.clientWidth * 0.85, behavior: 'smooth' });
 }
 
@@ -406,19 +408,7 @@ function wallNotice(uploader = null) {
 function viewHome() {
   const enabled = state.sources.filter(s => s.enabled !== false);
   const ports = state.ports;
-  const covers = state.games.slice().sort(byDownloads).slice(0, 6);
-  let html = `<div class="hero">
-    <div class="bg">${covers.map(g => `<div data-thumb="${esc(g.identifier)}" style="background:${tint(getTitle(g))}"></div>`).join('')}</div>
-    <div class="copy">
-      <h2>Pick something to play.</h2>
-      <p>Games and ports in one place.</p>
-      <div class="stats">
-        <div class="stat"><b>${state.wall.loading && !state.games.length ? '…' : fmtNum(state.games.length)}</b><span>games</span></div>
-        <div class="stat"><b>${ports ? fmtNum(ports.items.length) : '…'}</b><span>ports</span></div>
-        <div class="stat"><b>${fmtNum(state.games.filter(isInstalled).length)}</b><span>installed</span></div>
-      </div>
-    </div></div>`;
-  html += wallNotice();
+  let html = wallNotice();
 
   const newest = state.games.slice().sort(byNewest).slice(0, 24);
   html += section('Newest on the wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
@@ -586,7 +576,7 @@ function render() {
   else if (v.name === 'settings') html = viewSettings();
   else html = viewHome();
 
-  $('#heading').textContent = state.query ? 'Search'
+  const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
     : HEADINGS[v.name] || 'Home';
@@ -594,7 +584,7 @@ function render() {
   // Keep the settings form as typed while the wall is still streaming in
   if (v.name === 'settings' && !state.query && $('#setting-sources')) { renderNav(); return; }
   const body = $('#body');
-  body.innerHTML = html;
+  body.innerHTML = `<h1 class="page-title" id="heading">${esc(heading)}</h1>` + html;
   observeCovers(body);
   syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
