@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.3](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.2...v1.6.0-fork.3) (2026-09-29)
+
+
+### Features
+
+* load default sources from catalog/uploaders.json ([2a182ce](https://github.com/yabo-san/RohanKar-Launcher/commit/2a182ce23a0936b3c5667305c406d1f1f1901f09))
+* load default sources from catalog/uploaders.json ([6d652c0](https://github.com/yabo-san/RohanKar-Launcher/commit/6d652c059d09031d8cd64a2832c80ac776c4cf0d))
+
 ## [1.6.0-fork.2](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.1...v1.6.0-fork.2) (2026-09-29)
 
 
