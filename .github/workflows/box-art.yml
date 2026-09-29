@@ -2,10 +2,12 @@ name: Box art report
 
 # Manual only: finds curated-artist SteamGridDB art for pstriple's archive.org
 # items and opens one PR per batch that adds it to overrides.json (artUrl, plus
-# hero where a 1920x620 exists), with cover previews in the PR body. Never runs
+# hero where a 1920x620 exists), with cover previews in the PR body, and refreshes
+# catalog/art.json (every grid and hero found per item). Never runs
 # on push or PR, so PR checks never call archive.org. The script paces
 # archive.org at 1 request/s and honours Retry-After; responses are cached
-# across runs. Run from any branch other than main, it only prints the diff.
+# across runs. Run from any branch other than main, it prints the overrides.json
+# diff and commits only catalog/art.json back to that branch.
 #
 # Repo setting required: Actions > General > "Allow GitHub Actions to create
 # and approve pull requests".
@@ -67,6 +69,8 @@ jobs:
           cat scripts/box-art/candidates.csv
           echo '--- overrides.json diff ---'
           git diff overrides.json
+          echo '--- catalog/art.json ---'
+          git diff --stat catalog/art.json
           cat scripts/box-art/batch.md >> "$GITHUB_STEP_SUMMARY"
           { echo '```csv'; cat scripts/box-art/pstriple-art.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
 
@@ -79,12 +83,26 @@ jobs:
             scripts/box-art/candidates.csv
             scripts/box-art/batch.md
 
+      # On a branch, only the art catalog is committed back (overrides.json changes stay a dry run).
+      - name: Commit art catalog to this branch
+        if: github.ref != 'refs/heads/main' && inputs.grids == ''
+        run: |
+          if [ -z "$(git status --porcelain catalog/art.json)" ]; then
+            echo "catalog/art.json unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add catalog/art.json
+          git commit -m "chore: refresh catalog/art.json from SteamGridDB"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
+
       - name: Open batch PR
         if: github.ref == 'refs/heads/main' && inputs.grids == ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet overrides.json; then
+          if git diff --quiet overrides.json catalog/art.json; then
             echo "No new art; no PR."
             exit 0
           fi
@@ -92,7 +110,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add overrides.json
+          git add overrides.json catalog/art.json
           git commit -m "feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})"
           git push -u origin "$branch"
           gh pr create --base main --head "$branch" \

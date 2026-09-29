@@ -10,6 +10,7 @@ fallback. Every file changes by pull request.
 | `collisions.json` | fully resolved port plus data with checksums | 13 |
 | `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
+| `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API | per item |
 
 Rules: `dataFiles[].sha1` is the hash of the file after extraction and staging, not of the archive.
 Match ports and data on `repository`, never on title. A sha1 mismatch after staging is a failure,

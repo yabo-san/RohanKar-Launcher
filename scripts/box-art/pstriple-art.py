@@ -16,6 +16,9 @@ Rules (K):
 - Items with no curated cover get their top three portrait candidates by any
   artist (no_logo first, then votes) in candidates.csv for K to pick from;
   items with none at all are marked "needs art". Candidates are never written.
+- catalog/art.json keeps every portrait grid and hero SteamGridDB has for each
+  item (grid id, CDN URL, artist, style, votes), so picks and lookups read
+  the repo instead of the API.
 
 Usage: python3 pstriple-art.py [--artists catalog/favorite-artists.json] [--overrides overrides.json]
 """
@@ -38,6 +41,7 @@ CACHE.mkdir(exist_ok=True)
 ap = argparse.ArgumentParser()
 ap.add_argument("--artists", type=Path, default=ROOT / "catalog" / "favorite-artists.json")
 ap.add_argument("--overrides", type=Path, default=ROOT / "overrides.json")
+ap.add_argument("--art", type=Path, default=ROOT / "catalog" / "art.json")
 args = ap.parse_args()
 
 favs = json.loads(args.artists.read_text(encoding="utf-8"))["artists"]
@@ -130,19 +134,17 @@ def curated(assets):
 
 
 def cover(term):
-    """(matched game name, cover grid, hero, all portrait grids) for a search term."""
+    """(matched game, cover grid, hero, all portrait grids, all heroes) for a search term."""
     s = sgdb("/search/autocomplete/" + urllib.parse.quote(term))
     # Skip emulator entries, which match any title that still mentions one.
     games = [g for g in (s or {}).get("data") or [] if "(Emulator)" not in g["name"]]
     if not games:
-        return None, None, None, []
+        return None, None, None, [], []
     game = games[0]
     grids = (sgdb(f"/grids/game/{game['id']}?dimensions=600x900&types=static") or {}).get("data") or []
-    g = curated(grids)
-    if not g:
-        return game["name"], None, None, grids
     heroes = (sgdb(f"/heroes/game/{game['id']}?dimensions=1920x620&types=static") or {}).get("data") or []
-    return game["name"], g, curated(heroes), grids
+    g = curated(grids)
+    return game, g, curated(heroes) if g else None, grids, heroes
 
 
 def artist(asset):
@@ -153,13 +155,33 @@ def votes(asset):
     return asset.get("score", (asset.get("upvotes") or 0) - (asset.get("downvotes") or 0))
 
 
+def art_entry(a):
+    au = a.get("author") or {}
+    return {"id": a.get("id"), "url": a.get("url"), "artist": au.get("name"), "steam64": str(au.get("steam64") or ""),
+            "style": a.get("style"), "votes": votes(a), "curated": str(au.get("steam64") or "") in RANK}
+
+
+def ranked(assets):
+    # Curated artists first (in priority order), then no_logo, then votes
+    return sorted(assets, key=lambda a: (RANK.get(str((a.get("author") or {}).get("steam64") or ""), len(RANK)),
+                                         a.get("style") != "no_logo", -votes(a)))
+
+
 rows = []
 candidates = []
+art = {}
 docs = items()
 print(f"{len(docs)} items from pstriple", flush=True)
 for d in docs:
     term = ALIASES.get(d["identifier"]) or game_name(d.get("title") or d["identifier"])
-    matched, g, h, grids = cover(term)
+    game, g, h, grids, heroes = cover(term)
+    matched = game and game["name"]
+    art[d["identifier"]] = {
+        "title": d.get("title", ""), "searched": term,
+        "sgdb": {"id": game["id"], "name": game["name"]} if game else None,
+        "grids": [art_entry(a) for a in ranked(grids)],
+        "heroes": [art_entry(a) for a in ranked(heroes)],
+    }
     if not g:
         # No curated art: top three portrait grids by anyone, no_logo first, then votes, for K to pick from.
         top = sorted(grids, key=lambda a: (a.get("style") != "no_logo", -votes(a)))[:3]
@@ -185,6 +207,9 @@ with CANDIDATES.open("w", newline="", encoding="utf-8") as f:
     w = csv.writer(f)
     w.writerow(["identifier", "ia_title", "sgdb_game", "rank", "artist", "steam64", "style", "votes", "url", "pick"])
     w.writerows(candidates)
+
+# The art catalog: everything found, curated or not, keyed by archive.org identifier.
+args.art.write_text(json.dumps(dict(sorted(art.items())), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 # Approved rows into overrides.json; art already there (curated by hand or an earlier batch) wins.
 overrides = json.loads(args.overrides.read_text(encoding="utf-8"))
