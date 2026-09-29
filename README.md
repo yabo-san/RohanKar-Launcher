@@ -65,6 +65,40 @@ A desktop game launcher for the classic PC game collection uploaded to [Archive.
 
 ---
 
+## Development
+
+The development environment is a dev container (`.devcontainer/`). Open it with
+Devsy:
+
+```sh
+devsy workspace up .    # or the `dev up` alias
+mise run test
+```
+
+Creating the container runs `scripts/setup`: it installs the tools pinned in
+`mise.toml` (Node 24, gh, pre-commit, Trivy), runs `npm ci`, and installs the
+git hooks. Commit messages are checked against conventional commits, and
+staged JavaScript is linted.
+
+The container runs everything a PR check runs:
+
+| Task | Runs |
+|---|---|
+| `mise run lint` | ESLint and a syntax check of `src` |
+| `mise run test` | Unit tests with the 80% coverage gate |
+| `mise run e2e` | Playwright tests headless under xvfb, archive.org served from `e2e/fixtures` |
+| `mise run build-dir` | An unpacked Linux build in `dist/linux-unpacked` |
+| `trivy fs --scanners vuln --severity HIGH,CRITICAL .` | The dependency scan |
+
+The smoke test that CI runs on the Windows build also runs against the Linux
+one: `E2E_APP=dist/linux-unpacked/rohankar-launcher mise run e2e` after
+`mise run build-dir`.
+
+To see the app, run `npm start` on Windows. The Windows installer comes only
+from `release.yml` on `windows-latest`; nothing in the container builds it.
+
+---
+
 ## Releases
 
 Versions follow the fork line (`1.6.0-fork.0`, `1.6.0-fork.1`, …). The launcher
