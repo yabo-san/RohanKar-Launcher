@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0-fork.7](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.6...v1.6.0-fork.7) (2026-09-29)
+
+
+### Features
+
+* install catalog ports from GitHub releases with archive.org game data ([e24e5e7](https://github.com/yabo-san/RohanKar-Launcher/commit/e24e5e7de9911f7ab7d2fc4244df69222176c03c))
+
 ## [1.6.0-fork.6](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.5...v1.6.0-fork.6) (2026-09-29)
 
 
