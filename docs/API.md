@@ -459,3 +459,4 @@ curl http://127.0.0.1:7777/v1/os/open-item
 
 Everything is under `/v1/`. Adding fields or endpoints keeps v1; renaming or removing either, or
 changing a field's meaning, is `/v2/`, served alongside v1 until the frontend has moved.
+
