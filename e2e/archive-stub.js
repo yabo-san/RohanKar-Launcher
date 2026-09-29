@@ -5,7 +5,8 @@
  * - Points userData at E2E_USER_DATA so each run gets a fresh settings.json.
  * - Answers archive.org requests from fixtures/search.json instead of the
  *   network (CI never calls archive.org): advanced search returns that
- *   uploader's docs, anything else (covers, metadata) gets a 404.
+ *   uploader's docs, every item's metadata lists one <identifier>.zip, and
+ *   downloading it returns fixtures/tiny.zip. Anything else (covers) gets a 404.
  * - Answers the overrides.json fetch with a 404, so the bundled copy is used.
  */
 
@@ -16,14 +17,25 @@ const { Readable }     = require('stream');
 
 if (process.env.E2E_USER_DATA) app.setPath('userData', process.env.E2E_USER_DATA);
 
+const path     = require('path');
 const fixtures = require('./fixtures/search.json');
+const tinyZip  = require('fs').readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
 const realGet  = https.get;
 
 const respond = (status, body, contentType) => {
-  const res = Readable.from([Buffer.from(body)]);
+  const buf = Buffer.from(body);
+  const res = Readable.from([buf]);
   res.statusCode = status;
-  res.headers    = { 'content-type': contentType, date: new Date().toUTCString() };
+  res.headers    = { 'content-type': contentType, 'content-length': String(buf.length), date: new Date().toUTCString() };
   return res;
+};
+
+// /metadata/<id> and /download/<id>/<id>.zip
+const item = (url) => {
+  const [, kind, id, file] = url.pathname.split('/');
+  if (kind === 'metadata') return respond(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(tinyZip.length) }] }), 'application/json');
+  if (kind === 'download' && file === `${id}.zip`) return respond(200, tinyZip, 'application/zip');
+  return respond(404, 'not in fixtures', 'text/plain');
 };
 
 // advancedsearch.php?q=uploader:<id> mediatype:software&rows=..&page=..
@@ -47,7 +59,7 @@ https.get = function (target, ...rest) {
   const req = new EventEmitter();
   req.setTimeout = () => req;
   req.destroy    = () => req;
-  const res = url.pathname === '/advancedsearch.php' ? search(url) : respond(404, 'not in fixtures', 'text/plain');
+  const res = url.pathname === '/advancedsearch.php' ? search(url) : item(url);
   process.nextTick(() => callback?.(res));
   return req;
 };

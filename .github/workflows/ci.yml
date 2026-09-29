@@ -85,6 +85,22 @@ jobs:
       - name: Build unpacked app
         run: npx electron-builder --win --dir --publish never
 
+      # Launches the built app with archive.org served from e2e/fixtures:
+      # window renders, Settings shows the shipped sources, a stub download lands
+      - name: Smoke test the built app
+        env:
+          E2E_APP: ${{ github.workspace }}\dist\win-unpacked\RohanKar Launcher.exe
+        run: npx playwright test
+
+      - name: Upload smoke test report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: |
+            playwright-report/
+            test-results/
+
   e2e:
     runs-on: ubuntu-latest
     steps:
