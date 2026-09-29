@@ -206,5 +206,15 @@
     "assetPattern": null,
     "folderName": "ia.driver-2-pc",
     "dataFiles": null
+  },
+  {
+    "name": "Skate 3: Recompiled",
+    "repository": "mchughalex/skate3recomp",
+    "iaIdentifier": "skate-3-recompiled",
+    "contentUrl": null,
+    "ingest": "internet-archive",
+    "assetPattern": "(?i)windows",
+    "folderName": "mchughalex.skate3recomp",
+    "dataFiles": null
   }
 ]
