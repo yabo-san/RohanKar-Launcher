@@ -1,8 +1,8 @@
 'use strict';
 /**
- * Sources and title grouping for the backend. Same rules as
- * src/renderer/sources.js, which the renderer still loads until it reads
- * grouped items from the API; test/backend/sources.test.js keeps the two in step.
+ * Default sources and grouping by title. The frontend gets both from the API
+ * (/v1/sources, /v1/items); its sources.js keeps only display helpers, and
+ * test/backend/sources.test.js checks its getTitle matches this one.
  */
 
 // Default sources from catalog/uploaders.json. An entry is on only when it is

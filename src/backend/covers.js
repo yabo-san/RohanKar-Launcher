@@ -15,7 +15,7 @@ const MIN_IMAGE_BYTES = 1024;  // smaller than this is an error page, not a cove
 // An identifier becomes a file name in the cache: no separators, no dot-only names
 const safeName = (s) => typeof s === 'string' && s !== '' && !/[\\/]/.test(s) && !/^\.+$/.test(s);
 
-function createCovers({ cacheDir, appDir, archive, getOverrides, log = () => {} }) {
+function createCovers({ cacheDir, appDir, heroesDir = path.join(appDir, 'assets', 'heroes'), archive, getOverrides, log = () => {} }) {
   fs.mkdirSync(cacheDir, { recursive: true });
 
   // Path of a cached copy of liveUrl, downloading it first if needed. Null on
@@ -83,12 +83,24 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, log = () => {} 
     return null;
   }
 
-  // The hero banner: an overrides.json hero wins, then one in the install folder
-  async function hero(identifier, installDir) {
-    return (await overrideArt(identifier, 'hero')) ?? installHero(installDir);
+  // <heroes>/<identifier>.png shipped with the app
+  function bundledHero(identifier) {
+    if (!safeName(identifier)) return null;
+    const p = path.join(heroesDir, `${identifier}.png`);
+    return fs.existsSync(p) ? p : null;
   }
 
-  return { cacheImage, overrideArt, thumb, installHero, hero };
+  // The hero banner from one place (from = override | install | bundled), or
+  // the first of them that has one: an overrides.json hero, then one in the
+  // install folder, then one shipped with the app
+  async function hero(identifier, installDir, from = null) {
+    if (from === 'override') return (await overrideArt(identifier, 'hero')) ?? null;
+    if (from === 'install') return installHero(installDir);
+    if (from === 'bundled') return bundledHero(identifier);
+    return (await overrideArt(identifier, 'hero')) ?? installHero(installDir) ?? bundledHero(identifier);
+  }
+
+  return { cacheImage, overrideArt, thumb, installHero, bundledHero, hero };
 }
 
 const fileUrl = (p) => (p ? 'file:///' + p.replace(/\\/g, '/') : p);

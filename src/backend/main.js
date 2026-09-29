@@ -1,6 +1,7 @@
 'use strict';
 /**
- * Standalone backend: `node src/backend/main.js --data-dir <dir> [--port N]`.
+ * Standalone backend: `node src/backend/main.js --data-dir <dir> [--port N]`
+ * (tests add --archive-base, --overrides-url and --uploaders-url).
  * Prints one JSON line, { port, token, url }, once listening, so a parent
  * process (or a person) can find it. The token is random per start unless
  * LAUNCHER_TOKEN is set. OS actions that need Electron answer 501.
@@ -26,6 +27,7 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     dataDir,
     ...(args['archive-base'] ? { archiveBase: args['archive-base'] } : {}),
     ...(args['overrides-url'] ? { overridesUrl: args['overrides-url'] } : {}),
+    ...(args['uploaders-url'] ? { uploadersUrl: args['uploaders-url'] } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),
   });
   const api = createServer(backend, { token: env.LAUNCHER_TOKEN || newToken(), log: (msg) => process.stderr.write(msg + '\n') });

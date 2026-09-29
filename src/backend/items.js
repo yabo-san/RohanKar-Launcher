@@ -66,6 +66,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, getDe
     description: doc.description ?? null,
     subject:     doc.subject ?? null,
     originalTitle: doc.title ?? null,
+    override:    doc._override || null,
   });
 
   // A group as an item; `library` is the row of the installed version if any, else the first's

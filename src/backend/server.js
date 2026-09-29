@@ -89,7 +89,7 @@ function createApi(backend) {
     }
   };
 
-  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION } }));
+  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion } }));
 
   // ─── Items ────────────────────────────────────────────────────────────────
 
@@ -123,7 +123,12 @@ function createApi(backend) {
     return { file: p, type: IMAGE_TYPES[path.extname(p).toLowerCase()] || 'application/octet-stream' };
   };
   route('GET', '/items/:id/cover', async ({ params }) => image(await covers.thumb(params.id)));
-  route('GET', '/items/:id/hero', async ({ params }) => image(await covers.hero(params.id, library.get(params.id)?.install_dir)));
+  route('GET', '/items/:id/hero', async ({ params, query }) => {
+    if (query.from && !['override', 'install', 'bundled'].includes(query.from)) {
+      throw new HttpError(400, 'bad_request', 'from must be override, install or bundled');
+    }
+    return image(await covers.hero(params.id, library.get(params.id)?.install_dir, query.from || null));
+  });
 
   // ─── Catalogs ─────────────────────────────────────────────────────────────
 
@@ -309,6 +314,34 @@ function createApi(backend) {
   });
 
   route('POST', '/os/choose-folder', async () => ({ body: { path: await os(() => backend.os.chooseFolder()) } }));
+
+  route('POST', '/os/open-external', async ({ body }) => {
+    const url = requireString(requireObject(body).url, 'url');
+    if (!/^https?:\/\//i.test(url)) throw new HttpError(400, 'bad_request', 'url must be http(s)');
+    await os(() => backend.os.openExternal(url));
+    return { body: { ok: true } };
+  });
+
+  const WINDOW_ACTIONS = ['minimize', 'maximize', 'close'];
+  route('POST', '/os/window', async ({ body }) => {
+    const { action } = requireObject(body);
+    if (!WINDOW_ACTIONS.includes(action)) throw new HttpError(400, 'bad_request', `action must be ${WINDOW_ACTIONS.join(', ')}`);
+    await os(() => backend.os.window(action));
+    return { body: { ok: true } };
+  });
+
+  // Add to Steam: { appName, exePath, startDir }; the reply is the desktop app's
+  route('POST', '/os/add-to-steam', async ({ body }) => {
+    const { appName, exePath, startDir } = requireObject(body);
+    for (const [k, v] of Object.entries({ appName, exePath, startDir })) requireString(v, k);
+    return { body: await os(() => backend.os.addToSteam({ appName, exePath, startDir })) };
+  });
+
+  route('GET', '/os/updater', () => ({ body: { status: backend.updaterStatus } }));
+  route('POST', '/os/updater-install', async () => {
+    await os(() => backend.os.updaterInstall());
+    return { body: { ok: true } };
+  });
 
   // SSE: install progress, library changes, item reloads
   route('GET', '/events', ({ req, res }) => {
