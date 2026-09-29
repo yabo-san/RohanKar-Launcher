@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.2](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.1...v1.6.0-fork.2) (2026-09-29)
+
+
+### Features
+
+* per-title overrides for title, cover and hero ([56abeaf](https://github.com/yabo-san/RohanKar-Launcher/commit/56abeaf5a9e65f18dcd51ee4655f41e4e0d32591))
+* per-title overrides for title, cover and hero ([fe931cd](https://github.com/yabo-san/RohanKar-Launcher/commit/fe931cd37cca934575da7d96361336a90fd0a1e5))
+
 ## [1.6.0-fork.1](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.0...v1.6.0-fork.1) (2026-09-28)
 
 
