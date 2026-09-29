@@ -16,6 +16,9 @@ Rules (K):
 - Items with no curated cover get their top three portrait candidates by any
   artist (no_logo first, then votes) in candidates.csv for K to pick from;
   items with none at all are marked "needs art". Candidates are never written.
+- The CSV report has a name_override column, prefilled with the title already
+  in overrides.json. K fills it in; apply-names.py writes non-blank values into
+  overrides.json as title.
 - catalog/art.json keeps every portrait grid and hero SteamGridDB has for each
   item (grid id, CDN URL, artist, style, votes), so picks and lookups read
   the repo instead of the API.
@@ -169,6 +172,7 @@ def ranked(assets):
                                          a.get("style") != "no_logo", -votes(a)))
 
 
+current = json.loads(args.overrides.read_text(encoding="utf-8"))
 rows = []
 candidates = []
 art = {}
@@ -197,6 +201,7 @@ for d in docs:
         "identifier": d["identifier"], "ia_title": d.get("title", ""), "searched": term,
         "sgdb_game": matched or "", "artist": artist(g), "style": (g or {}).get("style") or "",
         "cover_url": (g or {}).get("url") or "", "hero_artist": artist(h), "hero_url": (h or {}).get("url") or "",
+        "name_override": (current.get(d["identifier"]) or {}).get("title", ""),
     })
 
 with OUT.open("w", newline="", encoding="utf-8") as f:
