@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0-fork.9](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.8...v1.6.0-fork.9) (2026-09-29)
+
+
+### Features
+
+* grid lookup prints the grid's game when the API returns it ([58cc531](https://github.com/yabo-san/RohanKar-Launcher/commit/58cc5310e597f6e5c115988753ef30291ce02771))
+* name_override column for pstriple display titles ([b10597e](https://github.com/yabo-san/RohanKar-Launcher/commit/b10597e94cc86c7ba5fab5354329341f30c15f09))
+* name_override defaults to the matched SteamGridDB game name ([a8583ab](https://github.com/yabo-san/RohanKar-Launcher/commit/a8583ab474ae45b0be532d61663a5793c25fe578))
+* SteamGridDB game names as pstriple display titles ([98cf306](https://github.com/yabo-san/RohanKar-Launcher/commit/98cf30601aeaccef2395097965dc864678ae901f))
+
 ## [1.6.0-fork.8](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.7...v1.6.0-fork.8) (2026-09-29)
 
 
