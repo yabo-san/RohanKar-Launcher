@@ -5,3 +5,5 @@ dist/
 release-notes.md
 test-results/
 playwright-report/
+scripts/box-art/cache/
+scripts/box-art/*.csv

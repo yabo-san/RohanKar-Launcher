@@ -1,0 +1,43 @@
+name: Box art report
+
+# Manual only: builds a CSV of curated-artist portrait covers for pstriple's
+# archive.org items. Never runs on push or PR, so PR checks never call
+# archive.org. The script paces archive.org at 1 request/s, honours
+# Retry-After, and writes nothing but the CSV; responses are cached across runs.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: box-art
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # A new key each run saves the updated cache; restore-keys picks up the latest one.
+      - name: Restore response cache
+        uses: actions/cache@v4
+        with:
+          path: scripts/box-art/cache
+          key: box-art-cache-${{ github.run_id }}
+          restore-keys: box-art-cache-
+
+      - name: Find covers
+        env:
+          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
+        run: python3 scripts/box-art/pstriple-art.py scripts/box-art/favorite-artists.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pstriple-art
+          path: scripts/box-art/pstriple-art.csv
