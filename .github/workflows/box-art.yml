@@ -37,6 +37,12 @@ jobs:
           STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
         run: python3 scripts/box-art/pstriple-art.py scripts/box-art/favorite-artists.json
 
+      # Also in the log and job summary, so the report can be read without downloading the artifact.
+      - name: Show report
+        run: |
+          cat scripts/box-art/pstriple-art.csv
+          { echo '```csv'; cat scripts/box-art/pstriple-art.csv; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/upload-artifact@v4
         with:
           name: pstriple-art
