@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Thumbnail cache
   getThumb:        (opts) => ipcRenderer.invoke('get-thumb', opts),
   getOverrides:    () => ipcRenderer.invoke('get-overrides'),
+  getDefaultSources: () => ipcRenderer.invoke('get-default-sources'),
   getOverrideHero: (opts) => ipcRenderer.invoke('get-override-hero', opts),
   archiveSearch:   (opts) => ipcRenderer.invoke('archive-search', opts),
 

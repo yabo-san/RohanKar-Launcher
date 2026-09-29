@@ -13,15 +13,12 @@
  * - Download queue toast panel (multi-download support)
  */
 
-// ─── Archive.org API ──────────────────────────────────────────────────────────
-
-// DEFAULT_SOURCES (used when settings.json has no `sources` key) lives in sources.js
-
 // ─── State ────────────────────────────────────────────────────────────────────
 
 let allGames      = [];   // one entry per title (first version of each group)
 let allVersions   = [];   // every fetched item, across all sources
-let sources       = DEFAULT_SOURCES;
+let defaultSources = [];   // from catalog/uploaders.json, used when settings has no `sources`
+let sources       = [];
 let overrides     = {};   // overrides.json, keyed by identifier
 let library       = {};
 let collections   = [];
@@ -158,7 +155,7 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 // getTitle, parseSources, formatSources, titleKey, preferredVersion and
 // versionLabel live in sources.js (loaded before this file).
 function loadSourcesSetting(s) {
-  return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
+  return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : defaultSources;
 }
 
 const thumbUrlCache = {};
@@ -509,6 +506,7 @@ async function init() {
 
   const initSettings = await window.electronAPI.getSettings();
   overrides          = await window.electronAPI.getOverrides().catch(() => ({}));
+  defaultSources     = await window.electronAPI.getDefaultSources().catch(() => []);
   sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true

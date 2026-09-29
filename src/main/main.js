@@ -11,6 +11,7 @@ const https  = require('https');
 const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
 const { loadOverrides, artSource } = require('./overrides');
+const { sourcesFromCatalog } = require('../renderer/sources');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -142,6 +143,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   getOverrides();
+  getDefaultSources();
   createWindow();
   setupAutoUpdater();
   // Validate installs on every launch — clears DB entries whose folders were deleted
@@ -445,6 +447,36 @@ function getOverrides() {
 }
 
 ipcMain.handle('get-overrides', () => getOverrides());
+
+// ─── Default sources ──────────────────────────────────────────────────────────
+// From catalog/uploaders.json: the copy on main at launch, the bundled one as fallback
+
+const UPLOADERS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/uploaders.json';
+
+let defaultSourcesPromise = null;
+function getDefaultSources() {
+  defaultSourcesPromise ??= (async () => {
+    const r = await archiveGetText(UPLOADERS_URL, 'uploaders', 5000);
+    try {
+      if (r.status !== 200) throw new Error(r.error || `HTTP ${r.status}`);
+      const list = sourcesFromCatalog(JSON.parse(r.body));
+      if (!list.length) throw new Error('no uploaders');
+      console.log(`[uploaders] ${list.length} from ${UPLOADERS_URL}`);
+      return list;
+    } catch (e) {
+      console.log(`[uploaders] fetch failed (${e.message}), using bundled copy`);
+    }
+    try {
+      return sourcesFromCatalog(JSON.parse(fs.readFileSync(path.join(app.getAppPath(), 'catalog', 'uploaders.json'), 'utf8')));
+    } catch (e) {
+      console.log(`[uploaders] no bundled copy (${e.message}), no default sources`);
+      return [];
+    }
+  })();
+  return defaultSourcesPromise;
+}
+
+ipcMain.handle('get-default-sources', () => getDefaultSources());
 
 // file:// URL for an override image, null if it couldn't be fetched, or
 // undefined when the title has no override for that field
