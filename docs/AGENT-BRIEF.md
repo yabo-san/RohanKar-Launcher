@@ -35,6 +35,26 @@ The data half is ours and Quiver has none of it. Four JSON files will be supplie
 
 No C# in this repo.
 
+## The gap, attributed to their code
+
+GithubLauncher and Quiver install a **binary** from a release. Neither has any notion of the
+**data** a port needs. Read these before porting anything, so the boundary is exact:
+
+| what | where in `tgeorgiadis/quiver-launcher` | what it shows |
+| --- | --- | --- |
+| entry schema | `Models/GameInfo.cs:248` `Repository`, `:271` `FolderName`, `:277` `ReleaseAssetFilter`, `:286` `Tags`, `:307` `FilesToAdd` | no field for a data file, an archive item, a checksum, or a patch |
+| `filesToAdd` | `Services/AppFilesToAddService.cs:62-91` `Sync` | creates **empty** files by name (`File.WriteAllText(path, string.Empty)`); it exists so `portable.txt` can be dropped next to an exe. It is not a way to ship content |
+| asset selection | `lib/QuiverLauncher.Core/Services/DownloadAssetSelection.cs:15-21` `IsAuxiliary` | checksum and signature assets (`.sha256`, `.sig`, `checksums.txt`) are **skipped**, not read; nothing in `lib/QuiverLauncher.Core/Services/GameInstallationService.cs` hashes or verifies a download |
+| release filter | `lib/QuiverLauncher.Core/Services/GitHubReleaseService.cs:119` via `RepositorySourceHelper.NormalizeReleaseAssetFilter` | port this exactly for step 3; it is the whole "which asset" rule |
+| OS platform | `lib/QuiverLauncher.Core/Services/CatalogPlatformSupport.cs` `CatalogPlatformFlags` (Windows, Linux, Android) from asset names | the catalog review filters by OS derived from release asset names; this is separate from the console catalogs |
+| console catalogs | `tgeorgiadis/quiver-community-app-catalog/community-app-catalog/{Nintendo,PlayStation,Xbox,OtherPlatforms}.json` | the shelves; curated by PR |
+
+So the join is one field, `repository`, and the data half is entirely ours: `catalog/collisions.json`
+and `catalog/catalog.json` say which archive.org item and which path inside it, staged where, with
+which sha1 after staging, and optionally which `.bps` to apply. Quiver's install ends at
+"extracted"; ours continues to "data staged and verified". Keep those as two stages in
+`src/core/` so a port without a collision still installs exactly as Quiver would.
+
 ## Steps, one PR each
 
 ### Step 0: research, no code
