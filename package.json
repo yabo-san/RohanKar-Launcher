@@ -1,6 +1,6 @@
 {
   "name": "rohankar-launcher",
-  "version": "1.6.0-fork.7",
+  "version": "1.6.0-fork.8",
   "description": "RohanKar Game Launcher",
   "author": "Kilted-Kraken",
   "main": "src/electron/main.js",

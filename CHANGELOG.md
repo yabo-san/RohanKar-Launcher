@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0-fork.8](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.7...v1.6.0-fork.8) (2026-09-29)
+
+
+### Features
+
+* keep a SteamGridDB art catalog in catalog/art.json ([a4fd378](https://github.com/yabo-san/RohanKar-Launcher/commit/a4fd378c621e26ef1f29d7ec8ac8fff7d722fcfa))
+* look up SteamGridDB grid ids in the box-art workflow ([05350c1](https://github.com/yabo-san/RohanKar-Launcher/commit/05350c10fea09d4bb9538017beef1021e16e7d4b))
+
+
+### Bug Fixes
+
+* search BBLauncher as Bloodborne in the box-art script ([a52297d](https://github.com/yabo-san/RohanKar-Launcher/commit/a52297d2c6380c94f04b75f9255e0884b863cab8))
+* search Pokestadia and the gen 1 recomp under their Pokémon titles ([199fa7b](https://github.com/yabo-san/RohanKar-Launcher/commit/199fa7b7863bb972a590ce485e4de7e31c255732))
+
 ## [1.6.0-fork.7](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.6...v1.6.0-fork.7) (2026-09-29)
 
 
