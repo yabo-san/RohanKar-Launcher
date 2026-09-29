@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.0-fork.5](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.4...v1.6.0-fork.5) (2026-09-29)
+
+
+### Features
+
+* batch 1 of curated SteamGridDB covers for pstriple's items ([40f5a8c](https://github.com/yabo-san/RohanKar-Launcher/commit/40f5a8ca9bacd2e67b73b544ae905c65142c0b94))
+* box-art pipeline into overrides.json, batch 1 (17 pstriple covers) ([662efda](https://github.com/yabo-san/RohanKar-Launcher/commit/662efda37c09837f1091620c325c72883293ff1f))
+* box-art script writes approved covers and heroes into overrides.json ([67ab14a](https://github.com/yabo-san/RohanKar-Launcher/commit/67ab14a880f8264f8183d06da822a632c2b456e6))
+* list top three SteamGridDB candidates for items with no curated cover ([dfc10f6](https://github.com/yabo-san/RohanKar-Launcher/commit/dfc10f67c95ee960079628563f3e1df2b6a5db19))
+* pin curated SteamGridDB covers for 12 of pstriple's items ([8b5978b](https://github.com/yabo-san/RohanKar-Launcher/commit/8b5978b276e869aadd30d4e2364246f67b0a33d1))
+
+
+### Bug Fixes
+
+* strip emulator and build text from box-art search titles ([2074fbb](https://github.com/yabo-san/RohanKar-Launcher/commit/2074fbb045f2364b5996bba473acb7920e02d0d6))
+
 ## [1.6.0-fork.4](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.3...v1.6.0-fork.4) (2026-09-29)
 
 
