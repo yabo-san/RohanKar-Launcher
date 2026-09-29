@@ -55,6 +55,31 @@ which sha1 after staging, and optionally which `.bps` to apply. Quiver's install
 "extracted"; ours continues to "data staged and verified". Keep those as two stages in
 `src/core/` so a port without a collision still installs exactly as Quiver would.
 
+## Where Quiver is ahead of us, attributed
+
+Port these shapes, not their UI. Numbers from a shallow clone on 2026-09-28.
+
+| what they have | where | what we have |
+| --- | --- | --- |
+| a core library with no UI in it: 26 services under `lib/QuiverLauncher.Core/Services/` (release sources, asset selection, install, caches, rate limiting) and 164 app-level services on top | `lib/QuiverLauncher.Core/` vs `Services/` | one 3,700-line `renderer.js` that fetches, joins and draws. The architecture rule above is this split |
+| 206 test files | `QuiverLauncher.Tests/` | 9 unit tests and one e2e |
+| release sources behind an interface: GitHub and GitLab, registry, cached endpoints | `IReleaseSource.cs`, `GitHubReleaseSource.cs`, `GitLabReleaseSource.cs`, `ReleaseSourceRegistry.cs`, `ReleaseEndpointCache.cs`, `GitHubApiCache.cs` | one hard-coded archive.org search |
+| GitHub API rate limiting handled as a first-class thing: primary vs secondary limits, per-token flights, a request queue, priority and cache scopes | `ReleaseRequestCoordinator.cs:11-54`, `ReleaseRequestQueue.cs`, `ReleaseApiTransport.cs` | retries with backoff on archive.org only; nothing for GitHub yet |
+| catalog diffing: added, removed, changed, and a review screen driven by it | `Services/CatalogDiff.cs:6-16`, `CatalogCompareService.cs`, `CatalogReviewService.cs` | none; the wall silently changes |
+| entry identity that survives renames: identity key from source, repository and folder, with a migration when it changes | `Services/AppIdentityMigration.cs:9-20`, `RepositorySourceHelper.GetIdentityKey` | identity is the archive.org identifier; nothing for renames |
+| background update checks on a user-set interval (default 60 min) with a scheduler | `Services/BackgroundUpdateCheckIntervals.cs:3-10`, `BackgroundUpdateScheduler.cs` | check on launch only |
+| download staging and file locking during install | `lib/QuiverLauncher.Core/Services/DownloadStaging.cs`, `ArchiveFileLock.cs` | download straight to the target |
+| controller navigation throughout: 17 gamepad layout services, 39 views and view-models reference it | `Services/*Gamepad*.cs` | mouse only. Matters for a couch launcher |
+| portable data beside the executable, stub `QuiverLauncher.exe` plus a replaceable `current/` folder | README, `LibraryFileSafetyTests.cs` | `%APPDATA%` and NSIS in place |
+| signed Windows binaries via Azure Trusted Signing with an OIDC-bound `signing` environment | `.github/workflows/dotnet-desktop.yml:50-87` | unsigned; SmartScreen warns |
+| Linux AppImage and Android builds | same workflow, `QuiverLauncher.Android/` | Windows only |
+| remote announcements shown once per message id | `Services/AnnouncementService.cs`, `announcement.json` | none |
+
+Order to close it: the core split and tests first (everything else lands on them), then release
+sources with rate limiting, then catalog diff and review, then identity migration, then staging
+and locking, then background checks. Gamepad, portable layout, signing, Linux and Android are
+product decisions for the owner, not for this brief.
+
 ## Steps, one PR each
 
 ### Step 0: research, no code
