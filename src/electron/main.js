@@ -95,7 +95,14 @@ async function loadSettings() {
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-function createWindow({ url, token }) {
+// The new UI is the default; "ui": "legacy" in settings.json (the toggle in
+// either UI's Settings) or RK_UI=legacy opens the classic one
+async function useClassicUi() {
+  return process.env.RK_UI === 'legacy' || (await loadSettings()).ui === 'legacy';
+}
+
+async function createWindow({ url, token }) {
+  const classic = await useClassicUi();
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 800,
@@ -109,7 +116,7 @@ function createWindow({ url, token }) {
     },
   });
   mainWindow.once('ready-to-show', () => { windowShown = true; });
-  mainWindow.loadFile(path.join(__dirname, '../frontend/index.html'));
+  mainWindow.loadFile(path.join(__dirname, classic ? '../frontend/index.html' : '../frontend/new/index.html'));
 }
 
 app.whenReady().then(async () => {
@@ -119,7 +126,7 @@ app.whenReady().then(async () => {
     console.error(`[backend] ${e.message}`);
     return;
   }
-  createWindow(backendInfo);
+  await createWindow(backendInfo);
   setupAutoUpdater();
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

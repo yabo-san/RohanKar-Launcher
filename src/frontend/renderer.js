@@ -545,6 +545,11 @@ async function init() {
 
   // Scan for pre-existing installs
   document.getElementById('btn-scan-games').addEventListener('click', onScanForGames);
+  // The new UI lives in new/; the choice is saved so the app opens there next time
+  document.getElementById('btn-new-ui').addEventListener('click', async () => {
+    await api.saveSettings({ ui: 'new' });
+    location.href = `new/index.html${location.search}`;
+  });
 
   // Auto-updater
   api.onUpdaterStatus((data) => {

@@ -1,0 +1,10 @@
+{
+  "name": "Nintendo",
+  "description": "Fixture cut from Quiver's Nintendo list",
+  "preferredTagFilters": ["recomp", "n64"],
+  "apps": [
+    { "name": "Banjo-Kazooie", "project": "Banjo: Recompiled", "repository": "BanjoRecomp/BanjoRecomp", "folderName": "BanjoKazooie-BanjoRecompiled", "tags": ["recomp", "n64"], "filesToAdd": ["portable.txt"] },
+    { "name": "Mario Kart 64", "project": "Mario Kart 64: Recompiled", "repository": "sonicdcer/MarioKart64Recomp", "folderName": "MarioKart64-MarioKart64Recompiled", "tags": ["recomp", "n64"] },
+    { "name": "AeroGauge", "project": "AeroGauge: Recompiled", "repository": "alondero/aerogauge-recomp", "folderName": "AeroGauge-AeroGaugeRecompiled", "tags": ["recomp", "n64"] }
+  ]
+}

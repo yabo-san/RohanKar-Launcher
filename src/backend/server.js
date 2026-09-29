@@ -148,6 +148,14 @@ function createApi(backend) {
   route('GET', '/catalogs/:id', ({ params }) => ({ body: catalog(params.id) }));
   route('DELETE', '/catalogs/:id', ({ params }) => { catalog(params.id); catalogs.unsubscribe(params.id); return { status: 204 }; });
   route('POST', '/catalogs/:id/refresh', async ({ params }) => { catalog(params.id); return { body: await catalogs.refresh(params.id) }; });
+  // One catalog's entries as items, with library state; doesn't wait on archive.org
+  route('GET', '/catalogs/:id/items', ({ params }) => {
+    catalog(params.id);
+    const lib = library.all();
+    const items = catalogs.items().filter(it => it.source.catalog === params.id)
+      .map(it => ({ ...it, versions: [], installed: !!lib[it.id]?.install_dir, library: lib[it.id] || null }));
+    return { body: { items } };
+  });
   route('GET', '/catalogs/:id/review', ({ params }) => { catalog(params.id); return { body: catalogs.review(params.id) }; });
   route('POST', '/catalogs/:id/seen', ({ params }) => { catalog(params.id); catalogs.markSeen(params.id); return { status: 204 }; });
 

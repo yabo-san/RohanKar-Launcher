@@ -106,7 +106,7 @@ async function launchPackaged(userData) {
 
 test.skip(!process.env.E2E_APP, 'E2E_APP is not set');
 
-test('packaged app: launches, shows default sources, downloads a stub item', async () => {
+test('packaged app: opens the new UI, shows default sources, downloads a stub item', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-smoke-'));
   const userData    = path.join(root, 'userData');
   const downloadDir = path.join(root, 'downloads');
@@ -120,14 +120,15 @@ test('packaged app: launches, shows default sources, downloads a stub item', asy
   try {
     const { page } = app;
 
-    // The window renders the library from the stub
-    await expect(page.locator('#library-grid .game-card').first()).toBeVisible({ timeout: 30_000 });
+    // The window opens the new UI (the default) with the wall from the stub
+    await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
+    await expect(page.locator('#body .game-card').first()).toBeVisible({ timeout: 30_000 });
 
     await page.locator('#btn-settings').click();
     await expect(page.locator('#setting-sources')).toHaveValue(formatSources(DEFAULT_SOURCES));
-    await page.locator('#btn-close-settings').click();
 
-    await page.locator('#library-grid .game-card', { hasText: 'Halo: Combat Evolved' }).click();
+    await page.locator('[data-view="wall"]').click();
+    await page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' }).click();
     await page.locator('#btn-download').click();
     const zip = path.join(downloadDir, 'rk-e2e-halo-ce', 'rk-e2e-halo-ce.zip');
     await expect.poll(() => fs.existsSync(zip) && fs.statSync(zip).size, { timeout: 30_000 })

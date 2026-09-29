@@ -97,6 +97,10 @@ test('catalogs: subscribe, list, get, refresh, review, seen, unsubscribe', async
   assert.equal((await call('GET', '/catalogs')).body.catalogs.length, 1);
   assert.equal((await call('GET', `/catalogs/${id}`)).body.entries, 1);
   assert.equal((await call('GET', '/items?shelf=Other')).body.items[0].title, 'A');
+  const [a] = (await call('GET', `/catalogs/${id}/items`)).body.items;
+  assert.deepEqual([a.title, a.repository, a.installed, a.library], ['A', 'o/a', false, null]);
+  assert.equal((await call('POST', '/library', { id: a.id, source: url })).status, 201);
+  assert.equal((await call('GET', `/catalogs/${id}/items`)).body.items[0].library.identifier, a.id);
 
   apps = [...apps, { name: 'B', repository: 'o/b' }];
   assert.equal((await call('POST', `/catalogs/${id}/refresh`)).body.entries, 2);
@@ -104,7 +108,7 @@ test('catalogs: subscribe, list, get, refresh, review, seen, unsubscribe', async
   assert.equal((await call('POST', `/catalogs/${id}/seen`)).status, 204);
   assert.deepEqual((await call('GET', `/catalogs/${id}/review`)).body.new, []);
   assert.equal((await call('DELETE', `/catalogs/${id}`)).status, 204);
-  for (const [m, p] of [['GET', ''], ['DELETE', ''], ['POST', '/refresh'], ['GET', '/review'], ['POST', '/seen']]) {
+  for (const [m, p] of [['GET', ''], ['DELETE', ''], ['POST', '/refresh'], ['GET', '/items'], ['GET', '/review'], ['POST', '/seen']]) {
     assert.equal((await call(m, `/catalogs/${id}${p}`)).status, 404, `${m} ${p}`);
   }
 });

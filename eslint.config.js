@@ -38,6 +38,13 @@ module.exports = [
     },
   },
   {
+    // Defined in ../api.js and ../sources.js, which new/index.html loads before app.js
+    files: ['src/frontend/new/app.js'],
+    languageOptions: {
+      globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly' },
+    },
+  },
+  {
     // module.exports is guarded by typeof, for the node:test suite
     files: ['src/frontend/sources.js'],
     languageOptions: { globals: { module: 'writable' } },
@@ -45,6 +52,6 @@ module.exports = [
   {
     // page.evaluate callbacks run in the renderer and read its top-level state
     files: ['e2e/**/*.e2e.js'],
-    languageOptions: { globals: { allGames: 'readonly', allVersions: 'readonly' } },
+    languageOptions: { globals: { allGames: 'readonly', allVersions: 'readonly', api: 'readonly' } },
   },
 ];
