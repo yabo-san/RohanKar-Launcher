@@ -10,8 +10,8 @@
  * - Install downloads, extracts and registers an archive.org game.
  * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
  *   the Left/Right keys, and a drag doesn't open a card.
- * - New shows the latest uploads: a feature carousel, then a compact list,
- *   newest first.
+ * - New leads with the featured picks (a wall game and a port), then a
+ *   compact list of the latest uploads, newest first.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -91,20 +91,29 @@ test("Home's rows scroll without a scrollbar", async () => {
   await page.setViewportSize({ width: 1280, height: 800 });
 });
 
-test('New leads with the latest uploads, newest first', async () => {
+test('New leads with the picks, then the latest uploads newest first', async () => {
   await page.locator('[data-view="new"]').click();
   await expect(page.locator('#heading')).toHaveText('New');
-  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
-  const groups = new Set(docs.map(d => titleKey(d))).size;
+  // featured.json: Halo, an item not on the wall (skipped), Banjo from the Nintendo list
   const features = page.locator('#body .feature-card');
+  await expect(features).toHaveCount(2);
+  await expect(features.nth(0).locator('.title')).toHaveText('Halo: Combat Evolved');
+  await expect(features.nth(0).locator('.eyebrow')).toHaveText('y4bo pick');
+  await expect(features.nth(0).locator('p')).toHaveText('The one that started it all.');
+  await expect(features.nth(1).locator('.title')).toHaveText('Banjo-Kazooie');
+  await expect(features.nth(1).locator('.eyebrow')).toHaveText('y4bo pick · port');
+
+  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
   const items = page.locator('#body .list-item');
-  await expect(features).toHaveCount(Math.max(2, Math.ceil(groups / 3)));
-  await expect(items).toHaveCount(groups - await features.count());
-  const dates = await page.locator('#body .feature-card .sub, #body .list-item .sub')
-    .evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
+  await expect(items).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
+  const dates = await items.locator('.sub').evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
   expect(dates).toEqual([...dates].sort().reverse());
+
   await items.first().click();
   await expect(page.locator('#detail')).not.toHaveClass(/hidden/);
+  await page.keyboard.press('Escape');
+  await features.nth(1).click();
+  await expect(page.locator('#detail')).toContainText('Banjo');
   await page.keyboard.press('Escape');
 });
 

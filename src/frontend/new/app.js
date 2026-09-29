@@ -22,6 +22,7 @@ const state = {
   portsError: null,
   portLibrary: [],
   review: [],
+  featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   wallFilter: { uploader: null, sort: 'newest' },
   shelfFilter: { tag: null, dataOnly: false },
   detail: null,
@@ -516,22 +517,41 @@ function viewLibrary() {
   return html;
 }
 
-// New: what landed most recently, laid out like Cider's New page. A wide
-// feature carousel, a compact list, then this week's uploads and new ports.
-const FEATURED = 8;
+// New, laid out like Cider's New page: a wide carousel of the hand-picked
+// games and ports (catalog/featured.json), then a compact list of what landed
+// most recently, this week's uploads and the ports new in the catalogs.
 const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
+const blurbOf = (text) => {
+  const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
+  return b.length > 110 ? `${b.slice(0, 107)}…` : b;
+};
 
-function featureCard(g) {
-  const v = newestVersion(g);
-  const n = g._versions?.length || 1;
-  const blurb = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description).replace(/\s+/g, ' ').trim();
-  return `<button class="card feature-card" data-open="game" data-id="${esc(g.identifier)}">
-    <div class="eyebrow">${n > 1 ? 'New version' : 'New upload'}</div>
-    <div class="title">${esc(getTitle(g))}</div>
-    <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div>
-    <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}">
-      ${blurb ? `<p>${esc(blurb.length > 110 ? `${blurb.slice(0, 107)}…` : blurb)}</p>` : ''}
-    </div>
+// Picks in order, each resolved to a wall game or a catalog port; picks not
+// on the wall (a disabled uploader, a catalog not subscribed) are skipped
+function resolvePicks() {
+  return state.featured.flatMap((pick) => {
+    if (pick.identifier) {
+      const g = state.games.find(x => (x._versions || [x]).some(v => v.identifier === pick.identifier));
+      return g ? [{ kind: 'game', g, v: (g._versions || [g]).find(v => v.identifier === pick.identifier), pick }] : [];
+    }
+    const p = state.ports?.items.find(x => String(x.repository).toLowerCase() === pick.repository);
+    return p ? [{ kind: 'port', p, pick }] : [];
+  });
+}
+
+function featureCard({ kind, g, v, p, pick }) {
+  const port = kind === 'port';
+  const title = port ? p.name : getTitle(g);
+  const sub = port ? (p.project || p.repository) : [v._sourceLabel, v.addeddate ? new Date(v.addeddate).getFullYear() : ''].filter(Boolean).join(' · ');
+  const blurb = pick.blurb || blurbOf(port ? p.description : v.description);
+  const art = port
+    ? `<div class="art icon" style="background:${tint(p.repository)}">${p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : ''}`
+    : `<div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(title)}">`;
+  return `<button class="card feature-card" data-open="${port ? 'port' : 'game'}" data-id="${esc(port ? p.id : g.identifier)}">
+    <div class="eyebrow">${port ? 'y4bo pick · port' : 'y4bo pick'}</div>
+    <div class="title">${esc(title)}</div>
+    <div class="sub">${esc(sub)}</div>
+    ${art}${blurb ? `<p>${esc(blurb)}</p>` : ''}</div>
   </button>`;
 }
 
@@ -549,11 +569,10 @@ function viewNew() {
   const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
   if (!newest.length) return html + (state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>');
 
-  // A short wall still leaves something for the list
-  const featured = Math.min(FEATURED, Math.max(2, Math.ceil(newest.length / 3)));
-  html += `<section class="section has-row feature-sec"><div class="row feature">${newest.slice(0, featured).map(featureCard).join('')}</div>${rowNav}</section>`;
+  const picks = resolvePicks();
+  if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
 
-  const rest = newest.slice(featured, featured + 40);
+  const rest = newest.slice(0, 40);
   if (rest.length) html += section('Recently added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
 
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
@@ -969,6 +988,7 @@ function showProgress(identifier, percent) {
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
   state.sources = (await api.getSources()).sources;
+  state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall

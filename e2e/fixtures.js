@@ -5,6 +5,8 @@
  *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip
  *   - Quiver's lists (…/quiver-community-app-catalog/…/<file>, or /quiver/<file>) come
  *     from fixtures/quiver/; a list with no fixture is a 404
+ *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
+ *     that isn't on the wall
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
  *     bundled copies are used
  * Shared by archive-stub.js (inside Electron) and fixture-server.js (over HTTP).
@@ -34,6 +36,9 @@ function answer(url) {
     return fs.existsSync(fixture) ? reply(200, fs.readFileSync(fixture), 'application/json') : reply(404, 'no fixture', 'text/plain');
   }
 
+  if (url.pathname === '/featured.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
+  }
   const [, kind, id, file] = url.pathname.split('/');
   if (kind === 'metadata') return reply(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
   if (kind === 'download' && file === `${id}.zip`) return reply(200, TINY_ZIP, 'application/zip');

@@ -276,6 +276,8 @@ button { font: inherit; color: inherit; }
   background-size: cover; background-position: center 25%; transition: box-shadow .16s ease;
 }
 .feature-card .art img { position: absolute; inset: 0; object-position: center 25%; }
+.feature-card .art.icon { display: flex; align-items: center; justify-content: center; }
+.feature-card .art.icon img { position: static; width: auto; height: 46%; }
 .feature-card:hover .art { box-shadow: 0 14px 34px rgba(0, 0, 0, .6); }
 .feature-card .art p {
   position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; margin: 0; padding: 40px 14px 12px; font-size: 12px; line-height: 1.4; color: #fff;
