@@ -8,7 +8,9 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
+const crypto = require('crypto');
 const { execFile, spawn } = require('child_process');
+const { loadOverrides, artSource } = require('./overrides');
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
@@ -139,6 +141,7 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  getOverrides();
   createWindow();
   setupAutoUpdater();
   // Validate installs on every launch — clears DB entries whose folders were deleted
@@ -353,9 +356,20 @@ ipcMain.handle('archive-search', async (_, { params }) => {
 // Returns a file:// URL from disk cache, downloading from archive.org if not
 // yet cached. Returns null on any failure: the renderer keeps its placeholder
 // rather than hitting archive.org a second time for the live image.
+// A title with an artUrl override never falls through to archive.org.
 ipcMain.handle('get-thumb', async (_, { identifier }) => {
-  const liveUrl   = `https://archive.org/services/img/${identifier}`;
-  const cachePath = path.join(THUMB_CACHE_DIR, `${identifier}.jpg`);
+  const override = await overrideArtUrl(identifier, 'artUrl');
+  if (override !== undefined) return override;
+  return cacheImage(
+    `https://archive.org/services/img/${identifier}`,
+    path.join(THUMB_CACHE_DIR, `${identifier}.jpg`));
+});
+
+ipcMain.handle('get-override-hero', async (_, { identifier }) => {
+  return (await overrideArtUrl(identifier, 'hero')) ?? null;
+});
+
+function cacheImage(liveUrl, cachePath) {
   const cacheUrl  = 'file:///' + cachePath.replace(/\\/g, '/');
 
   // Serve from cache if it already exists and looks like a real image (>1 KB)
@@ -415,7 +429,32 @@ ipcMain.handle('get-thumb', async (_, { identifier }) => {
     };
     doRequest(liveUrl, 0);
   });
-});
+}
+
+// ─── Per-title overrides ──────────────────────────────────────────────────────
+
+let overridesPromise = null;
+function getOverrides() {
+  overridesPromise ??= loadOverrides({
+    fetchText: (url) => archiveGetText(url, 'overrides', 5000)
+      .then(r => r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`))),
+    readBundled: () => fs.readFileSync(path.join(app.getAppPath(), 'overrides.json'), 'utf8'),
+    log: (msg) => console.log(msg),
+  });
+  return overridesPromise;
+}
+
+ipcMain.handle('get-overrides', () => getOverrides());
+
+// file:// URL for an override image, null if it couldn't be fetched, or
+// undefined when the title has no override for that field
+async function overrideArtUrl(identifier, field) {
+  const src = artSource((await getOverrides())[identifier]?.[field]);
+  if (!src) return undefined;
+  if (src.bundled) return 'file:///' + path.join(app.getAppPath(), src.bundled).replace(/\\/g, '/');
+  const name = crypto.createHash('sha1').update(src.remote).digest('hex').slice(0, 16);
+  return cacheImage(src.remote, path.join(THUMB_CACHE_DIR, `override-${name}.jpg`));
+}
 
 // ─── Download ─────────────────────────────────────────────────────────────────
 

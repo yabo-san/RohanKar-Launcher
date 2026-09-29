@@ -22,6 +22,7 @@
 let allGames      = [];   // one entry per title (first version of each group)
 let allVersions   = [];   // every fetched item, across all sources
 let sources       = DEFAULT_SOURCES;
+let overrides     = {};   // overrides.json, keyed by identifier
 let library       = {};
 let collections   = [];
 let selectedGame  = null;
@@ -158,10 +159,6 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 // versionLabel live in sources.js (loaded before this file).
 function loadSourcesSetting(s) {
   return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : DEFAULT_SOURCES;
-}
-
-function getThumb(game) {
-  return `https://archive.org/services/img/${game.identifier}`;
 }
 
 const thumbUrlCache = {};
@@ -511,6 +508,7 @@ async function init() {
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
 
   const initSettings = await window.electronAPI.getSettings();
+  overrides          = await window.electronAPI.getOverrides().catch(() => ({}));
   sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
@@ -863,6 +861,9 @@ async function fetchGames() {
       seen.add(g.identifier);
       return true;
     });
+    for (const g of allVersions) {
+      if (overrides[g.identifier]) g._override = overrides[g.identifier];
+    }
 
     const groups = new Map();
     for (const g of allVersions) {
@@ -1252,11 +1253,14 @@ async function selectGame(game) {
 
   const libEntry   = library[game.identifier];
   const installDir = libEntry?.install_dir || null;
-  const gameHeroUrl = installDir
+  const overrideHero = await window.electronAPI.getOverrideHero({ identifier: game.identifier });
+  const gameHeroUrl = !overrideHero && installDir
     ? await window.electronAPI.checkGameHero({ installDir })
     : null;
 
-  if (gameHeroUrl) {
+  if (overrideHero) {
+    setHeroLocal(overrideHero);
+  } else if (gameHeroUrl) {
     setHeroLocal(gameHeroUrl);
   } else if (localHero) {
     const testImg = new Image();
@@ -2505,22 +2509,28 @@ function renderHomeBanner(game) {
     resolveThumb(game.identifier).then(url => { if (url) bannerBg.style.backgroundImage = `url("${url}")`; });
   };
 
-  if (localHero) {
-    const testImg = new Image();
-    testImg.onload = () => {
-      bannerLocal.src = localHero;
-      bannerLocal.classList.remove('hidden');
-      bannerBg.style.backgroundImage = 'none';
-    };
-    testImg.onerror = () => {
+  const showBannerLocal = (src) => {
+    bannerLocal.src = src;
+    bannerLocal.classList.remove('hidden');
+    bannerBg.style.backgroundImage = 'none';
+  };
+
+  window.electronAPI.getOverrideHero({ identifier: game.identifier }).then(overrideHero => {
+    if (overrideHero) {
+      showBannerLocal(overrideHero);
+    } else if (localHero) {
+      const testImg = new Image();
+      testImg.onload = () => showBannerLocal(localHero);
+      testImg.onerror = () => {
+        bannerLocal.classList.add('hidden');
+        bannerFromCover();
+      };
+      testImg.src = localHero;
+    } else {
       bannerLocal.classList.add('hidden');
       bannerFromCover();
-    };
-    testImg.src = localHero;
-  } else {
-    bannerLocal.classList.add('hidden');
-    bannerFromCover();
-  }
+    }
+  });
 
   const btnView = document.getElementById('home-banner-btn');
   const newBtn  = btnView.cloneNode(true);
@@ -2541,12 +2551,15 @@ function startBannerRotation() {
   }, 18000);
 }
 
-function crossfadeBanner(game) {
+async function crossfadeBanner(game) {
   const bg1 = document.getElementById('home-banner-bg');
   const bg2 = document.getElementById('home-banner-bg2');
   if (!bg2) { homeFeaturedGame = game; renderHomeBanner(game); return; }
 
-  const newUrl = `url("${getThumb(game)}")`;
+  // Override hero, else the disk-cached cover; never a live archive.org image
+  const art = await window.electronAPI.getOverrideHero({ identifier: game.identifier })
+    || await resolveThumb(game.identifier);
+  const newUrl = art ? `url("${art}")` : 'none';
   bg2.style.backgroundImage = newUrl;
   bg2.style.opacity = '0';
 

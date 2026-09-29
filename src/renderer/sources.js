@@ -12,7 +12,9 @@ const DEFAULT_SOURCES = [
   { uploader: 'spideymaster661@gmail.com', label: 'r4zel1ght',       enabled: true },
 ];
 
+// An overrides.json title (attached as _override) replaces the archive.org one
 function getTitle(game) {
+  if (game._override?.title) return game._override.title;
   const t = Array.isArray(game.title) ? game.title[0] : game.title;
   return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
 }

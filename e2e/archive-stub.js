@@ -7,6 +7,7 @@
  *   network (CI never calls archive.org): advanced search returns that
  *   uploader's docs, every item's metadata lists one <identifier>.zip, and
  *   downloading it returns fixtures/tiny.zip. Anything else (covers) gets a 404.
+ * - Answers the overrides.json fetch with a 404, so the bundled copy is used.
  */
 
 const { app } = require('electron');
@@ -48,9 +49,11 @@ const search = (url) => {
   return respond(200, JSON.stringify(json), 'application/json');
 };
 
+const STUBBED_HOSTS = new Set(['archive.org', 'raw.githubusercontent.com']);
+
 https.get = function (target, ...rest) {
   const url = new URL(String(target));
-  if (url.hostname !== 'archive.org') return realGet.call(this, target, ...rest);
+  if (!STUBBED_HOSTS.has(url.hostname)) return realGet.call(this, target, ...rest);
 
   const callback = rest.find(a => typeof a === 'function');
   const req = new EventEmitter();
