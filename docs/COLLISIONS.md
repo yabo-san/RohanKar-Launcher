@@ -18,7 +18,20 @@ an earlier one's entry for the same repository outright; entries aren't merged f
 A collision for a repository that no subscribed catalog lists defines a port of its own. Those show
 on a **Your ports** shelf, which is how an arbitrary GitHub repository gets into the launcher.
 
-`GET /collisions/export` returns the user's own as a feed file, ready to publish and share.
+## Feeds: what you curate
+
+A feed file carries both halves of a curation: ports (collisions, as below) and the archive.org
+uploaders its author trusts, as `uploaders: [{ "uploader": "someone@example.com", "label": "someone" }]`
+(`catalog/uploaders.json`'s `uploaderEmail`/`handle` entries read too). Quiver's catalogs are only
+read, as shelves; a feed is what users keep and share.
+
+- **Your feed**: Settings > Feeds > Copy my feed (`GET /collisions/export`) gives your own
+  collisions and every uploader you have on, ready to publish anywhere.
+- **Import**: Settings > Feeds > Import a feed file (`POST /feed/import`) makes the file's
+  collisions yours and adds its uploaders to your list, turned on. Importing again changes nothing.
+- **Subscribe**: a subscribed feed's collisions apply right away (layer 2 above). Its uploaders are
+  listed with a **Trust** button and stay out of the wall until you trust each one
+  (`POST /sources/trust`), so a subscription never brings in a stranger's uploads by itself.
 
 ## The file
 

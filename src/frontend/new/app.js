@@ -818,10 +818,14 @@ function viewSettings() {
       <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : ''}`).join(' · ') : 'Loading…'}
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
-    <div class="field"><label>Collision feeds</label>
-      <div class="hint">Other people's collisions: which archive.org data goes with which port. Yours win over a feed's, and a feed's over the bundled ones.</div>
+    <div class="field"><label>Feeds</label>
+      <div class="hint">A feed is someone's curation: ports from GitHub releases with the archive.org data they need, and the archive.org uploaders they trust.
+        Subscribe by URL. A feed's ports show up right away (yours win over a feed's, and a feed's over the bundled ones); its uploaders wait until you trust each one.</div>
       <div id="feed-list">${feedListHtml()}</div>
-      <div class="inline"><input type="text" id="feed-url" placeholder="https://…/collisions.json"><button class="btn" data-action="feed-add">Subscribe</button></div></div>
+      <div class="inline"><input type="text" id="feed-url" placeholder="https://…/feed.json"><button class="btn" data-action="feed-add">Subscribe</button></div>
+      <div class="inline feed-own"><button class="btn" data-action="ed-export">Copy my feed</button>
+        <label class="btn">Import a feed file…<input type="file" id="feed-file" accept=".json,application/json" hidden></label></div>
+      <div class="hint">Your feed is your own ports and the uploaders you have on. Importing a file makes its ports yours and adds its uploaders to your list.</div></div>
     <div class="field" id="quiver-import"><label>Quiver library</label>
       <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
       <div class="import-body">${quiverImportHtml()}</div></div>
@@ -1411,7 +1415,7 @@ async function editorExport() {
   const text = JSON.stringify(feed, null, 2);
   try {
     await navigator.clipboard.writeText(text);
-    toast(`Copied ${feed.collisions.length} collision${feed.collisions.length === 1 ? '' : 's'} as a feed file. Publish it anywhere and others can subscribe to its URL.`, 6000);
+    toast(`Copied your feed: ${feed.collisions.length} port${feed.collisions.length === 1 ? '' : 's'}, ${feed.uploaders.length} uploader${feed.uploaders.length === 1 ? '' : 's'}. Publish it anywhere and others can subscribe to its URL.`, 6000);
   } catch {
     toast("Couldn't reach the clipboard.");
   }
@@ -1426,6 +1430,12 @@ document.addEventListener('input', (e) => {
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
   if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'feed-file' && e.target.files[0]) {
+    importFeedFile(e.target.files[0]);
+    e.target.value = '';
+  }
 });
 document.addEventListener('change', (e) => {
   const ed = state.editor;
@@ -1443,7 +1453,9 @@ function feedListHtml() {
   if (!feeds.length) return '<div class="hint">None yet.</div>';
   return feeds.map(f => `<div class="feed-row"><div class="grow"><b>${esc(f.name)}</b> · ${fmtNum(f.entries)} collision${f.entries === 1 ? '' : 's'}
       ${f.rejected.length ? `, ${f.rejected.length} skipped as invalid` : ''}${f.error ? ` · <span class="warn">${esc(f.error)}</span>` : ''}
-      <div class="meta">${esc(f.url)}</div></div>
+      <div class="meta">${esc(f.url)}</div>
+      ${f.uploaders.length ? `<div class="feed-uploaders">${f.uploaders.map(u => `<span class="feed-uploader"><b>${esc(u.label)}</b> <span class="meta">${esc(u.uploader)}</span>
+        ${u.trusted ? '<span class="trusted">Trusted</span>' : `<button class="btn" data-action="feed-trust" data-uploader="${esc(u.uploader)}" data-label="${esc(u.label)}">Trust</button>`}</span>`).join('')}</div>` : ''}</div>
     <button class="btn" data-action="feed-refresh" data-id="${esc(f.id)}">Refresh</button>
     <button class="btn" data-action="feed-remove" data-id="${esc(f.id)}">Remove</button></div>`).join('');
 }
@@ -1463,6 +1475,32 @@ async function addCollisionFeed() {
   $('#feed-url').value = '';
   await loadCollisionFeeds();
   loadPorts();
+}
+
+// The user's uploader list changed from a feed: redraw it and reload the wall
+async function sourcesChanged() {
+  state.sources = (await api.getSources()).sources;
+  const box = $('#setting-sources');
+  if (box) box.value = formatSources(state.sources);
+  await loadCollisionFeeds();
+  ambientDone = false;
+  loadWall({ refresh: true });
+}
+
+async function trustUploader(el) {
+  const r = await api.trustUploader({ uploader: el.dataset.uploader, label: el.dataset.label });
+  if (!r.ok) return toast(`Couldn't trust it: ${r.error}`);
+  toast(`${el.dataset.label} is one of your uploaders now. Their uploads join the wall.`);
+  await sourcesChanged();
+}
+
+async function importFeedFile(file) {
+  const r = await api.importFeed(await file.text());
+  if (!r.ok) return toast(`Couldn't import ${file.name}: ${r.error}`, 6000);
+  const n = (k, one) => `${r[k].length} ${one}${r[k].length === 1 ? '' : 's'}`;
+  toast(`Imported ${file.name}: ${n('collisions', 'port')}, ${n('uploaders', 'uploader')}${r.rejected.length ? `, ${r.rejected.length} skipped as invalid` : ''}.`, 6000);
+  if (r.collisions.length) loadPorts();
+  if (r.uploaders.length) await sourcesChanged();
 }
 
 // ─── right-click menu (ports), after Quiver's ────────────────────────────────
@@ -1657,6 +1695,7 @@ async function onAction(action, el) {
     case 'ed-delete': return editorDelete();
     case 'ed-export': return editorExport();
     case 'feed-add': return addCollisionFeed();
+    case 'feed-trust': return trustUploader(el);
     case 'feed-refresh': await api.refreshCollisionFeed(el.dataset.id); return loadCollisionFeeds();
     case 'feed-remove': await api.removeCollisionFeed(el.dataset.id); await loadCollisionFeeds(); return loadPorts();
     case 'announce-dismiss':
