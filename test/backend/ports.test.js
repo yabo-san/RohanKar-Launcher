@@ -319,3 +319,24 @@ test('base "binary": one file and a folder placed beside the release, checked ag
   assert.match(outside.error, /binaryTarget would land outside/);
   assert.ok(fake.base);
 });
+
+test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as` to what the port expects', async (t) => {
+  const { dir, installs, item, state } = await setup(t, { bin: PD_REAL() });
+  const romZip = makeZip({ 'Perfect Dark (USA) (Rev A).z64': 'TOSECROM', 'readme.txt': 'hi' });
+  state.files['N64TOSEC'] = [{ name: 'Perfect Dark (USA) (Rev A).zip', source: 'original', size: String(romZip.length), sha1: sha1(romZip) }];
+  state.routes['/download/N64TOSEC/Perfect%20Dark%20(USA)%20(Rev%20A).zip'] = (req, res) => { res.writeHead(200); res.end(romZip); };
+  const source = { ia: 'N64TOSEC', path: 'Perfect Dark (USA) (Rev A).zip', target: 'data', extract: true, as: 'pd.ntsc-final.z64' };
+  assert.deepEqual(ports.validateCollision({ repository: 'o/pd', sources: [source] }), []);
+  const r = installs.startPort({ item: { ...item, data: { assetPattern: '(?i)x86_64-windows', exe: 'pd.x86_64.exe', sources: [source] } } });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.error, job.exePath], ['done', null, path.join(dest, 'pd.x86_64.exe')]);
+  assert.equal(fs.readFileSync(path.join(dest, 'data', 'pd.ntsc-final.z64'), 'utf8'), 'TOSECROM');
+  assert.deepEqual(fs.readdirSync(path.join(dest, 'data')).sort(), ['pd.ntsc-final.z64', 'put_your_rom_here.txt'], 'no readme, no staging left');
+
+  assert.deepEqual(ports.validateCollision({ repository: 'o/pd', sources: [{ ia: 'i', path: 'x/*', as: 'a.z64' }, { ia: 'i', path: 'x.zip', as: 'data/a.z64' }] }), [
+    'sources[0].as only applies to a single file', 'sources[1].as must be a file name',
+  ]);
+  assert.equal(ports.expandSource({ ia: 'i', path: 'roms/bk.z64', as: 'baserom.z64' }, IA_FILES).files[0].rel, 'baserom.z64');
+});

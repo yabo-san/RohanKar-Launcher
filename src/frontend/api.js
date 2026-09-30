@@ -90,6 +90,7 @@ const api = (() => {
     chooseFolder:   async () => (await call('POST', '/os/choose-folder')).body?.path || null,
     addToSteam:     async (opts) => { const r = await call('POST', '/os/add-to-steam', opts); return r.ok ? r.body : failure(r); },
     getAppVersion:  async () => (await call('GET', '/health')).body?.version || '',
+    getHealth:      async () => (await call('GET', '/health')).body || {},
     updaterInstall: () => call('POST', '/os/updater-install'),
     // Reports the latest status now, if any, then each new one
     onUpdaterStatus: (cb) => {
@@ -194,6 +195,13 @@ const api = (() => {
     exportCollisions: async () => (await call('GET', '/collisions/export')).body,
     previewCollision: async (sources) => { const r = await call('POST', '/collisions/preview', { sources }); return r.ok ? r.body.sources : null; },
     getCollisionFeeds: async () => (await call('GET', '/collision-feeds')).body?.feeds || [],
+
+    // Admin mode (docs/ADMIN.md): the curated collisions, edited in place
+    getCuratedCollisions: async () => { const r = await call('GET', '/admin/collisions'); return r.ok ? r.body : null; },
+    saveCuratedCollision: async (repo, entry) => { const r = await call('PUT', `/admin/collisions/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
+    deleteCuratedCollision: async (repo) => { const r = await call('DELETE', `/admin/collisions/${enc(repo)}`); return r.ok ? { ok: true } : failure(r); },
+    getReleases: async (repo, pattern) => { const r = await call('GET', `/admin/releases/${enc(repo)}${pattern ? `?pattern=${enc(pattern)}` : ''}`); return r.ok ? { ok: true, ...r.body } : failure(r); },
+    searchArchive: async (q) => { const r = await call('GET', `/admin/ia-search?q=${enc(q)}`); return r.ok ? { ok: true, items: r.body.items } : { ...failure(r), items: [] }; },
     addCollisionFeed: async ({ url, name }) => { const r = await call('POST', '/collision-feeds', { url, name }); return r.ok ? { ok: true, feed: r.body } : failure(r); },
     refreshCollisionFeed: async (id) => (await call('POST', `/collision-feeds/${enc(id)}/refresh`)).body,
     removeCollisionFeed: (id) => call('DELETE', `/collision-feeds/${enc(id)}`),

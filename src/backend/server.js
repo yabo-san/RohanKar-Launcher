@@ -94,7 +94,7 @@ function createApi(backend) {
     }
   };
 
-  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion } }));
+  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion, ...(backend.admin ? { admin: true } : {}) } }));
 
   // ─── Items ────────────────────────────────────────────────────────────────
 
@@ -236,6 +236,40 @@ function createApi(backend) {
   });
   route('POST', '/collision-feeds/:id/refresh', async ({ params }) => { feed(params.id); return { body: await catalogs.refreshFeed(params.id) }; });
   route('DELETE', '/collision-feeds/:id', ({ params }) => { feed(params.id); catalogs.unsubscribeFeed(params.id); return { status: 204 }; });
+
+  // ─── Admin mode: the curated collisions (docs/ADMIN.md) ──────────────────
+  const needAdmin = () => { if (!backend.admin) throw new HttpError(403, 'not_admin', 'Admin mode is off; start the backend with --admin'); };
+  route('GET', '/admin/collisions', () => {
+    needAdmin();
+    return { body: { file: backend.collisionsFile, collisions: catalogs.curatedList() } };
+  });
+  route('PUT', '/admin/collisions/:repo', ({ params, body }) => {
+    needAdmin();
+    const r = catalogs.saveCurated({ ...requireObject(body), repository: params.repo });
+    if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
+    return { status: r.created ? 201 : 200, body: r.entry };
+  });
+  route('DELETE', '/admin/collisions/:repo', ({ params }) => {
+    needAdmin();
+    if (!catalogs.deleteCurated(params.repo).ok) throw new HttpError(404, 'not_found', `No curated collision for ${params.repo}`);
+    return { status: 204 };
+  });
+  // A repository's recent releases, each asset with the pattern that keeps picking it
+  route('GET', '/admin/releases/:repo', async ({ params, query }) => {
+    needAdmin();
+    const r = await installs.releases(params.repo, { pattern: query.pattern || null });
+    if (!r.ok) throw new HttpError(502, 'github', r.error);
+    return { body: r };
+  });
+  // archive.org items for a search, to pick a data source from
+  route('GET', '/admin/ia-search', async ({ query }) => {
+    needAdmin();
+    const q = String(query.q || '').trim();
+    if (!q) throw new HttpError(400, 'bad_request', 'q is required');
+    const r = await archive.search({ q, fl: 'identifier,title,uploader,item_size', rows: '40', output: 'json' });
+    if (!r.json) throw new HttpError(502, 'archive', r.error || `HTTP ${r.status}`);
+    return { body: { items: (r.json.response?.docs || []).map(d => ({ identifier: d.identifier, title: d.title || d.identifier, uploader: d.uploader || null, size: Number(d.item_size) || 0 })) } };
+  });
 
   // What a list of sources would place, file by file, before saving it
   route('POST', '/collisions/preview', async ({ body }) => {

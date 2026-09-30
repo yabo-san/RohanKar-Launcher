@@ -32,6 +32,14 @@ function toRegExp(pattern) {
 // Otherwise any asset that looks like a Windows build. Among several, an
 // archive or exe beats anything else and 64-bit beats 32-bit/ARM.
 // Returns { asset } or { error, names }.
+// An asset pattern that keeps picking this asset in later releases: the name,
+// with version numbers matching any version. "Dusklight-v2.0.3-win32-x86_64.zip"
+// becomes (?i)^Dusklight-.+-win32-x86_64\.zip$
+function assetPatternFor(name) {
+  const parts = String(name).split(/v?\d+(?:\.\d+)+/i);
+  return '(?i)^' + parts.map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.+') + '$';
+}
+
 function pickAsset(assets, { pattern = null, filter = null } = {}) {
   const all = (Array.isArray(assets) ? assets : []).filter(a => a && a.name && a.browser_download_url);
   let pool;
@@ -138,7 +146,9 @@ function expandSource(source, files) {
   }
   const f = all.find(x => x.name === want) || all.find(x => x.name.toLowerCase() === want.toLowerCase());
   if (!f) return { error: `${want} isn't in ${source.ia}` };
-  return { files: [{ name: f.name, rel: path.posix.basename(f.name), sha1: f.sha1 || null, size: Number(f.size) || 0 }], single: true };
+  // `as` renames it (with extract: the one file the archive unpacks to)
+  const rel = typeof source.as === 'string' && source.as ? source.as : path.posix.basename(f.name);
+  return { files: [{ name: f.name, rel, sha1: f.sha1 || null, size: Number(f.size) || 0 }], single: true };
 }
 
 const SHA1 = /^[0-9a-f]{40}$/i;
@@ -152,7 +162,8 @@ function validateCollision(c) {
   const errs = [];
   if (!c || typeof c !== 'object' || Array.isArray(c)) return ['entry must be an object'];
   if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
-  for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (c[k] != null && typeof c[k] !== 'string') errs.push(`${k} must be a string`);
+  for (const k of ['name', 'folderName', 'releaseAssetFilter', 'shelf']) if (c[k] != null && typeof c[k] !== 'string') errs.push(`${k} must be a string`);
+  if (c.hidden != null && typeof c.hidden !== 'boolean') errs.push('hidden must be true or false');
   if (c.assetPattern != null) {
     if (typeof c.assetPattern !== 'string') errs.push('assetPattern must be a string');
     else { try { toRegExp(c.assetPattern); } catch (e) { errs.push(`assetPattern: ${e.message}`); } }
@@ -171,6 +182,8 @@ function validateCollision(c) {
     if (s.sha1 != null && !SHA1.test(s.sha1)) errs.push(`${at}.sha1 must be 40 hex characters`);
     if (s.sha1 != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.sha1 only applies to a single file`);
     for (const k of ['extract', 'optional']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
+    if (s.as != null && !(typeof s.as === 'string' && /^[^\\/:*?"<>|]+$/.test(s.as) && s.as !== '.' && s.as !== '..')) errs.push(`${at}.as must be a file name`);
+    if (s.as != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.as only applies to a single file`);
   });
   if (!(Array.isArray(c.sources) && c.sources.length) && !(Array.isArray(c.dataFiles) && c.dataFiles.length) && !c.name) {
     errs.push('an entry with no data sources needs a name (it defines a port of its own)');
@@ -179,6 +192,6 @@ function validateCollision(c) {
 }
 
 module.exports = {
-  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, largestFiles, ARCHIVE_EXT,
+  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, largestFiles, assetPatternFor, ARCHIVE_EXT,
   expandSource, isGlob, validateCollision, safeRel,
 };
