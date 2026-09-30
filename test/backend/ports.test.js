@@ -160,3 +160,81 @@ test('a port with no data and a bare exe asset installs the exe; cancelling stop
   assert.equal(installs.get(slow.id).status, 'cancelled');
   void fake;
 });
+
+// Shaped like archive.org's /metadata/<id> files list, bookkeeping files included
+const IA_FILES = [
+  { name: 'Banjo.zip', source: 'original', size: '120', sha1: sha1('zip') },
+  { name: 'roms/bk.z64', source: 'original', size: '4', sha1: sha1('ROM1') },
+  { name: 'roms/extra/bk-pal.z64', source: 'original', size: '4', sha1: sha1('ROM2') },
+  { name: 'Banjo.zip.torrent', source: 'metadata' },
+  { name: 'banjo-full_meta.xml', source: 'original' },
+  { name: '__ia_thumb.jpg', source: 'original' },
+  { name: 'Banjo.png', source: 'derivative' },
+];
+
+test('expandSource: one file, a folder, the whole item; bookkeeping files never count', () => {
+  const one = ports.expandSource({ ia: 'i', path: 'roms/BK.z64' }, IA_FILES);
+  assert.deepEqual(one, { files: [{ name: 'roms/bk.z64', rel: 'bk.z64', sha1: sha1('ROM1'), size: 4 }], single: true });
+  const folder = ports.expandSource({ ia: 'i', path: 'roms/*' }, IA_FILES);
+  assert.deepEqual(folder.files.map(f => f.rel), ['bk.z64', 'extra/bk-pal.z64']);
+  assert.deepEqual(ports.expandSource({ ia: 'i', path: '*' }, IA_FILES).files.map(f => f.name), ['Banjo.zip', 'roms/bk.z64', 'roms/extra/bk-pal.z64']);
+  assert.deepEqual(ports.expandSource({ ia: 'i', path: 'nope.bin' }, IA_FILES), { error: "nope.bin isn't in i" });
+  assert.deepEqual(ports.expandSource({ ia: 'i', path: 'saves/*' }, IA_FILES), { error: 'Nothing under saves/* in i' });
+});
+
+test('validateCollision: a port of its own needs a name; sha1 only on one file', () => {
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', name: 'B' }), []);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b' }), ['an entry with no data sources needs a name (it defines a port of its own)']);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', sources: [{ ia: 'i', path: 'x/*', sha1: sha1('x') }] }), ['sources[0].sha1 only applies to a single file']);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', binaryTarget: '..', assetPattern: '(', sources: [{ ia: 'i', path: 'x', extract: 'yes' }] }), [
+    'assetPattern: Invalid regular expression: /(/: Unterminated group', 'binaryTarget must be a relative folder', 'sources[0].extract must be true or false',
+  ]);
+  assert.deepEqual(ports.validateCollision([]), ['entry must be an object']);
+});
+
+test('base "data": the archive.org zip unpacks first, the release unpacks over it into binaryTarget', async (t) => {
+  const { dir, installs, item, state } = await setup(t);
+  state.files['banjo-full'] = IA_FILES;
+  state.zips['banjo-full/Banjo.zip'] = makeZip({ 'game.dat': 'DATA', 'bin/pd.exe': 'OLD' });
+  const zipSum = sha1(state.zips['banjo-full/Banjo.zip']);
+  state.files['banjo-full'] = IA_FILES.map(f => (f.name === 'Banjo.zip' ? { ...f, sha1: zipSum } : f));
+  const it = { ...item, data: { assetPattern: '(?i)x86_64-windows', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'banjo-full', path: 'Banjo.zip', extract: true }] } };
+  const r = installs.startPort({ item: it });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.error], ['done', null]);
+  assert.equal(fs.readFileSync(path.join(dest, 'game.dat'), 'utf8'), 'DATA');
+  assert.equal(fs.readFileSync(path.join(dest, 'bin', 'pd.exe'), 'utf8'), 'MZ', 'the release wins over the data');
+  assert.ok(fs.existsSync(path.join(dest, 'bin', 'portable.txt')), 'filesToAdd land beside the release');
+  assert.ok(!fs.existsSync(path.join(dest, 'Banjo.zip')), 'an extracted archive is not also copied');
+});
+
+test('base "binary": one file and a folder placed beside the release, checked against archive.org sha1', async (t) => {
+  const { dir, installs, item, state, fake } = await setup(t);
+  state.files['banjo-full'] = IA_FILES;
+  state.routes['/download/banjo-full/roms/bk.z64'] = (req, res) => { res.writeHead(200); res.end('ROM1'); };
+  state.routes['/download/banjo-full/roms/extra/bk-pal.z64'] = (req, res) => { res.writeHead(200); res.end('ROM2'); };
+  const sources = [{ ia: 'banjo-full', path: 'roms/bk.z64', target: 'data' }, { ia: 'banjo-full', path: 'roms/*', target: 'all' }];
+  const run = async (it) => { const r = installs.startPort({ item: it }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
+
+  const job = await run({ ...item, data: { assetPattern: '(?i)x86_64-windows', sources } });
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.exePath], ['done', path.join(dest, 'pd.exe')]);
+  assert.equal(fs.readFileSync(path.join(dest, 'data', 'bk.z64'), 'utf8'), 'ROM1');
+  assert.equal(fs.readFileSync(path.join(dest, 'all', 'extra', 'bk-pal.z64'), 'utf8'), 'ROM2');
+
+  // A wrong file fails the install naming it; the entry's own sha1 beats archive.org's
+  state.routes['/download/banjo-full/roms/bk.z64'] = (req, res) => { res.writeHead(200); res.end('CORRUPT'); };
+  const bad = await run({ ...item, id: 'quiver:c1:o/bad', data: { sources: [sources[0]] } });
+  assert.match(bad.error, /^roms\/bk\.z64 doesn't match archive\.org \(sha1 [0-9a-f]{40}, expected /);
+  const pinned = await run({ ...item, id: 'quiver:c1:o/pin', data: { sources: [{ ...sources[0], sha1: sha1('CORRUPT') }] } });
+  assert.equal(pinned.status, 'done');
+  const missing = await run({ ...item, id: 'quiver:c1:o/miss', data: { sources: [{ ia: 'banjo-full', path: 'nope.bin' }] } });
+  assert.equal(missing.error, "nope.bin isn't in banjo-full");
+  const optional = await run({ ...item, id: 'quiver:c1:o/opt', data: { sources: [{ ia: 'banjo-full', path: 'nope.bin', optional: true }] } });
+  assert.equal(optional.status, 'done');
+  const outside = await run({ ...item, id: 'quiver:c1:o/out', data: { binaryTarget: '../x' } });
+  assert.match(outside.error, /binaryTarget would land outside/);
+  assert.ok(fake.base);
+});

@@ -93,4 +93,67 @@ function inside(root, ...rel) {
   return p === path.resolve(root) || p.startsWith(path.resolve(root) + path.sep) ? p : null;
 }
 
-module.exports = { pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, ARCHIVE_EXT };
+// ─── Data sources (docs/COLLISIONS.md) ───────────────────────────────────────
+
+// archive.org's own bookkeeping files, never game data
+const IA_METADATA = /(^|\/)(__ia_thumb\.jpg|[^/]*_(meta\.xml|meta\.sqlite|files\.xml|reviews\.xml|archive\.torrent))$/i;
+const isGlob = (p) => p === '*' || p.endsWith('/*');
+
+// One source's files in an archive.org item's file list:
+//   "dir/file.bin"  that file, placed as file.bin
+//   "dir/sub/*"     every file under dir/sub, keeping the layout below it
+//   "*"             every file in the item
+// Returns { files: [{ name, rel, sha1, size }], single } or { error }.
+function expandSource(source, files) {
+  const all = (Array.isArray(files) ? files : []).filter(f => f?.name && !IA_METADATA.test(f.name) && f.source !== 'metadata' && f.source !== 'derivative');
+  const want = String(source.path || '').replace(/^\/+/, '');
+  if (isGlob(want)) {
+    const prefix = want.slice(0, -1);
+    const out = all.filter(f => f.name.startsWith(prefix) && f.name.length > prefix.length)
+      .map(f => ({ name: f.name, rel: f.name.slice(prefix.length), sha1: f.sha1 || null, size: Number(f.size) || 0 }));
+    return out.length ? { files: out, single: false } : { error: `Nothing under ${want} in ${source.ia}` };
+  }
+  const f = all.find(x => x.name === want) || all.find(x => x.name.toLowerCase() === want.toLowerCase());
+  if (!f) return { error: `${want} isn't in ${source.ia}` };
+  return { files: [{ name: f.name, rel: path.posix.basename(f.name), sha1: f.sha1 || null, size: Number(f.size) || 0 }], single: true };
+}
+
+const SHA1 = /^[0-9a-f]{40}$/i;
+const REPO = /^[\w.-]+\/[\w.-]+$/;
+// A relative path that stays relative: no drive, no leading slash, no ..
+const safeRel = (p) => typeof p === 'string' && !/^([a-z]:|[\\/])/i.test(p) && !p.split(/[\\/]/).includes('..');
+
+// Checks a collision entry (a user's own, or one bound for collisions.json).
+// Returns a list of problems, empty when it's good.
+function validateCollision(c) {
+  const errs = [];
+  if (!c || typeof c !== 'object' || Array.isArray(c)) return ['entry must be an object'];
+  if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
+  for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (c[k] != null && typeof c[k] !== 'string') errs.push(`${k} must be a string`);
+  if (c.assetPattern != null) {
+    if (typeof c.assetPattern !== 'string') errs.push('assetPattern must be a string');
+    else { try { toRegExp(c.assetPattern); } catch (e) { errs.push(`assetPattern: ${e.message}`); } }
+  }
+  if (c.base != null && !['binary', 'data'].includes(c.base)) errs.push('base must be "binary" or "data"');
+  if (c.binaryTarget != null && !safeRel(c.binaryTarget)) errs.push('binaryTarget must be a relative folder');
+  if (c.sources != null && !Array.isArray(c.sources)) errs.push('sources must be an array');
+  (Array.isArray(c.sources) ? c.sources : []).forEach((s, i) => {
+    const at = `sources[${i}]`;
+    if (!s || typeof s !== 'object') return errs.push(`${at} must be an object`);
+    if (typeof s.ia !== 'string' || !/^[\w.-]+$/.test(s.ia)) errs.push(`${at}.ia must be an archive.org identifier`);
+    if (typeof s.path !== 'string' || !s.path.trim() || !safeRel(s.path.replace(/^\/+/, ''))) errs.push(`${at}.path must be a file, folder/* or * in the item`);
+    if (s.target != null && !safeRel(s.target)) errs.push(`${at}.target must be a relative folder`);
+    if (s.sha1 != null && !SHA1.test(s.sha1)) errs.push(`${at}.sha1 must be 40 hex characters`);
+    if (s.sha1 != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.sha1 only applies to a single file`);
+    for (const k of ['extract', 'optional']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
+  });
+  if (!(Array.isArray(c.sources) && c.sources.length) && !(Array.isArray(c.dataFiles) && c.dataFiles.length) && !c.name) {
+    errs.push('an entry with no data sources needs a name (it defines a port of its own)');
+  }
+  return errs;
+}
+
+module.exports = {
+  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, ARCHIVE_EXT,
+  expandSource, isGlob, validateCollision, safeRel,
+};

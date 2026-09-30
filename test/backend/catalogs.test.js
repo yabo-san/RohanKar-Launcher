@@ -135,3 +135,40 @@ test('every collision joins a catalog entry on repository', () => {
   const orphans = read('collisions.json').filter(c => !repos.has(entryKey({ repository: c.repository })));
   assert.deepEqual(orphans.map(c => c.repository), []);
 });
+
+test("the user's own collisions win over the bundled ones and fill a Your ports shelf", async (t) => {
+  const { fake, catalogs } = await setup(t);
+  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  assert.equal(catalogs.collision('banjorecomp/banjorecomp').origin, 'bundled');
+
+  // Override a bundled one: base "data", a whole archive unpacked first
+  const mine = { repository: 'BanjoRecomp/BanjoRecomp', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'banjo-full', path: 'Banjo.zip', extract: true }] };
+  assert.deepEqual(catalogs.saveCollision(mine), { ok: true, entry: mine });
+  assert.equal(catalogs.collision('BANJORECOMP/banjorecomp').origin, 'local');
+  const banjo = catalogs.items().find(i => i.repository === 'BanjoRecomp/BanjoRecomp');
+  assert.deepEqual([banjo.data.base, banjo.data.binaryTarget, banjo.data.iaIdentifier, banjo.data.sources.length], ['data', 'bin', 'banjo-full', 1]);
+  assert.equal(catalogs.list().length, 1, 'a repo a catalog lists makes no shelf of its own');
+
+  // A repository no catalog lists becomes a port on "Your ports"
+  assert.equal(catalogs.saveCollision({ repository: 'me/port', name: 'My Port', folderName: 'MyPort', sources: [{ ia: 'my-data', path: 'roms/*', target: 'roms' }] }).ok, true);
+  const shelf = catalogs.list().find(c => c.id === 'local');
+  assert.deepEqual([shelf.name, shelf.entries, shelf.url], ['Your ports', 1, null]);
+  const port = catalogs.items().find(i => i.id === 'quiver:local:me/port');
+  assert.deepEqual([port.title, port.shelf, port.entry.folderName, port.data.sources[0].target], ['My Port', 'Your ports', 'MyPort', 'roms']);
+  assert.deepEqual(catalogs.review('local'), { new: [], changed: [], removed: [] });
+  assert.equal(catalogs.markSeen('local'), true);
+  assert.equal(catalogs.unsubscribe('local'), false);
+  assert.equal((await catalogs.refresh('local')).entries, 1);
+
+  // Bad entries are refused with every problem named; deletes are per repository
+  const bad = catalogs.saveCollision({ repository: 'nope', base: 'up', sources: [{ ia: 'a b', path: '../x', sha1: 'zz', target: '/abs' }] });
+  assert.equal(bad.ok, false);
+  assert.deepEqual(bad.errors, [
+    'repository must be owner/repo', 'base must be "binary" or "data"', 'sources[0].ia must be an archive.org identifier',
+    'sources[0].path must be a file, folder/* or * in the item', 'sources[0].target must be a relative folder', 'sources[0].sha1 must be 40 hex characters',
+  ]);
+  assert.equal(catalogs.deleteCollision('ME/port'), true);
+  assert.equal(catalogs.deleteCollision('me/port'), false);
+  assert.equal(catalogs.list().some(c => c.id === 'local'), false);
+  assert.equal(catalogs.unsubscribe(sub.id), true);
+});

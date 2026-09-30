@@ -232,81 +232,145 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     return release;
   }
 
+  // base "binary" (the default): the release lays down first and the data goes
+  // into it. base "data": the data lays down first and the release unpacks
+  // into binaryTarget on top of it. See docs/COLLISIONS.md.
   async function runPortJob(job, item) {
     const entry = item.entry || {};
+    const data = item.data || {};
     const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
     const dest = path.join(installDir(), folderName);
     const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
-    const downloads = [];
-
-    // 1. The binary: the latest release's Windows build, unpacked into dest
-    const release = await latestRelease(item.repository);
-    const pick = ports.pickAsset(release.assets, { pattern: item.data?.assetPattern, filter: entry.releaseAssetFilter });
-    if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
-    update(job, { file: pick.asset.name });
-    const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
-    if (job.status === 'cancelled') return;
-    if (!bin.ok) return update(job, { status: 'error', error: bin.error });
-    downloads.push(bin.filePath);
-    update(job, { status: 'extracting', percent: 100 });
+    const downloads = new Set();
+    const fail = (error) => { update(job, { status: 'error', error }); return false; };
+    const binDest = ports.inside(dest, data.binaryTarget || '');
+    if (!binDest) return fail(`${item.title}'s binaryTarget would land outside the install folder`);
     fs.mkdirSync(dest, { recursive: true });
-    if (ports.ARCHIVE_EXT.test(bin.filePath)) {
-      const x = await extractTo(bin.filePath, dest);
-      if (!x.ok) return update(job, { status: 'error', error: x.error });
-    } else {
-      fs.copyFileSync(bin.filePath, path.join(dest, path.basename(bin.filePath)));
-    }
-    for (const f of [].concat(entry.filesToAdd || [])) {
-      const target = ports.inside(dest, f);
-      if (target && !fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, ''); }
+
+    // The binary: the latest release's Windows build, unpacked into binDest
+    async function binary() {
+      update(job, { status: 'downloading', step: 'binary', percent: 0 });
+      const release = await latestRelease(item.repository);
+      const pick = ports.pickAsset(release.assets, { pattern: data.assetPattern, filter: entry.releaseAssetFilter });
+      if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
+      update(job, { file: pick.asset.name });
+      const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
+      if (job.status === 'cancelled') return false;
+      if (!bin.ok) return fail(bin.error);
+      downloads.add(bin.filePath);
+      update(job, { status: 'extracting', percent: 100 });
+      fs.mkdirSync(binDest, { recursive: true });
+      if (ports.ARCHIVE_EXT.test(bin.filePath)) {
+        const x = await extractTo(bin.filePath, binDest);
+        if (!x.ok) return fail(x.error);
+      } else {
+        fs.copyFileSync(bin.filePath, path.join(binDest, path.basename(bin.filePath)));
+      }
+      for (const f of [].concat(entry.filesToAdd || [])) {
+        const target = ports.inside(binDest, f);
+        if (target && !fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, ''); }
+      }
+      return true;
     }
 
-    // 2. The game data, when the collision catalog says where it is
-    const dataFiles = item.data?.dataFiles || [];
-    if (dataFiles.length) {
-      const src = ports.archiveFile(item.data.contentUrl);
+    // dataFiles: named files picked out of one archive.org download (contentUrl)
+    async function dataFiles() {
+      const wanted = data.dataFiles || [];
+      if (!wanted.length) return true;
+      const src = ports.archiveFile(data.contentUrl);
       if (!src) throw new Error(`The collision catalog's data link for ${item.title} isn't an archive.org download`);
       update(job, { status: 'downloading', step: 'data', percent: 0, file: path.basename(src.file) });
       const got = await download({ key: job.id, identifier: src.identifier, url: archive.downloadUrl(src.identifier, src.file), fileName: src.file, onProgress: progress });
-      if (job.status === 'cancelled') return;
-      if (!got.ok) return update(job, { status: 'error', error: got.error });
-      downloads.push(got.filePath);
+      if (job.status === 'cancelled') return false;
+      if (!got.ok) return fail(got.error);
+      downloads.add(got.filePath);
       update(job, { status: 'extracting', percent: 100 });
       let staging = null;
       if (ports.ARCHIVE_EXT.test(got.filePath)) {
         staging = path.join(path.dirname(got.filePath), '_staging');
         fs.rmSync(staging, { recursive: true, force: true });
         const x = await extractTo(got.filePath, staging);
-        if (!x.ok) return update(job, { status: 'error', error: x.error });
+        if (!x.ok) return fail(x.error);
       }
       try {
         update(job, { status: 'verifying' });
-        for (const df of dataFiles) {
+        for (const df of wanted) {
           const found = (staging && ports.findFile(staging, df.name))
             || (path.basename(got.filePath).toLowerCase() === String(df.name).toLowerCase() ? got.filePath : null);
           if (!found) {
             if (df.optional) continue;
-            return update(job, { status: 'error', error: `${df.name} isn't in ${src.file}` });
+            return fail(`${df.name} isn't in ${src.file}`);
           }
-          if (df.patch) return update(job, { status: 'error', error: `${df.name} needs a patch (${df.patch}), which isn't supported yet` });
+          if (df.patch) return fail(`${df.name} needs a patch (${df.patch}), which isn't supported yet`);
           const target = ports.inside(dest, df.targetSubpath, df.name);
-          if (!target) return update(job, { status: 'error', error: `${df.name} would land outside the install folder` });
+          if (!target) return fail(`${df.name} would land outside the install folder`);
           fs.mkdirSync(path.dirname(target), { recursive: true });
           fs.copyFileSync(found, target);
           if (df.sha1) {
             const sum = await ports.sha1File(target);
             if (sum !== String(df.sha1).toLowerCase()) {
               fs.rmSync(target, { force: true });
-              return update(job, { status: 'error', error: `${df.name} doesn't match the catalog (sha1 ${sum}, expected ${df.sha1})` });
+              return fail(`${df.name} doesn't match the catalog (sha1 ${sum}, expected ${df.sha1})`);
             }
           }
         }
       } finally {
         if (staging) fs.rmSync(staging, { recursive: true, force: true });
       }
+      return true;
     }
 
-    // 3. Record it against the catalog item, keeping its library row
+    // sources: files, folders (dir/*) or whole archives straight from archive.org
+    // items, each checked against the entry's sha1 or else archive.org's own
+    async function sources() {
+      const list = data.sources || [];
+      if (!list.length) return true;
+      const listed = new Map();
+      for (const s of list) {
+        if (!listed.has(s.ia)) {
+          update(job, { status: 'downloading', step: 'data', percent: 0, file: s.ia });
+          const r = await archive.fileList(s.ia);
+          if (!r.ok) return fail(`Couldn't list ${s.ia} on archive.org (${r.error})`);
+          listed.set(s.ia, r.files);
+        }
+        const x = ports.expandSource(s, listed.get(s.ia));
+        if (x.error) { if (s.optional) continue; return fail(x.error); }
+        const root = ports.inside(dest, s.target || '');
+        if (!root) return fail(`${s.path} would land outside the install folder`);
+        for (const f of x.files) {
+          const to = ports.inside(root, f.rel);
+          if (!to) return fail(`${f.name} would land outside the install folder`);
+          update(job, { status: 'downloading', step: 'data', percent: 0, file: f.name });
+          const got = await download({ key: job.id, identifier: s.ia, url: archive.downloadUrl(s.ia, f.name), fileName: f.name, onProgress: progress });
+          if (job.status === 'cancelled') return false;
+          if (!got.ok) return fail(`${f.name}: ${got.error}`);
+          downloads.add(got.filePath);
+          const want = (x.single && s.sha1) || f.sha1;
+          if (want) {
+            update(job, { status: 'verifying' });
+            const sum = await ports.sha1File(got.filePath);
+            if (sum !== String(want).toLowerCase()) {
+              fs.rmSync(got.filePath, { force: true });
+              return fail(`${f.name} doesn't match ${x.single && s.sha1 ? 'the catalog' : 'archive.org'} (sha1 ${sum}, expected ${want})`);
+            }
+          }
+          if (s.extract && ports.ARCHIVE_EXT.test(f.name)) {
+            update(job, { status: 'extracting', percent: 100 });
+            const xr = await extractTo(got.filePath, root);
+            if (!xr.ok) return fail(xr.error);
+          } else {
+            fs.mkdirSync(path.dirname(to), { recursive: true });
+            fs.copyFileSync(got.filePath, to);
+          }
+        }
+      }
+      return true;
+    }
+
+    const order = data.base === 'data' ? [sources, dataFiles, binary] : [binary, dataFiles, sources];
+    for (const stage of order) if (!(await stage())) return;
+
+    // Record it against the catalog item, keeping its library row
     if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
     disk.unblockDirectory(dest, { platform, log });
     const exes = disk.findExes(dest);
