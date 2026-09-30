@@ -24,8 +24,12 @@ description = "Backend and frontend together in one process; prints the page URL
 run = "node scripts/dev.js"
 
 [tasks.ui]
-description = "The UI in a browser on 0.0.0.0:5180 from saved JSON (e2e fixtures, no network, no installs); --live for real data"
+description = "The UI in a browser on 0.0.0.0:5180 from the real data saved as JSON, no backend and no installs; --offline for the e2e fixtures"
 run = "node scripts/ui.js"
+
+[tasks.sandbox]
+description = "The real backend and UI with real installs, everything under ./sandbox/; --reset empties it"
+run = "node scripts/sandbox.js"
 
 [tasks.test]
 description = "Unit and API tests with the 80% coverage gate"

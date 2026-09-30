@@ -2,7 +2,7 @@
 /**
  * `mise run ui`: the launcher's UI in a browser, no Electron and no Windows.
  *
- *   node scripts/ui.js [--live] [--port 5180] [--host 0.0.0.0]
+ *   node scripts/ui.js [--offline] [--port 5180] [--host 0.0.0.0]
  *
  * Builds the web preview (scripts/preview/build.js) into preview-site/ and
  * serves it. The pages talk to scripts/preview/preview.js instead of a
@@ -11,9 +11,11 @@
  * shelves and cards render. Favourites and Add/Remove work for the tab;
  * installs, launching and folders answer 501.
  *
- * By default the JSON comes from the e2e fixtures, so nothing touches the
- * network. --live saves it from the real sources instead, as the Pages
- * preview does. It listens on 0.0.0.0 so a devcontainer's forwarded port
+ * By default the JSON is saved from the real sources, as the Pages preview
+ * does: the uploader walls, Quiver's catalogs, the collision catalog, and
+ * main's renames and SteamGridDB art. --offline uses the e2e fixtures
+ * instead, so nothing touches the network, and is what it falls back to when
+ * the real sources can't be reached. It listens on 0.0.0.0 so a devcontainer's forwarded port
  * reaches it; UI_PORT and UI_HOST change the defaults.
  */
 const fs   = require('fs');
@@ -30,9 +32,10 @@ const TYPES = {
 };
 
 function parseArgs(argv, env = process.env) {
-  const out = { live: false, port: Number(env.UI_PORT ?? 5180), host: env.UI_HOST || '0.0.0.0', out: OUT };
+  const out = { live: true, port: Number(env.UI_PORT ?? 5180), host: env.UI_HOST || '0.0.0.0', out: OUT };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--live') out.live = true;
+    else if (argv[i] === '--offline') out.live = false;
     else if (argv[i] === '--port') out.port = Number(argv[++i]);
     else if (argv[i] === '--host') out.host = argv[++i];
     else if (argv[i] === '--out') out.out = path.resolve(argv[++i]);
@@ -69,8 +72,16 @@ async function serve(dir, { port, host }) {
   };
 }
 
-async function start(opts, print = (l) => process.stdout.write(l)) {
-  const info = await build({ out: opts.out, fixtures: !opts.live });
+async function start(opts, print = (l) => process.stdout.write(l), { buildSite = build } = {}) {
+  let info;
+  try {
+    info = await buildSite({ out: opts.out, fixtures: !opts.live });
+  } catch (e) {
+    if (!opts.live) throw e;
+    // No network (or archive.org is down): still show something
+    print(`ui  couldn't load the real data (${e.message}); showing the offline fixtures\n`);
+    info = await buildSite({ out: opts.out, fixtures: true });
+  }
   const s = await serve(opts.out, opts);
   print(`ui  ${s.url}/new/  (${info.data} data: ${info.items} wall items, ${info.ports} ports)\n`);
   print(`    classic UI ${s.url}/index.html · no installs in this mode · Ctrl+C stops\n`);

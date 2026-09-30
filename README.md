@@ -106,7 +106,8 @@ To work on the app without Electron:
 | `mise run dev` | The backend and the frontend together, and prints the page URLs |
 | `mise run backend` | Only the backend, on `127.0.0.1:5170` |
 | `mise run frontend` | Only `src/frontend`, on `127.0.0.1:5173`, pointed at the backend task |
-| `mise run ui` | The UI alone from saved JSON on `0.0.0.0:5180`, no backend and no network (below) |
+| `mise run ui` | The UI alone on `0.0.0.0:5180`, from the real data saved as JSON, no backend and no installs (below) |
+| `mise run sandbox` | The backend and the UI with real installs, everything kept under `./sandbox/` (below) |
 
 Open the printed URL in a browser: `new/index.html` is the new interface and
 `index.html` the classic one. The backend keeps its data in `.launcher-data/`
@@ -127,14 +128,21 @@ once, every response the UIs ask for at start is saved as a file, and
 favorites, Add/Remove and settings work (kept for the tab); installs and
 launching answer 501. main's preview is rebuilt nightly.
 
-`mise run ui` is the same thing locally, for seeing the shelves and cards
-without Windows or Electron. It builds the preview from the e2e fixtures
-(uploader walls, Quiver lists joined to the collision catalog, and a small
-made-up library), so it needs no network, and serves it on `0.0.0.0:5180`:
-open the forwarded port in a devcontainer, or `http://127.0.0.1:5180/`.
-There are no installs in this mode. `mise run ui -- --live` saves the real
-sources instead, as the Pages build does; `UI_PORT` and `UI_HOST` change
-where it listens.
+`mise run ui` is the same thing locally: the whole UI in a browser, with no
+Windows, Electron or build. It saves the real sources as the Pages build does
+(uploader walls, Quiver's catalogs joined to the collision catalog, main's
+renames and SteamGridDB art) and serves them on `0.0.0.0:5180`: open the
+forwarded port in a devcontainer, or `http://127.0.0.1:5180/`. There are no
+installs in this mode. `mise run ui -- --offline` uses the e2e fixtures and a
+small made-up library instead, with no network; `UI_PORT` and `UI_HOST`
+change where it listens.
+
+`mise run sandbox` is the real thing in a throwaway folder: `mise run dev`
+with its data folder set to `./sandbox/`, so the library, settings, downloads
+and installed games all live there and nothing touches `%APPDATA%` or the
+desktop app's library. Installs download and unpack for real; launching needs
+the desktop app. `mise run sandbox -- --reset` starts again from an empty
+folder, and `--dir` picks another one.
 
 To see the app, run `npm start` on Windows. The Windows installer comes only
 from `release.yml` on `windows-latest`; nothing in the container builds it.
