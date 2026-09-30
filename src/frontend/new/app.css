@@ -410,6 +410,8 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 [data-ico=plus] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4.5v15M4.5 12h15'/%3E%3C/svg%3E"); }
 [data-ico=browse] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='2.5' y='7' width='19' height='11' rx='5.5'/%3E%3Cpath d='M7.5 10.5v4M5.5 12.5h4'/%3E%3Ccircle cx='15.5' cy='11.3' r='.6' fill='%23000'/%3E%3Ccircle cx='17.5' cy='13.7' r='.6' fill='%23000'/%3E%3C/svg%3E"); }
 [data-ico=box] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4.5' width='17' height='15' rx='2.5'/%3E%3Cpath d='M3.5 9h17M8 4.5 9.5 9M13 4.5 14.5 9'/%3E%3C/svg%3E"); }
+[data-ico=grid] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='6.5' height='6.5' rx='1.5'/%3E%3Crect x='13.5' y='4' width='6.5' height='6.5' rx='1.5'/%3E%3Crect x='4' y='13.5' width='6.5' height='6.5' rx='1.5'/%3E%3Crect x='13.5' y='13.5' width='6.5' height='6.5' rx='1.5'/%3E%3C/svg%3E"); }
+[data-ico=list] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6.5h11M9 12h11M9 17.5h11'/%3E%3Crect x='3.8' y='5.3' width='2.4' height='2.4' rx='.6'/%3E%3Crect x='3.8' y='10.8' width='2.4' height='2.4' rx='.6'/%3E%3Crect x='3.8' y='16.3' width='2.4' height='2.4' rx='.6'/%3E%3C/svg%3E"); }
 [data-ico=back] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m14.5 5-7 7 7 7'/%3E%3C/svg%3E"); }
 [data-ico=fwd] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 5 7 7-7 7'/%3E%3C/svg%3E"); }
 [data-ico=sidebar] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4.5' width='18' height='15' rx='3'/%3E%3Cpath d='M9.5 4.5v15' /%3E%3Cpath d='M5.6 8h1.6M5.6 11h1.6' /%3E%3C/svg%3E"); }
@@ -696,7 +698,10 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .md-select optgroup { background: #202020; }
 .md-select:focus { outline: 2px solid rgb(250 45 72 / 50%); }
 .album-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0 0; }
-.album-header .lib-controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.album-header .lib-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex: 1; }
+.seg.view-toggle { margin: 0 0 0 auto; height: 28px; width: 64px; background: rgb(255 255 255 / 8%); box-shadow: inset 0 0 0 .5px rgb(255 255 255 / 8%); }
+.seg.view-toggle button .ico { width: 16px; height: 16px; }
+.seg.view-toggle button:focus-visible { outline: 2px solid rgb(250 45 72 / 50%); }
 .album-header .pagination-container { flex-basis: 100%; justify-content: flex-start; margin: 6px 0 0; }
 .lib-count { color: var(--text2); font-size: 12px; margin: 16px 0 14px; }
 .chip { border-radius: 14px; font-size: 12px; background: rgb(255 255 255 / 8%); border: 0; }
@@ -768,7 +773,7 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 @media (max-width: 860px) {
   .sidebar { width: 64px; }
   .search { margin: 12px 8px 0; }
-  .seg, .me-text, .navgroup { display: none; }
+  .sidebar .seg, .me-text, .navgroup { display: none; }
   .navscroll { padding: 6px 8px; }
   .navitem { justify-content: center; padding: 0; font-size: 0; }
   .me { justify-content: center; padding: 0; }

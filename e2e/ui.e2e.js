@@ -234,10 +234,16 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
   await expect(page.locator('#lib-search')).toBeFocused();
   await page.locator('#lib-search').fill('');
 
-  await header.locator('[data-pref="viewAs"]').selectOption('list');
+  // View as: a two-button switch at the end of the controls row
+  const toggle = header.getByRole('group', { name: 'View as' });
+  await expect(toggle.getByRole('button', { name: 'Cover art' })).toHaveAttribute('aria-pressed', 'true');
+  await toggle.getByRole('button', { name: 'List' }).click();
   await expect(page.locator('#body .list-row').first()).toBeVisible();
   await expect(page.locator('#body .game-card')).toHaveCount(0);
-  await header.locator('[data-pref="viewAs"]').selectOption('covers');
+  await expect(header.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(header.getByRole('button', { name: 'Cover art' })).toHaveAttribute('aria-pressed', 'false');
+  await header.getByRole('button', { name: 'Cover art' }).click();
+  await expect(page.locator('#body .game-card').first()).toBeVisible();
 
   await header.locator('[data-pref="scroll"]').selectOption('paged');
   await expect(header.locator('.pagination-container')).toBeVisible();

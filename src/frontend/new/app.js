@@ -568,8 +568,8 @@ function viewHome() {
 }
 
 // ─── library pages (after Cider's library-albums page) ──────────────────────
-// A sticky header over the grid: a search box, then Sort by, Sort order, View
-// as (cover art or list) and Scroll (infinite or paged). The choices are kept
+// A sticky header over the grid: a search box, then Sort by, Sort order,
+// Scroll (infinite or paged) and a cover art / list switch. The choices are kept
 // per page. Sorting and search follow Cider's searchLibraryAlbums: numbers
 // compare as numbers, everything else case-insensitively, and the search
 // ignores punctuation.
@@ -623,6 +623,15 @@ function mdSelect(page, pref, label, options) {
     ${options.map(([v, text]) => `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</optgroup></select>`;
 }
 
+// View as cover art or a list: a two-button segmented switch, like the one
+// under the sidebar's search box, at the end of the controls row
+function viewToggle(page) {
+  const cur = libPrefs[page].viewAs;
+  const b = (v, ico, label) => `<button type="button" class="${cur === v ? 'on' : ''}" data-page="${page}" data-view-as="${v}"
+    aria-label="${label}" title="${label}" aria-pressed="${cur === v}"><i class="ico" data-ico="${ico}"></i></button>`;
+  return `<div class="seg view-toggle" role="group" aria-label="View as">${b('covers', 'grid', 'Cover art')}${b('list', 'list', 'List')}</div>`;
+}
+
 // The search box goes in the page title row (render adds it); the rest sit
 // in a plain row under the title, on the page itself
 let pageHasSearch = false;
@@ -632,8 +641,8 @@ function libraryHeader(page, sorts, { extra = '', total = 0 } = {}) {
     <div class="lib-controls">${extra}
       ${mdSelect(page, 'sort', 'Sort by', Object.entries(sorts).map(([k, [text]]) => [k, text]))}
       ${mdSelect(page, 'order', 'Sort order', [['asc', 'Ascending'], ['desc', 'Descending']])}
-      ${mdSelect(page, 'viewAs', 'View as', [['covers', 'Cover art'], ['list', 'List']])}
       ${mdSelect(page, 'scroll', 'Scroll', [['infinite', 'Infinite'], ['paged', `Paged (${PAGE_SIZE} per page)`]])}
+      ${viewToggle(page)}
     </div>${libPrefs[page].scroll === 'paged' ? pagination(total) : ''}</div>`;
 }
 
@@ -1954,6 +1963,7 @@ document.addEventListener('click', (e) => {
   }
   if (t.dataset.menu !== undefined) return runMenu(t);
   if (t.dataset.sub !== undefined) return;
+  if (t.dataset.viewAs) { setPref(t.dataset.page, 'viewAs', t.dataset.viewAs); return render(); }
   if (t.dataset.pageGo) { state.libPage = Number(t.dataset.pageGo); render(); $('#body').scrollTop = 0; return; }
   if (t.dataset.collapse) return toggleFold(t.dataset.collapse);
   if (t.dataset.action) return onAction(t.dataset.action, t);
