@@ -325,3 +325,37 @@ button { font: inherit; color: inherit; }
 .ctxmenu .sub { display: none; position: absolute; top: -6px; left: 100%; margin-left: 4px; }
 .ctxmenu.flip .sub { left: auto; right: 100%; margin: 0 4px 0 0; }
 .ctxmenu .has-sub:hover > .sub, .ctxmenu .has-sub:focus-within > .sub { display: block; }
+
+/* ---- game data (collision editor) and collision feeds ---- */
+.navitem.subtle:not(.active) { color: var(--text2); }
+.editor { max-width: 760px; }
+.editor .lede { color: var(--text2); line-height: 1.6; margin: 0; }
+.editor code { font-size: 11px; background: var(--fill); padding: 1px 5px; border-radius: 4px; }
+.editor .two, .source-card .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.editor .two label, .source-card label { display: block; font-weight: 600; font-size: 12px; margin: 8px 0 4px; }
+.editor .radio { display: flex; gap: 8px; align-items: center; font-weight: 400; margin: 6px 0; cursor: pointer; }
+.source-card { border: 1px solid var(--border); background: var(--fill); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
+.source-card input[type=text] {
+  width: 100%; background: rgba(0, 0, 0, .25); color: var(--text); border: 1px solid var(--border); border-radius: 10px;
+  padding: 9px 12px; font: 12px ui-monospace, "SF Mono", Consolas, monospace; outline: none;
+}
+.source-card input[type=text]:focus { border-color: var(--key); }
+.source-card .checks { display: flex; gap: 16px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.source-card .checks label { display: flex; gap: 6px; align-items: center; font-weight: 400; margin: 0; cursor: pointer; }
+.source-card .checks .sha { flex: 1; min-width: 220px; }
+.browser { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+#browse-list { max-height: 360px; overflow-y: auto; margin-top: 6px; }
+.pick {
+  display: flex; gap: 10px; align-items: center; width: 100%; text-align: left; border: 0; background: none; cursor: pointer;
+  padding: 6px 8px; border-radius: 7px; font: 12px ui-monospace, "SF Mono", Consolas, monospace;
+}
+.pick:hover { background: var(--fill2); }
+.pick .kind { flex: none; width: 34px; font: 700 9px -apple-system, "Segoe UI", sans-serif; letter-spacing: .8px; color: var(--text2); }
+.pick .meta { margin-left: auto; padding-left: 12px; color: var(--text2); white-space: nowrap; }
+.preview-row { border-left: 2px solid var(--ok); padding: 6px 10px; margin: 6px 0; line-height: 1.5; }
+.preview-row.warn { border-color: var(--warn); color: var(--warn); }
+.preview-row .meta, .feed-row .meta { color: var(--text2); font: 11px ui-monospace, "SF Mono", Consolas, monospace; margin-top: 3px; overflow-wrap: anywhere; }
+.feed-row { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.feed-row .grow { flex: 1; min-width: 0; }
+.feed-row .warn { color: var(--warn); }
+@media (max-width: 640px) { .editor .two, .source-card .two { grid-template-columns: 1fr; } }

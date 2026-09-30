@@ -175,7 +175,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await card.click({ button: 'right' });
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options›', 'Remove from Library', 'About›', 'Delete']);
+  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options›', 'Remove from Library', 'Game Data…', 'About›', 'Delete']);
   await menu.locator('.has-sub', { hasText: 'Launch Options' }).hover();
   await expect(menu.locator('[data-menu="choose-exe"]')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -191,6 +191,55 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeHidden();
   await expect(page.locator('#detail')).toContainText('Mario Kart 64');
   await page.keyboard.press('Escape');
+});
+
+test('Game data: add a GitHub repo, browse an archive.org item, pick a file and a folder, preview, save', async () => {
+  await page.locator('#nav-add-repo').click();
+  await expect(page.locator('#heading')).toHaveText('Add a GitHub repo');
+  await page.locator('#ed-repo').fill('someone/banjo-fork');
+  await page.locator('#ed-name').fill('Banjo Fork');
+
+  // Browse the item: bookkeeping files are hidden, folders come first
+  await page.locator('[data-src="0"][data-key="ia"]').fill('rk-e2e-romset');
+  await page.locator('[data-action="ed-browse"]').click();
+  await expect(page.locator('#browse-list .pick')).toHaveCount(6);
+  await expect(page.locator('#browse-list')).not.toContainText('_meta.xml');
+  await page.locator('#ed-filter').fill('banjo');
+  await expect(page.locator('#browse-list .pick')).toHaveCount(1);
+  await page.locator('#browse-list .pick').click();
+  await expect(page.locator('[data-src="0"][data-key="path"]')).toHaveValue('Nintendo 64/Banjo-Kazooie (USA).z64');
+  await expect(page.locator('[data-src="0"][data-key="sha1"]')).toHaveValue('1fe1632098865f639e22c11b9a81ee8f29c75d7a');
+
+  // A second source: a whole folder into textures/
+  await page.locator('[data-action="ed-add-source"]').click();
+  await page.locator('[data-src="1"][data-key="ia"]').fill('rk-e2e-romset');
+  await page.locator('[data-action="ed-browse"][data-i="1"]').click();
+  await page.locator('#browse-list .pick[data-path="Nintendo 64/Textures/*"]').click();
+  await page.locator('[data-src="1"][data-key="target"]').fill('textures');
+  await page.locator('[data-action="ed-preview"]').click();
+  await expect(page.locator('#ed-preview')).toContainText('Nintendo 64/Textures/bk-hd.png → textures/bk-hd.png');
+  await expect(page.locator('#ed-preview')).toContainText('16 MB');
+
+  await page.locator('#btn-save-collision').click();
+  await expect(page.locator('#detail')).toContainText('Banjo Fork');
+  await page.keyboard.press('Escape');
+  const saved = JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'catalogs', 'collisions.local.json'), 'utf8'));
+  expect(saved).toEqual([{
+    repository: 'someone/banjo-fork', name: 'Banjo Fork',
+    sources: [
+      { ia: 'rk-e2e-romset', path: 'Nintendo 64/Banjo-Kazooie (USA).z64', sha1: '1fe1632098865f639e22c11b9a81ee8f29c75d7a' },
+      { ia: 'rk-e2e-romset', path: 'Nintendo 64/Textures/*', target: 'textures' },
+    ],
+  }]);
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'Your ports' })).toBeVisible();
+
+  // A bad entry names its problems instead of saving
+  await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
+  await page.locator('.port-card', { hasText: 'Banjo Fork' }).click({ button: 'right' });
+  await page.locator('#ctxmenu [data-menu="collision"]').click();
+  await page.locator('[data-src="0"][data-key="target"]').fill('../escape');
+  await page.locator('#btn-save-collision').click();
+  await expect(page.locator('.editor .notice')).toContainText('sources[0].target must be a relative folder');
 });
 
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {
