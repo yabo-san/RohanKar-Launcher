@@ -439,16 +439,14 @@ body { font-family: "Pretendard Variable", -apple-system, BlinkMacSystemFont, "S
 .md-select optgroup { background: #2c2c2c; }
 .md-select:focus { outline: solid 1px var(--selected); }
 
-/* album-header: the sticky, blurred bar over a library page */
-.album-header {
-  position: sticky; top: -6px; z-index: 6; margin: 8px -24px 0; padding: 12px 24px;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
-  background: rgb(0 0 0 / 25%); backdrop-filter: blur(32px); -webkit-backdrop-filter: blur(32px);
-  border-bottom: 1px solid rgb(200 200 200 / 5%);
-}
-.album-header .search-input-container { flex: 1 1 280px; }
+/* library controls: Cider's sort and view selects, in a plain row under the
+   title (no bar behind them); the search box sits in the title row */
+.page-head .grow { flex: 1; }
+.page-head .reload-btn { margin-left: 0; }
+.page-head .search-input { width: 260px; flex: none; }
+.album-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 0; }
 .album-header .lib-controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.album-header .pagination-container { flex-basis: 100%; margin: 0; }
+.album-header .pagination-container { flex-basis: 100%; justify-content: flex-start; margin: 6px 0 0; }
 .lib-count { color: var(--text2); font-size: 12px; margin: 14px 0 12px; }
 
 /* pagination */
