@@ -538,35 +538,6 @@ function wallNotice(uploader = null) {
     <button class="btn" data-action="reload-wall">Try again</button></div>`;
 }
 
-function viewHome() {
-  const enabled = state.sources.filter(s => s.enabled !== false);
-  const ports = state.ports;
-  let html = wallNotice();
-
-  const newest = state.games.slice().sort(byNewest).slice(0, 24);
-  html += section('Newest on the Wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
-    { cls: 'row', seeAll: ['wall'] });
-
-  for (const s of enabled) {
-    const list = state.games.filter(g => (g._versions || [g]).some(v => v._uploader === s.uploader)).sort(byDownloads);
-    const failed = state.wall.failed.some(f => f.src.uploader === s.uploader);
-    if (failed) continue;
-    const body = list.length ? list.slice(0, 20).map(gameCard).join('') : state.wall.loading ? skeletons(8) : '';
-    if (!body) continue;
-    html += section(`Most Played from ${sourceName(s)}`, body, { count: list.length || null, cls: 'row', seeAll: ['uploader', s.uploader] });
-  }
-
-  for (const shelf of ports?.shelves || []) {
-    const items = ports.items.filter(i => i.shelf === shelf.id)
-      .sort((a, b) => (b.data.status === 'available') - (a.data.status === 'available'));
-    if (!items.length) continue;
-    html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
-      { count: items.length, sub: shelf.withData ? `${shelf.withData} with data` : '', cls: 'row ports', seeAll: ['shelf', shelf.id] });
-  }
-  if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
-  return html;
-}
-
 // ─── library pages (after Cider's library-albums page) ──────────────────────
 // A sticky header over the grid: a search box, then Sort by, Sort order, View
 // as (cover art or list) and Scroll (infinite or paged). The choices are kept
@@ -795,9 +766,10 @@ function viewLibrary() {
   return html;
 }
 
-// New, laid out like Cider's New page: a wide carousel of the hand-picked
+// Home, laid out like Cider's New page: a wide carousel of the hand-picked
 // games and ports (catalog/featured.json), then a compact list of what landed
-// most recently, this week's uploads and the ports new in the catalogs.
+// most recently, this week's uploads and the ports new in the catalogs, then
+// rows of each uploader's most played games and each shelf's ports.
 const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
 const blurbOf = (text) => {
   const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
@@ -843,12 +815,12 @@ function listItem(g) {
   </button>`;
 }
 
-function viewNew() {
+function viewHome() {
   let html = wallNotice();
   const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
-  if (!newest.length) return html + (state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>');
+  if (!newest.length) html += state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>';
 
-  const picks = resolvePicks();
+  const picks = newest.length ? resolvePicks() : [];
   if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
 
   const rest = newest.slice(0, 40);
@@ -860,9 +832,24 @@ function viewNew() {
 
   const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
   const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
-  // With nothing new in the catalogs, the ports row shows what they hold
-  const ports = newPorts.length ? newPorts : (state.ports?.items || []).slice(0, 24);
-  if (ports.length) html += section(newPorts.length ? 'New Ports' : 'Ports', ports.map(portCard).join(''), { cls: 'row squares ports', seeAll: newPorts.length ? ['updates'] : null });
+  if (newPorts.length) html += section('New Ports', newPorts.map(portCard).join(''), { cls: 'row squares ports', seeAll: ['updates'] });
+
+  // Then each uploader's most downloaded games and each shelf's ports
+  for (const s of state.sources.filter(x => x.enabled !== false)) {
+    if (state.wall.failed.some(f => f.src.uploader === s.uploader)) continue;
+    const list = state.games.filter(g => (g._versions || [g]).some(v => v._uploader === s.uploader)).sort(byDownloads);
+    if (!list.length) continue;
+    html += section(`Most Played from ${sourceName(s)}`, list.slice(0, 20).map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', s.uploader] });
+  }
+  const ports = state.ports;
+  for (const shelf of ports?.shelves || []) {
+    const items = ports.items.filter(i => i.shelf === shelf.id)
+      .sort((a, b) => (b.data.status === 'available') - (a.data.status === 'available'));
+    if (!items.length) continue;
+    html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
+      { sub: shelf.withData ? `${shelf.withData} with data` : '', cls: 'row squares ports', seeAll: ['shelf', shelf.id] });
+  }
+  if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
   return html;
 }
 
@@ -990,8 +977,8 @@ function viewSearch(q) {
 }
 
 // The round reload button at the right of the page title (Cider's reload-btn)
-const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data' };
+const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
+const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data' };
 
 function render() {
   const v = state.view;
@@ -999,7 +986,6 @@ function render() {
   pageHasSearch = false;
   let html;
   if (state.query) html = viewSearch(state.query);
-  else if (v.name === 'new') html = viewNew();
   else if (v.name === 'wall') html = viewWall(null);
   else if (v.name === 'uploader') html = viewWall(v.arg);
   else if (v.name === 'shelf') html = viewShelf(v.arg);

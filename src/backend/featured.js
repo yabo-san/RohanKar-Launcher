@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Featured picks: the hand-picked games and ports that lead the New page.
+ * Featured picks: the hand-picked games and ports that lead the Home page.
  * catalog/featured.json holds { picks: [{ identifier } | { repository }, ...] }
  * in display order; identifier is an archive.org item on the wall, repository
  * a port's GitHub owner/repo. An optional blurb replaces the item's own

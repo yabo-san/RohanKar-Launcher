@@ -114,7 +114,7 @@ function createApi(backend) {
     return item;
   };
 
-  // The hand-picked games and ports that lead the New page, in order
+  // The hand-picked games and ports that lead the Home page, in order
   route('GET', '/announcement', async () => ({ body: { announcement: await backend.getAnnouncement() } }));
   route('POST', '/announcement/dismiss', ({ body }) => {
     backend.dismissAnnouncement(requireString(requireObject(body).id, 'id'));
