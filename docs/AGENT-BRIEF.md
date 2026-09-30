@@ -98,6 +98,32 @@ A `mise run ui` task that serves `src/renderer/` from a static server with a stu
 shelves and cards render in a browser through the devcontainer's forwarded port. No installs in
 that mode.
 
+### Step 5b: User-added sources
+
+Comes before the Quiver import (6.4) in the order of things; 6.4 had already merged, so it landed
+after it. The full rules are in [USER-SOURCES.md](USER-SOURCES.md).
+
+- Default is the curated list only: our uploaders (`catalog/uploaders.json`) and `catalog/`.
+- A Settings toggle, **Allow additional sources**, off by default. Turning it on shows a Cider-style
+  modal (centered, dimmed backdrop, clear title, one primary and one secondary button) every time
+  it goes from off to on: title "Additional sources", body "Warning: we do not monitor additional
+  sources. Make sure you trust the repo or uploader before you add it.", buttons "I understand"
+  (turns it on) and "Cancel" (leaves it off).
+- `user.json`: a local file path in Settings (no URLs for now). Schema version 1 with three arrays in
+  the curated catalog's shapes: `collisions` (GitHub repo + archive.org data files), `archive`
+  (standalone archive.org downloads), `github` (standalone GitHub release binaries). sha1 is
+  optional per file.
+- Every other non-curated input sits behind the same toggle and badge: the user's own collisions,
+  feeds, and uploaders not on the curated list.
+- Rules: every card from an additional source shows "Your source · not reviewed", curated cards
+  never do; curated wins, and a user entry with a curated repository or identifier is ignored and
+  listed as a conflict in Settings; a sha1 is verified like curated entries, and without one the
+  hash is recorded on first install and a later change asks in the same modal style; user.json is
+  validated on load and each invalid entry is shown with why, never skipped silently; turning the
+  toggle off hides user entries and leaves installed files on disk.
+- Logic in the backend (`src/backend/`, the core), the renderer only renders. Tests with fixture
+  user.json files: valid, invalid, conflicting with curated.
+
 ### Step 6: Supersede Quiver
 
 This fork supersedes Quiver: users switch to it, and it does not integrate with Quiver. Quiver's

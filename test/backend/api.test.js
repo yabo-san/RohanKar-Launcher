@@ -76,7 +76,7 @@ test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (
 
 test('items: sources down is a 502 with the per-source errors', async (t) => {
   const { call, backend, fake } = await testApi(t);
-  backend.settings.save({ sources: [{ uploader: 'nobody@x' }] });
+  backend.settings.save({ allowAdditionalSources: true, sources: [{ uploader: 'nobody@x' }] });
   const r = await call('GET', '/items');
   assert.equal(r.status, 502);
   assert.equal(r.body.error, 'sources_failed');
@@ -427,6 +427,7 @@ test('collisions: yours (save, read, export, delete), feeds you subscribe to, an
     routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
     files: { 'my-data': [{ name: 'roms/a.z64', size: '3', sha1: 'a'.repeat(40) }, { name: 'roms/b/c.z64', size: '5' }, { name: 'Game.zip', size: '9' }] },
   } });
+  await call('PUT', '/settings', { allowAdditionalSources: true });
   const enc = encodeURIComponent;
 
   const entry = { name: 'My Port', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'my-data', path: 'Game.zip', extract: true }] };
@@ -481,6 +482,7 @@ test('feeds: uploaders from a feed wait to be trusted; your feed exports and imp
   const { call, fake } = await testApi(t, { state: {
     routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
   } });
+  await call('PUT', '/settings', { allowAdditionalSources: true });
   const mine = async () => (await call('GET', '/sources')).body.sources;
   const before = await mine();
 

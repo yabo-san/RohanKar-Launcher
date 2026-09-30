@@ -34,6 +34,15 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
   assert.ok(settings.catalogs.length > 0, 'catalogs subscribed, so the page does not try to');
   assert.ok(Object.keys(responses).some(k => /^GET \/items\/[^/]+\/cover$/.test(k)));
 
+  // Saved again with Allow additional sources on: user.json's entries, badged
+  const read = (k) => JSON.parse(fs.readFileSync(path.join(out, 'preview-data', responses[k].file), 'utf8'));
+  assert.equal(read('GET /user-sources').enabled, false);
+  assert.equal(read('ON GET /user-sources').enabled, true);
+  assert.equal(read('GET /items?shelf=wall').items.some(i => i.userSource), false);
+  assert.equal(read('ON GET /items?shelf=wall').items.find(i => i.id === 'rk-e2e-user-demo').userSource, true);
+  assert.ok(read('ON GET /catalogs').catalogs.some(c => c.id === 'local'));
+  assert.ok(responses['GET /items/rk-e2e-user-demo/cover'], 'covers for what only shows with it on');
+
   assert.match(fs.readFileSync(path.join(out, 'new', 'index.html'), 'utf8'), /<script src="\.\.\/preview\.js"><\/script>\s*<script src="\.\.\/api\.js">/);
   assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /<script src="preview\.js"><\/script>\s*<script src="api\.js">/);
   assert.ok(fs.existsSync(path.join(out, 'preview.js')));

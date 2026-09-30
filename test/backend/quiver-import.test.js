@@ -199,12 +199,14 @@ test('POST /library/import/quiver: preview, apply, "Your ports", errors', async 
   assert.deepEqual((await call('GET', '/library')).body.library, {}, 'a preview writes nothing');
 
   const done = await call('POST', '/library/import/quiver', { dir: root, apply: true });
-  assert.deepEqual(done.body.result, { added: 2, adopted: 4, ports: 3, unchanged: 0 });
+  assert.deepEqual(done.body.result, { added: 2, adopted: 4, ports: 3, unchanged: 0, needAdditionalSources: 3 });
   const lib = (await call('GET', '/library')).body.library;
   assert.equal(lib[`quiver:${cat}:fgsfdsfgs/perfect_dark`].install_dir, path.join(apps, 'PerfectDark'));
   assert.equal(lib['manual:Homebrew'].title, 'Homebrew Thing');
 
-  // The repositories no catalog lists are on "Your ports" now
+  // The repositories no catalog lists are on "Your ports", once additional sources are on
+  assert.equal((await call('GET', '/catalogs/local/items')).status, 404);
+  await call('PUT', '/settings', { allowAdditionalSources: true });
   const mine = (await call('GET', '/catalogs/local/items')).body.items.map(i => i.repository).sort();
   assert.deepEqual(mine, ['HarbourMasters/Shipwright', 'someone/half-installed', 'someone/obscure-port']);
   assert.equal(lib['quiver:local:harbourmasters/shipwright'].install_dir !== null, true);

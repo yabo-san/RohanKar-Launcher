@@ -251,8 +251,8 @@ The user's own collisions and the collision feeds they subscribe to. The schema 
 | `GET /collisions/export` | The user's feed: `{ schemaVersion: 1, collisions: [...], uploaders: [{ uploader, label }] }`, their own collisions and the uploaders they have on |
 | `POST /feed/import` | `{ text }`, a feed file's contents: valid collisions become the user's own, its uploaders join their list (turned on). Answers `{ collisions, rejected, uploaders }`; not a feed is `400 bad_feed` |
 | `POST /sources/trust` | `{ uploader, label? }` adds one uploader to the user's list, turned on (or turns it back on). Answers `{ sources }` |
-| `GET /collisions/:repo` | The collision in effect: `{ origin: "local" \| "feed" \| "bundled", entry, feed? }`, `404` if none |
-| `PUT /collisions/:repo` | Saves one (replacing the user's own for that repo); `400 bad_collision` lists every problem |
+| `GET /collisions/:repo` | The collision in effect: `{ origin: "bundled" \| "local" \| "user.json" \| "feed", entry, feed? }`, `404` if none. Curated (bundled) wins; the others count only while additional sources are allowed |
+| `PUT /collisions/:repo` | Saves one (replacing the user's own for that repo); `400 bad_collision` lists every problem; `409 curated` for a repository the bundled collisions have |
 | `DELETE /collisions/:repo` | Removes the user's own (`204`), `404` if there wasn't one |
 | `POST /collisions/preview` | `{ sources }` → per source, the archive.org files it places (`to`) and `bytes`, or `error` |
 | `GET /collision-feeds` | Subscribed feeds with `entries`, `rejected`, `uploaders` (each with `trusted`: on in the user's list), `fetchedAt`, `error` |
@@ -416,6 +416,12 @@ extracts it, copies each `dataFiles` entry to its `targetSubpath` and checks its
 "verifying"`). A mismatch fails the job and names the file; `optional` files may be missing.
 Unknown ports answer `404`, ports that can't start (no repository) `422`.
 
+From an additional source ([USER-SOURCES.md](USER-SOURCES.md)), a downloaded file (an archive.org
+upload, or a port's release asset) is checked against the sha1 its entry gives, or else against the
+sha1 recorded on its first install. A changed file fails the job with `hashChange: { file, before,
+after, itemId }` before anything is extracted; `POST /installs` again with `acceptHashChange: true`
+installs it and records the new sha1.
+
 ```sh
 curl -X POST -d '{"id":"rk-e2e-halo-ce"}' http://127.0.0.1:7777/v1/installs
 # {"installs":[{"id":"b7e1…","itemId":"rk-e2e-halo-ce","file":"rk-e2e-halo-ce.zip","status":"downloading","percent":0,…}]}
@@ -470,10 +476,24 @@ curl http://127.0.0.1:7777/v1/sources
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
+`allowAdditionalSources` must be `true` or `false`; `userSourcesFile` must be a full local path
+(`null` or empty clears it; a URL is `400`).
 
 ```sh
 curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://127.0.0.1:7777/v1/settings
 # {"sources":[…],"installPath":"D:\\Games","deleteAfterInstall":true}
+```
+
+### `GET /user-sources`
+
+Additional sources ([USER-SOURCES.md](USER-SOURCES.md)): whether they're allowed, and user.json as
+read. `file` and `error` (a file that can't be used at all), `invalid` (each bad entry: `section`,
+`index`, `key`, `errors`), `entries` (valid entries per section) and, while allowed, `conflicts`:
+user entries ignored because the curated list has them (`from`, `key`, `reason`).
+
+```sh
+curl http://127.0.0.1:7777/v1/user-sources
+# {"enabled":true,"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"collisions":1,"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a curated uploader has it"}]}
 ```
 
 ### `POST /export/playnite`

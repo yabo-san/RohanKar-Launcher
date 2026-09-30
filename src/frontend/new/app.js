@@ -31,6 +31,7 @@ const state = {
   downloads: new Map(), // identifier -> { percent, status }
   editor: null,         // the collision being edited (viewCollision)
   collisionFeeds: null, // subscribed collision feeds, for Settings
+  userSources: null,    // GET /user-sources: user.json's state, invalid entries, conflicts
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -56,6 +57,46 @@ function toast(msg, ms = 4000) {
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => t.classList.add('hidden'), ms);
 }
+
+// A Cider-style modal: centered window over a dimmed backdrop, a clear title,
+// one primary and one secondary button. Resolves true for the primary button;
+// Escape, the backdrop and the secondary button resolve false.
+function modal({ title, body, primary, secondary = 'Cancel' }) {
+  document.getElementById('modal')?.remove();
+  const el = document.createElement('div');
+  el.id = 'modal';
+  el.className = 'modal-fullscreen';
+  el.innerHTML = `<div class="modal-window" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
+    <div class="modal-header"><div class="modal-title" id="modal-title">${esc(title)}</div></div>
+    <div class="modal-content" id="modal-body">${esc(body)}</div>
+    <div class="modal-footer"><button class="md-btn" data-modal="0">${esc(secondary)}</button><button class="md-btn md-btn-primary" data-modal="1">${esc(primary)}</button></div>
+  </div>`;
+  const back = document.activeElement;
+  document.body.appendChild(el);
+  // The safe answer has focus, so Enter never accepts a warning by accident
+  el.querySelector('[data-modal="0"]').focus();
+  return new Promise(resolve => {
+    const done = (ok) => { el.remove(); document.removeEventListener('keydown', key, true); back?.focus?.(); resolve(ok); };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); }
+      if (e.key === 'Tab') {
+        const b = [...el.querySelectorAll('button')];
+        const i = b.indexOf(document.activeElement);
+        e.preventDefault();
+        b[(i + (e.shiftKey ? b.length - 1 : 1)) % b.length].focus();
+      }
+    };
+    document.addEventListener('keydown', key, true);
+    el.addEventListener('click', (e) => {
+      if (e.target === el) return done(false);
+      const b = e.target.closest('[data-modal]');
+      if (b) done(b.dataset.modal === '1');
+    });
+  });
+}
+
+// The badge on anything from an additional source
+const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
 function stripHtml(html) {
   const d = document.createElement('div');
@@ -121,6 +162,7 @@ function versionFromItem(v) {
     _sourceLabel: v.source?.label || v.source?.uploader,
     _override:    v.override || undefined,
     _newer:       v.newer || null,
+    _user:        !!v.user,
   };
 }
 
@@ -134,7 +176,7 @@ async function loadWall({ refresh = false } = {}) {
     const { items, errors } = await api.getItems(refresh ? { shelf: 'wall', refresh: 'true' } : { shelf: 'wall' });
     state.games = items.map(item => {
       const versions = item.versions.map(versionFromItem);
-      for (const v of versions) v._versions = versions;
+      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource });
       state.versions.push(...versions);
       return versions[0];
     });
@@ -183,6 +225,7 @@ function portFromItem(it, cat) {
     filesToAdd:         Array.isArray(e.filesToAdd) ? e.filesToAdd : [],
     shelf:              cat.id,
     shelfName:          cat.shelf,
+    userSource:         !!it.userSource,
     catalogUrl:         cat.url,
     // A collision with no data (a repo added on its own) has nothing to fetch
     data: it.data && (it.data.iaIdentifier || it.data.contentUrl || it.data.dataFiles?.length || it.data.sources?.length)
@@ -344,6 +387,7 @@ function gameCard(g) {
     </div>
     <div class="title">${esc(title)}</div>
     <div class="sub">${esc([g._sourceLabel, g.addeddate ? new Date(g.addeddate).getFullYear() : ''].filter(Boolean).join(' · '))}</div>
+    ${g._userItem ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -359,6 +403,7 @@ function portCard(p) {
       <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
+    ${p.userSource ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -848,7 +893,8 @@ function viewSettings() {
   const s = state.settings;
   return `<div class="form">
     <div class="field"><label for="setting-sources">Uploaders</label>
-      <div class="hint">One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.</div>
+      <div class="hint">One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.
+        Uploaders that aren't on our curated list load only while additional sources are allowed.</div>
       <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources))}</textarea></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
@@ -861,7 +907,12 @@ function viewSettings() {
       <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : ''}`).join(' · ') : 'Loading…'}
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
-    <div class="field"><label>Feeds</label>
+    <div class="field" id="additional"><label class="switch-row" for="setting-additional">
+        <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, ports and game data you add,
+          feeds you subscribe to and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
+        <input type="checkbox" class="switch" id="setting-additional" role="switch" ${s.allowAdditionalSources ? 'checked' : ''}></label>
+      <div id="additional-body">${additionalHtml()}</div></div>
+    <div class="field additional-only${s.allowAdditionalSources ? '' : ' hidden'}"><label>Feeds</label>
       <div class="hint">A feed is someone's curation: ports from GitHub releases with the archive.org data they need, and the archive.org uploaders they trust.
         Subscribe by URL. A feed's ports show up right away (yours win over a feed's, and a feed's over the bundled ones); its uploaders wait until you trust each one.</div>
       <div id="feed-list">${feedListHtml()}</div>
@@ -888,7 +939,9 @@ function quiverImportHtml() {
   if (result) {
     const said = [[result.adopted, 'adopted'], [result.added, 'added'], [result.ports, 'new on Your ports'], [result.unchanged, 'already here']]
       .filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join(', ');
-    return `<div class="hint import-done">Imported from ${esc(plan.root)}: ${esc(said || 'nothing to change')}.</div>
+    const hidden = result.needAdditionalSources
+      ? ` ${result.needAdditionalSources} of your ports come from repos no catalog lists: they show on Your ports once additional sources are allowed.` : '';
+    return `<div class="hint import-done">Imported from ${esc(plan.root)}: ${esc(said || 'nothing to change')}.${esc(hidden)}</div>
       <button class="btn" data-action="quiver-import-cancel">Done</button>`;
   }
   const todo = plan.apps.filter(a => !a.alreadyInstalled && !(a.inLibrary && !a.installed));
@@ -1084,13 +1137,14 @@ function gameDetail(d) {
       <button class="x" data-close aria-label="Close">&#10005;</button>
       <div class="titles"><h2>${esc(title)}</h2><div class="by">${v._manual ? 'Your folder' : `archive.org · ${esc(v._sourceLabel || '')}`}${v.addeddate ? ` · ${fmtDate(v.addeddate)}` : ''}</div></div></div>
     <div class="d-body">
+      ${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
       <div class="actions">${actions}</div>
       ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exes}
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}
       ${versions.length > 1 ? `<div class="h3">${versions.length} versions</div><div class="versions">${versions.map(x => `
-        <button class="version ${x === v ? 'on' : ''}" data-version="${esc(x.identifier)}"><span class="who">${esc(x._sourceLabel)}</span>
+        <button class="version ${x === v ? 'on' : ''}" data-version="${esc(x.identifier)}"><span class="who">${esc(x._sourceLabel)}</span>${x._user ? USER_BADGE : ''}
         ${state.library[x.identifier]?.install_dir ? '<span class="tag installed" style="position:static">INSTALLED</span>' : ''}
         ${newerOf === x ? '<span class="tag installed update" style="position:static">NEWER</span>' : ''}
         <span class="meta">${esc(fmtDate(x.addeddate))} · ${fmtNum(x.downloads)} downloads</span></button>`).join('')}</div>` : ''}
@@ -1139,6 +1193,7 @@ function portDetail(d) {
       <button class="x" data-close aria-label="Close">&#10005;</button>
       <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${esc(p.project)} · Source: Quiver / ${esc(p.shelfName)}</div></div></div>
     <div class="d-body">
+      ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
       <div class="actions">
         <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
         ${portActions(p)}
@@ -1161,7 +1216,19 @@ function portDetail(d) {
 
 // ─── actions ─────────────────────────────────────────────────────────────────
 
-async function installGame(v) {
+// A file from the user's own source changed since its first install: ask,
+// and install again accepting it only on the primary button
+function confirmHashChange(job, name) {
+  const c = job.hashChange;
+  return modal({
+    title: 'File changed',
+    body: `${c.file} from ${name} is not the file you installed before (sha1 ${c.before.slice(0, 12)}… is now ${c.after.slice(0, 12)}…). `
+      + 'It may be an update, or someone may have replaced it. We do not monitor additional sources. Only continue if you trust the source.',
+    primary: 'Install anyway',
+  });
+}
+
+async function installGame(v, { acceptHashChange = false } = {}) {
   const identifier = v.identifier;
   if (state.downloads.has(identifier)) return;
   const list = await api.fetchFileList({ identifier });
@@ -1178,18 +1245,20 @@ async function installGame(v) {
   const job = await api.install({
     identifier,
     fileName:     file.name,
+    acceptHashChange,
     onStart:      (j) => { dl.jobId = j.id; },
     onProgress:   (percent) => showProgress(identifier, percent),
     onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
   });
   state.downloads.delete(identifier);
   await reloadLibrary();
+  render();
+  if (job.hashChange) return (await confirmHashChange(job, getTitle(v))) && installGame(v, { acceptHashChange: true });
   if (job.status === 'done') toast(`${getTitle(v)} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`);
-  render();
 }
 
-async function installPort(p) {
+async function installPort(p, { acceptHashChange = false } = {}) {
   if (state.downloads.has(p.id)) return;
   const dl = { percent: 0, status: 'downloading', step: 'binary', jobId: null, name: p.name, open: ['port', p.id] };
   state.downloads.set(p.id, dl);
@@ -1197,15 +1266,17 @@ async function installPort(p) {
   renderNowbar();
   const job = await api.install({
     identifier:   p.id,
+    acceptHashChange,
     onStart:      (j) => { dl.jobId = j.id; },
     onProgress:   (percent, j) => { Object.assign(dl, { percent, status: 'downloading', step: j.step }); renderDetail(); renderNowbar(); },
     onExtracting: (j) => { Object.assign(dl, { percent: 100, status: j.status, step: j.step }); renderDetail(); renderNowbar(); },
   });
   state.downloads.delete(p.id);
   await reloadLibrary();
+  render();
+  if (job.hashChange) return (await confirmHashChange(job, p.name)) && installPort(p, { acceptHashChange: true });
   if (job.status === 'done') toast(`${p.name} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
-  render();
 }
 
 async function playGame(v) {
@@ -1276,7 +1347,10 @@ function viewCollision() {
   if (!ed) return '<p class="empty">Loading…</p>';
   if (ed.loading) return '<p class="empty">Loading the collision…</p>';
   const from = ed.origin === 'local' ? 'Yours.' : ed.origin === 'feed' ? `From the ${esc(ed.feed?.name || '')} feed. Saving makes a copy of your own that wins over it.`
-    : ed.origin === 'bundled' ? 'Bundled with the launcher. Saving makes a copy of your own that wins over it.' : 'Nothing yet.';
+    : ed.origin === 'user.json' ? 'From your user.json. Saving makes a copy of your own that wins over it.'
+    : ed.origin === 'bundled' ? 'Curated: bundled with the launcher. The curated list wins, so it can\'t be changed here.' : 'Nothing yet.';
+  const off = !state.settings.allowAdditionalSources;
+  const locked = off || ed.origin === 'bundled';
   const legacy = ed.extra.dataFiles?.length
     ? `<div class="hint">Also picks ${esc(ed.extra.dataFiles.map(d => d.name).join(', '))} out of ${esc(decodeURIComponent(String(ed.extra.contentUrl || '').split('/').pop()))} (the first version of the schema). That part is kept as it is.</div>` : '';
   return `<div class="form editor">
@@ -1299,9 +1373,11 @@ function viewCollision() {
       ${ed.sources.map((x, i) => sourceCard(x, i)).join('')}
       <button class="btn" data-action="ed-add-source">Add a source</button></div>
     ${ed.errors ? `<div class="notice warn"><div class="grow">${ed.errors.map(esc).join('<br>')}</div></div>` : ''}
+    ${off ? `<div class="notice" id="ed-off"><div class="grow">Game data you add is an additional source. Turn on Allow additional sources in Settings to save it.</div>
+      <button class="btn" data-view="settings">Settings</button></div>` : ''}
     <div class="field actions">
       <button class="btn" data-action="ed-preview">Preview</button>
-      <button class="btn primary" id="btn-save-collision" data-action="ed-save">Save</button>
+      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>Save</button>
       ${ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
       <button class="btn" data-action="ed-export">Copy my collisions as a feed</button></div>
     <div id="ed-preview">${previewHtml()}</div>
@@ -1465,6 +1541,7 @@ document.addEventListener('input', (e) => {
   if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
 });
 document.addEventListener('change', (e) => {
+  if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
   if (e.target.id === 'feed-file' && e.target.files[0]) {
     importFeedFile(e.target.files[0]);
     e.target.value = '';
@@ -1477,6 +1554,67 @@ document.addEventListener('change', (e) => {
   if (t.name === 'ed-base') ed.base = t.value;
   if (t.dataset.src !== undefined && t.type === 'checkbox') ed.sources[Number(t.dataset.src)][t.dataset.key] = t.checked;
 });
+
+// ─── Additional sources (Settings) ───────────────────────────────────────────
+
+const SECTION_NAME = { collisions: 'collisions', archive: 'archive', github: 'github' };
+function additionalHtml() {
+  if (!state.settings.allowAdditionalSources) return '';
+  const u = state.userSources;
+  if (!u) { loadUserSources(); return '<div class="hint">Loading…</div>'; }
+  const n = (k) => u.entries[k];
+  const status = !u.file ? '<div class="hint">No user.json yet. Pick a file on this computer: <code>{ "schemaVersion": 1, "collisions": [], "archive": [], "github": [] }</code>.</div>'
+    : u.error ? `<div class="notice warn" id="user-file-error"><div class="grow">${esc(u.error)}</div></div>`
+    : `<div class="hint" id="user-file-counts">Loaded: ${n('collisions')} collision${n('collisions') === 1 ? '' : 's'}, ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}.</div>`;
+  const invalid = u.invalid.length ? `<div class="notice warn user-list" id="user-invalid"><div class="grow"><b>${u.invalid.length} invalid entr${u.invalid.length === 1 ? 'y' : 'ies'}, not loaded:</b>
+      ${u.invalid.map(i => `<div>${esc(SECTION_NAME[i.section])}[${i.index}]${i.key ? ` ${esc(i.key)}` : ''}: ${esc(i.errors.join('; '))}</div>`).join('')}</div></div>` : '';
+  const conflicts = u.conflicts.length ? `<div class="notice user-list" id="user-conflicts"><div class="grow"><b>Ignored, the curated list already has ${u.conflicts.length === 1 ? 'it' : 'them'}:</b>
+      ${u.conflicts.map(c => `<div>${esc(c.key)} (${esc(c.from)}): ${esc(c.reason)}</div>`).join('')}</div></div>` : '';
+  return `<label for="setting-user-file" class="sublabel">user.json</label>
+    <div class="inline"><input type="text" id="setting-user-file" value="${esc(u.file || '')}" placeholder="Full path to user.json on this computer" spellcheck="false">
+      <button class="btn" data-action="user-file-save">Load</button></div>
+    ${status}${invalid}${conflicts}`;
+}
+
+async function loadUserSources() {
+  state.userSources = await api.getUserSources().catch(() => null) || { enabled: false, file: null, error: null, invalid: [], entries: {}, conflicts: [] };
+  const el = $('#additional-body');
+  if (el) el.innerHTML = additionalHtml();
+}
+
+// The toggle: turning it on asks first, every time; off hides what's from
+// additional sources (installed files stay on disk)
+async function setAdditional(on) {
+  const box = $('#setting-additional');
+  if (on && !(await modal({
+    title: 'Additional sources',
+    body: 'Warning: we do not monitor additional sources. Make sure you trust the repo or uploader before you add it.',
+    primary: 'I understand',
+  }))) {
+    if (box) box.checked = false;
+    return;
+  }
+  const r = await api.saveSettings({ allowAdditionalSources: on });
+  if (r && r.ok === false) { if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
+  state.settings = { ...state.settings, allowAdditionalSources: on };
+  document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !on));
+  state.userSources = null;
+  const el = $('#additional-body');
+  if (el) el.innerHTML = additionalHtml();
+  toast(on ? 'Additional sources are on. What comes from them is marked Your source · not reviewed.' : 'Additional sources are off. Only the curated list shows; installed games stay on disk.');
+  loadWall({ refresh: true });
+  loadPorts();
+}
+
+async function saveUserFile() {
+  const file = $('#setting-user-file').value.trim();
+  const r = await api.saveSettings({ userSourcesFile: file || null });
+  if (r && r.ok === false) return toast(r.body?.detail || `Couldn't save: HTTP ${r.status}`, 6000);
+  state.settings = { ...state.settings, userSourcesFile: file || null };
+  await loadUserSources();
+  loadWall({ refresh: true });
+  loadPorts();
+}
 
 // ─── Collision feeds (Settings) ───────────────────────────────────────────────
 
@@ -1727,6 +1865,7 @@ async function onAction(action, el) {
     case 'ed-delete': return editorDelete();
     case 'ed-export': return editorExport();
     case 'feed-add': return addCollisionFeed();
+    case 'user-file-save': return saveUserFile();
     case 'feed-trust': return trustUploader(el);
     case 'feed-refresh': await api.refreshCollisionFeed(el.dataset.id); return loadCollisionFeeds();
     case 'feed-remove': await api.removeCollisionFeed(el.dataset.id); await loadCollisionFeeds(); return loadPorts();
@@ -1975,6 +2114,7 @@ async function showAnnouncement() {
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
+  document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
   state.sources = (await api.getSources()).sources;
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();

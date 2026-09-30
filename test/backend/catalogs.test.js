@@ -136,17 +136,27 @@ test('every collision joins a catalog entry on repository', () => {
   assert.deepEqual(orphans.map(c => c.repository), []);
 });
 
-test("the user's own collisions win over the bundled ones and fill a Your ports shelf", async (t) => {
-  const { fake, catalogs } = await setup(t);
+test('curated collisions win over your own, which need additional sources and fill a Your ports shelf', async (t) => {
+  const { fake, catalogs, settings } = await setup(t);
   const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
   assert.equal(catalogs.collision('banjorecomp/banjorecomp').origin, 'bundled');
 
-  // Override a bundled one: base "data", a whole archive unpacked first
+  // A bundled repository can't be overridden: curated wins
   const mine = { repository: 'BanjoRecomp/BanjoRecomp', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'banjo-full', path: 'Banjo.zip', extract: true }] };
-  assert.deepEqual(catalogs.saveCollision(mine), { ok: true, entry: mine });
-  assert.equal(catalogs.collision('BANJORECOMP/banjorecomp').origin, 'local');
-  const banjo = catalogs.items().find(i => i.repository === 'BanjoRecomp/BanjoRecomp');
-  assert.deepEqual([banjo.data.base, banjo.data.binaryTarget, banjo.data.iaIdentifier, banjo.data.sources.length], ['data', 'bin', 'banjo-full', 1]);
+  const refused = catalogs.saveCollision(mine);
+  assert.equal(refused.ok, false);
+  assert.match(refused.errors[0], /curated collisions/);
+  assert.equal(catalogs.isCurated('banjorecomp/BANJORECOMP'), true);
+  assert.equal(catalogs.items().find(i => i.repository === 'BanjoRecomp/BanjoRecomp').userSource, false);
+
+  // Your own for a repo a shelf lists binds its data, but only with additional sources on
+  assert.equal(catalogs.saveCollision({ repository: 'HarbourMasters/Shipwright', sources: [{ ia: 'soh-data', path: 'oot.z64' }] }).ok, true);
+  assert.equal(catalogs.collision('harbourmasters/shipwright'), null);
+  assert.equal(catalogs.items().find(i => i.repository === 'HarbourMasters/Shipwright').data, null);
+  settings.save({ allowAdditionalSources: true });
+  assert.equal(catalogs.collision('harbourmasters/shipwright').origin, 'local');
+  const soh = catalogs.items().find(i => i.repository === 'HarbourMasters/Shipwright');
+  assert.deepEqual([soh.data.iaIdentifier, soh.userSource], ['soh-data', true]);
   assert.equal(catalogs.list().length, 1, 'a repo a catalog lists makes no shelf of its own');
 
   // A repository no catalog lists becomes a port on "Your ports"

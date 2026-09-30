@@ -16,6 +16,9 @@
  *   compact list of the latest uploads, newest first.
  * - The announcement from announcement.json shows until dismissed.
  * - Your own app: a folder the library makes, fills and launches.
+ * - Additional sources: the Settings toggle asks in a modal every time it goes
+ *   on; user.json's entries show with the Your source badge, curated ones
+ *   never; a file that changed since its first install asks before installing.
  * - Settings imports a Quiver library (apps.json + Apps/) without downloading.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
@@ -250,6 +253,94 @@ test('Sidebar groups fold and stay folded', async () => {
   await expect(page.locator('#nav-uploaders')).toBeHidden();
   await page.locator('[data-collapse="uploaders"]').click();
   await expect(page.locator('#nav-uploaders')).toBeVisible();
+});
+
+test('Additional sources: the toggle asks every time, user.json cards carry the badge, a changed file asks first', async () => {
+  const modal = page.locator('#modal');
+  const toggle = page.locator('#setting-additional');
+  await page.locator('#btn-settings').click();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator('#nav-add-repo')).toBeHidden();
+
+  // Cancel leaves it off
+  await toggle.click();
+  await expect(modal.locator('.modal-title')).toHaveText('Additional sources');
+  await expect(modal.locator('.modal-content')).toHaveText('Warning: we do not monitor additional sources. Make sure you trust the repo or uploader before you add it.');
+  await expect(modal.locator('.md-btn-primary')).toHaveText('I understand');
+  await expect(modal.locator('.md-btn:not(.md-btn-primary)')).toHaveText('Cancel');
+  await modal.locator('.md-btn', { hasText: 'Cancel' }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(toggle).not.toBeChecked();
+  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8'));
+  expect(saved().allowAdditionalSources).toBeUndefined();
+
+  // Escape is Cancel too; I understand turns it on
+  await toggle.click();
+  await page.keyboard.press('Escape');
+  await expect(toggle).not.toBeChecked();
+  await toggle.click();
+  await modal.locator('.md-btn-primary').click();
+  await expect(toggle).toBeChecked();
+  expect(saved().allowAdditionalSources).toBe(true);
+  await expect(page.locator('#nav-add-repo')).toBeVisible();
+
+  // user.json: loaded, its invalid entry and its conflict with the curated list listed
+  const file = path.join(stack.dataDir, 'user.json');
+  fs.copyFileSync(path.join(__dirname, 'fixtures', 'user.json'), file);
+  await page.locator('#setting-user-file').fill('https://example.com/user.json');
+  await page.locator('[data-action="user-file-save"]').click();
+  await expect(page.locator('#toast')).toContainText('not a URL');
+  await page.locator('#setting-user-file').fill(file);
+  await page.locator('[data-action="user-file-save"]').click();
+  await expect(page.locator('#user-file-counts')).toHaveText('Loaded: 0 collisions, 2 archive.org downloads, 1 GitHub release.');
+  await expect(page.locator('#user-invalid')).toContainText('github[1] not a repo: repository must be owner/repo');
+  await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a curated uploader has it');
+
+  // The badge: on your cards, never on curated ones
+  await page.locator('[data-view="wall"]').click();
+  const demo = page.locator('.game-card', { hasText: 'User Demo' });
+  await expect(demo.locator('.user-badge')).toHaveText('Your source · not reviewed');
+  await expect(page.locator('.game-card', { hasText: 'Halo' }).locator('.user-badge')).toHaveCount(0);
+  await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
+  await expect(page.locator('.port-card', { hasText: 'User Tool' }).locator('.user-badge')).toHaveText('Your source · not reviewed');
+  await expect(page.locator('.port-card .user-badge')).toHaveCount(await page.locator('.port-card').count());
+  await page.locator('[data-view="shelf"][data-arg]', { hasText: 'Test ports' }).click();
+  await expect(page.locator('.port-card', { hasText: 'Perfect Dark' }).locator('.user-badge')).toHaveCount(0);
+
+  // First install pins the file; a different file later asks before installing
+  await page.locator('[data-view="wall"]').click();
+  await demo.click();
+  await expect(page.locator('#detail .user-note')).toContainText('from a source you added');
+  await page.locator('#btn-download').click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const pinsFile = path.join(stack.dataDir, 'pins.json');
+  const pins = JSON.parse(fs.readFileSync(pinsFile, 'utf8'));
+  expect(Object.keys(pins)).toEqual(['archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip']);
+  fs.writeFileSync(pinsFile, JSON.stringify({ 'archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip': 'f'.repeat(40) }));
+  // Reinstall over it, as an update would (deleting needs the desktop app)
+  const reinstall = page.evaluate(() => installGame(state.detail.version)); // eslint-disable-line no-undef
+  await expect(modal.locator('.modal-title')).toHaveText('File changed');
+  await expect(modal.locator('.modal-content')).toContainText('rk-e2e-user-demo.zip from User Demo is not the file you installed before');
+  await modal.locator('.md-btn-primary', { hasText: 'Install anyway' }).click();
+  await reinstall;
+  await expect(page.locator('#toast')).toContainText('User Demo is installed.');
+  expect(JSON.parse(fs.readFileSync(pinsFile, 'utf8'))).toEqual(pins);
+  await page.keyboard.press('Escape');
+
+  // Off hides them and keeps the install; on again asks again
+  await page.locator('#btn-settings').click();
+  await toggle.click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.locator('#nav-add-repo')).toBeHidden();
+  await page.locator('[data-view="wall"]').click();
+  await expect(page.locator('.game-card', { hasText: 'Halo' })).toBeVisible();
+  await expect(page.locator('.game-card', { hasText: 'User Demo' })).toHaveCount(0);
+  expect((await page.evaluate(() => api.getLibrary()))['rk-e2e-user-demo'].install_dir).toBeTruthy();
+  await page.locator('#btn-settings').click();
+  await toggle.click();
+  await expect(modal.locator('.modal-title')).toHaveText('Additional sources');
+  await modal.locator('.md-btn-primary').click();
+  await expect(toggle).toBeChecked();
 });
 
 test('Game data: add a GitHub repo, browse an archive.org item, pick a file and a folder, preview, save', async () => {

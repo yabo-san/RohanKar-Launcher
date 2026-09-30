@@ -58,15 +58,22 @@ function createArchive({ base = 'https://archive.org', log = () => {}, sleep = (
     return docs;
   }
 
+  // Item metadata and file list. { ok, metadata, files, error? }
+  async function item(identifier) {
+    const r = await get(`${base}/metadata/${encodeURIComponent(identifier)}`, 'metadata');
+    if (r.status === 0) return { ok: false, error: r.error, metadata: {}, files: [] };
+    try {
+      const json = JSON.parse(r.body);
+      return { ok: true, metadata: json.metadata || {}, files: json.files || [] };
+    } catch (e) {
+      return { ok: false, error: e.message, metadata: {}, files: [] };
+    }
+  }
+
   // Item file list. { ok, files, error? }
   async function fileList(identifier) {
-    const r = await get(`${base}/metadata/${encodeURIComponent(identifier)}`, 'metadata');
-    if (r.status === 0) return { ok: false, error: r.error, files: [] };
-    try {
-      return { ok: true, files: JSON.parse(r.body).files || [] };
-    } catch (e) {
-      return { ok: false, error: e.message, files: [] };
-    }
+    const { metadata, ...r } = await item(identifier); // eslint-disable-line no-unused-vars
+    return r;
   }
 
   async function reviews(identifier) {
@@ -78,7 +85,7 @@ function createArchive({ base = 'https://archive.org', log = () => {}, sleep = (
     `${base}/download/${identifier}/${fileName.split('/').map(encodeURIComponent).join('/')}`;
   const thumbUrl = (identifier) => `${base}/services/img/${identifier}`;
 
-  return { base, search, searchWithRetry, fetchSource, fileList, reviews, downloadUrl, thumbUrl };
+  return { base, search, searchWithRetry, fetchSource, item, fileList, reviews, downloadUrl, thumbUrl };
 }
 
 // Archives a user can install from an item's file list: zip/7z/rar, or a

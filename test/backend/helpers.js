@@ -63,12 +63,14 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2048, 
 //   search:   { [uploader]: docs[] }             (defaults to e2e/fixtures/search.json)
 //   failures: { [uploader]: [status, ...] }      statuses served before the real answer
 //   files:    { [identifier]: [{ name, size }] } (default: one <id>.zip)
+//   metadata: { [identifier]: { title, ... } }   an item's metadata block (default: none)
 //   zips:     { [identifier/file]: Buffer }      (default: an exe-bearing zip)
 //   routes:   { [pathname]: (req, res) => void } overrides anything above
 async function fakeArchive(t, state = {}) {
   state.search   ??= SEARCH;
   state.failures ??= {};
   state.files    ??= {};
+  state.metadata ??= {};
   state.zips     ??= {};
   state.routes   ??= {};
   state.requests = [];
@@ -98,7 +100,7 @@ async function fakeArchive(t, state = {}) {
 
     const [, kind, id, ...rest] = url.pathname.split('/').map(decodeURIComponent);
     if (kind === 'metadata' && rest[0] === 'reviews') return json(200, { result: [{ reviewtitle: 'Works', stars: '5' }] });
-    if (kind === 'metadata') return json(200, { files: state.files[id] || [{ name: `${id}.zip`, size: '100' }] });
+    if (kind === 'metadata') return json(200, { ...(state.metadata[id] ? { metadata: state.metadata[id] } : {}), files: state.files[id] || [{ name: `${id}.zip`, size: '100' }] });
     if (kind === 'download') {
       const zip = state.zips[`${id}/${rest.join('/')}`] || makeZip({ 'Game/game.exe': 'MZ', 'readme.txt': 'hello' });
       res.writeHead(200, { 'content-type': 'application/zip', 'content-length': zip.length });

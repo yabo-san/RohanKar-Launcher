@@ -14,7 +14,10 @@
  * By default the backend reads the live sources (archive.org, the Quiver
  * lists, the catalogs on main), as the app does. --fixtures uses the e2e
  * fixtures instead (no network), and gives the preview a small made-up
- * library (seedLibrary) so the Library page has something on it.
+ * library (seedLibrary) so the Library page has something on it, and
+ * e2e/fixtures/user.json as the user's own sources: what the UIs load is
+ * saved a second time with Allow additional sources on (keys prefixed
+ * "ON "), and preview.js answers from those while the toggle is on.
  */
 const fs   = require('fs');
 const os   = require('os');
@@ -98,9 +101,18 @@ function seedLibrary(backend, wallItems) {
   if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
 }
 
+// What the UIs load that depends on Allow additional sources
+const ADDITIONAL_PREFIX = 'ON ';
+
 async function build(opts) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-preview-'));
-  fs.writeFileSync(path.join(dataDir, 'settings.json'), '{}');
+  let settings = {};
+  if (opts.fixtures) {
+    const userFile = path.join(dataDir, 'user.json');
+    fs.copyFileSync(path.join(ROOT, 'e2e', 'fixtures', 'user.json'), userFile);
+    settings = { userSourcesFile: userFile };
+  }
+  fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings));
   const { backend, catalogUrl, close } = await startBackend(opts, dataDir);
 
   fs.rmSync(opts.out, { recursive: true, force: true });
@@ -110,7 +122,7 @@ async function build(opts) {
 
   const manifest = {};
   let n = 0;
-  async function save(p, query = {}, { binary = false } = {}) {
+  async function save(p, query = {}, { binary = false, prefix = '' } = {}) {
     const q = new URLSearchParams(query);
     const res = await fetch(`${backend.url}${p}${q.size ? `?${q}` : ''}`, { headers: { Authorization: `Bearer ${backend.token}` } });
     const type = res.headers.get('content-type') || 'application/octet-stream';
@@ -118,7 +130,7 @@ async function build(opts) {
     const ext = binary ? (/png/.test(type) ? '.png' : /webp/.test(type) ? '.webp' : /jpe?g/.test(type) ? '.jpg' : '.bin') : '.json';
     const file = `r${++n}${ext}`;
     fs.writeFileSync(path.join(dataOut, file), body);
-    manifest[key(p, query)] = { file, status: res.status, type };
+    manifest[prefix + key(p, query)] = { file, status: res.status, type };
     return binary || !body.length ? null : JSON.parse(body);
   }
 
@@ -142,14 +154,28 @@ async function build(opts) {
     if (opts.fixtures) seedLibrary(backend.backend, wall.items);
     await save('/library');
     await save('/collections');
-    const catalogs = (await save('/catalogs'))?.catalogs || [];
-    for (const c of catalogs) {
-      await save(`/catalogs/${encodeURIComponent(c.id)}/items`);
-      await save(`/catalogs/${encodeURIComponent(c.id)}/review`);
+    await save('/user-sources');
+    const shelves = async (prefix) => {
+      const list = (await save('/catalogs', {}, { prefix }))?.catalogs || [];
+      for (const c of list) {
+        await save(`/catalogs/${encodeURIComponent(c.id)}/items`, {}, { prefix });
+        await save(`/catalogs/${encodeURIComponent(c.id)}/review`, {}, { prefix });
+      }
+      return list;
+    };
+    const catalogs = await shelves('');
+
+    // The same with additional sources on (user.json), for the toggle
+    let more = [];
+    if (opts.fixtures) {
+      backend.backend.settings.save({ allowAdditionalSources: true });
+      more = (await save('/items', { shelf: 'wall' }, { prefix: ADDITIONAL_PREFIX }))?.items || [];
+      await save('/user-sources', {}, { prefix: ADDITIONAL_PREFIX });
+      await shelves(ADDITIONAL_PREFIX);
     }
 
     // Covers and file lists: each version of each wall item
-    const ids = [...new Set((wall?.items || []).flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
+    const ids = [...new Set([...(wall?.items || []), ...more].flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
     await pool(ids, 6, async (id) => {
       const enc = encodeURIComponent(id);
       await save(`/items/${enc}/cover`, {}, { binary: true });
@@ -191,4 +217,4 @@ if (require.main === module) {
   build(parseArgs(process.argv.slice(2))).catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, key, quiverLists, seedLibrary };
+module.exports = { build, key, quiverLists, seedLibrary, ADDITIONAL_PREFIX };
