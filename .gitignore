@@ -11,3 +11,4 @@ scripts/box-art/*.csv
 __pycache__/
 scripts/box-art/batch.md
 scripts/box-art/candidates.csv
+preview-site/

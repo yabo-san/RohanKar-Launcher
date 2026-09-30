@@ -5,10 +5,10 @@ const globals = require('globals');
 // Baseline: rules the existing code fails are switched off per file group so
 // CI starts green. Remove an override once the code it covers is fixed.
 module.exports = [
-  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/'] },
+  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/', 'preview-site/'] },
   js.configs.recommended,
   {
-    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
+    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'scripts/preview/build.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
@@ -43,6 +43,11 @@ module.exports = [
     languageOptions: {
       globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly' },
     },
+  },
+  {
+    // The web preview's API stand-in, a plain script loaded before api.js
+    files: ['scripts/preview/preview.js'],
+    languageOptions: { sourceType: 'script', globals: globals.browser },
   },
   {
     // module.exports is guarded by typeof, for the node:test suite

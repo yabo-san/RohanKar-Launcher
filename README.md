@@ -114,6 +114,20 @@ and uses the token `dev`, so the URLs stay the same across restarts
 change that). Folder pickers, the Recycle Bin, Add to Steam and the updater
 need the desktop app and answer 501 here. The API is in [docs/API.md](docs/API.md).
 
+### Web preview
+
+Both interfaces run in a browser on GitHub Pages, no install needed:
+[main](https://yabo-san.github.io/RohanKar-Launcher/preview/new/), and each PR
+that touches the app gets its own under `preview/pr-<number>/new/`, linked in a
+PR comment and removed when the PR closes. `.github/workflows/preview.yml`
+builds it with `scripts/preview/build.js`: the backend loads the live sources
+once, every response the UIs ask for at start is saved as a file, and
+`scripts/preview/preview.js` answers the API from those files. Browsing,
+favorites, Add/Remove and settings work (kept for the tab); installs and
+launching answer 501. main's preview is rebuilt nightly. Locally,
+`node scripts/preview/build.js --fixtures` builds one from the e2e fixtures
+into `preview-site/`; serve that folder with any static server.
+
 To see the app, run `npm start` on Windows. The Windows installer comes only
 from `release.yml` on `windows-latest`; nothing in the container builds it.
 
