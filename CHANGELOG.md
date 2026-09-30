@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.13](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.12...v1.6.0-fork.13) (2026-09-30)
+
+
+### Features
+
+* mise run ui shows the UI in a browser from saved JSON ([02a5091](https://github.com/yabo-san/RohanKar-Launcher/commit/02a509134f8e703d59cb9d827da2afc8e56416fa))
+* your own apps in the library, and announcements ([39e5f18](https://github.com/yabo-san/RohanKar-Launcher/commit/39e5f18be09f6f1c179f28a0fd79176e04af830e))
+
 ## [1.6.0-fork.12](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.11...v1.6.0-fork.12) (2026-09-30)
 
 
