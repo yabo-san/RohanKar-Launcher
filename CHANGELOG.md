@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.10](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.9...v1.6.0-fork.10) (2026-09-30)
+
+
+### Features
+
+* right-click menu on port cards ([781aeb0](https://github.com/yabo-san/RohanKar-Launcher/commit/781aeb041b7dbb3b68bb28d5962902be0fdba415))
+* right-click menu on port cards, after Quiver's ([1b8e996](https://github.com/yabo-san/RohanKar-Launcher/commit/1b8e99682de478e4f399d1eb39cdfa110da6c8bb))
+
 ## [1.6.0-fork.9](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.8...v1.6.0-fork.9) (2026-09-29)
 
 
