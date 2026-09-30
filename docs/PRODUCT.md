@@ -6,7 +6,7 @@ One launcher, two kinds of shelf, one install button.
 
 The default view is a scrollable wall of everything the curated archive.org uploaders have posted:
 PC games, cover art, one card per title, a version picker when two uploaders have the same game.
-That is the RohanKar half, working today.
+That is the archive.org half, working today.
 
 Next to it, a Ports area: shelves named Nintendo, PlayStation, Xbox, Other, pulled from Quiver's
 community catalogs. Each shelf lists open-source ports and recompilations. You browse a shelf, hit

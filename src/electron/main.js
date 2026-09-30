@@ -100,7 +100,7 @@ function startBackend() {
       backendExited = true;
       reject(new Error(`the backend exited (code ${code}) before it was ready`));
       if (!quitting) {
-        dialog.showErrorBox('RohanKar Launcher', `The launcher's backend stopped unexpectedly (code ${code}).`);
+        dialog.showErrorBox('y4bo', `The launcher's backend stopped unexpectedly (code ${code}).`);
         app.quit();
       }
     });
