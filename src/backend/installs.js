@@ -291,8 +291,15 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       update(job, { status: 'extracting', percent: 100 });
       fs.mkdirSync(binDest, { recursive: true });
       if (ports.ARCHIVE_EXT.test(bin.filePath)) {
-        const x = await extractTo(bin.filePath, binDest);
-        if (!x.ok) return fail(x.error);
+        // Unpacked beside the download first: a release that is one folder
+        // (pd-x86_64-windows/) lays down that folder's contents, so the data
+        // stages next to the exe, unless the entry says keepReleaseFolder
+        const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
+        fs.rmSync(staging, { recursive: true, force: true });
+        const x = await extractTo(bin.filePath, staging);
+        if (!x.ok) { fs.rmSync(staging, { recursive: true, force: true }); return fail(x.error); }
+        fs.cpSync(data.keepReleaseFolder ? staging : ports.releaseRoot(staging), binDest, { recursive: true, force: true });
+        fs.rmSync(staging, { recursive: true, force: true });
       } else {
         fs.copyFileSync(bin.filePath, path.join(binDest, path.basename(bin.filePath)));
       }
@@ -441,8 +448,10 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     // Record it against the catalog item, keeping its library row
     if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
     disk.unblockDirectory(dest, { platform, log });
+    // The collision's exe when it names one (Perfect Dark ships one per region)
+    const named = data.exe && ports.inside(binDest, data.exe);
     const exes = disk.findExes(dest);
-    const exePath = exes.length === 1 ? exes[0] : null;
+    const exePath = named && fs.existsSync(named) ? named : exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     update(job, { status: 'done', step: null, installDir: dest, exePath });
   }

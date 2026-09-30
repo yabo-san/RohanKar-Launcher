@@ -93,6 +93,14 @@ function inside(root, ...rel) {
   return p === path.resolve(root) || p.startsWith(path.resolve(root) + path.sep) ? p : null;
 }
 
+// A release archive that holds one folder and nothing else (Perfect Dark's
+// pd-x86_64-windows/) is that folder's contents: returns the folder to copy
+// from, dir itself otherwise
+function releaseRoot(dir) {
+  const entries = fs.readdirSync(dir, { withFileTypes: true });
+  return entries.length === 1 && entries[0].isDirectory() ? path.join(dir, entries[0].name) : dir;
+}
+
 // ─── Data sources (docs/COLLISIONS.md) ───────────────────────────────────────
 
 // archive.org's own bookkeeping files, never game data
@@ -136,6 +144,8 @@ function validateCollision(c) {
   }
   if (c.base != null && !['binary', 'data'].includes(c.base)) errs.push('base must be "binary" or "data"');
   if (c.binaryTarget != null && !safeRel(c.binaryTarget)) errs.push('binaryTarget must be a relative folder');
+  if (c.exe != null && !(typeof c.exe === 'string' && /\.exe$/i.test(c.exe) && safeRel(c.exe))) errs.push('exe must be a relative path to an .exe');
+  if (c.keepReleaseFolder != null && typeof c.keepReleaseFolder !== 'boolean') errs.push('keepReleaseFolder must be true or false');
   if (c.sources != null && !Array.isArray(c.sources)) errs.push('sources must be an array');
   (Array.isArray(c.sources) ? c.sources : []).forEach((s, i) => {
     const at = `sources[${i}]`;
@@ -154,6 +164,6 @@ function validateCollision(c) {
 }
 
 module.exports = {
-  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, ARCHIVE_EXT,
+  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, ARCHIVE_EXT,
   expandSource, isGlob, validateCollision, safeRel,
 };

@@ -39,6 +39,7 @@
     "ingest": "place-file",
     "assetPattern": "(?i)x86_64-windows",
     "folderName": "perfect-dark-pc-port.perfect_dark",
+    "exe": "pd.x86_64.exe",
     "dataFiles": [
       {
         "name": "pd.ntsc-final.z64",

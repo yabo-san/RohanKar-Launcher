@@ -6,7 +6,7 @@
  *
  *   node scripts/live-port.js [owner/repo ...] [--keep]
  *
- * For each repository in catalog/collisions.json (default: Perfect Dark) it
+ * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
  * installs the port into a temp folder with the same install engine the app
  * uses, and lists what landed. Exits 1 if any install fails.
@@ -21,7 +21,7 @@ const { createLibrary } = require('../src/backend/library');
 const { getText } = require('../src/backend/net');
 
 const ROOT = path.join(__dirname, '..');
-const DEFAULT = ['perfect-dark-pc-port/perfect_dark'];
+const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
 
 function parseArgs(argv) {
   const repos = argv.filter(a => !a.startsWith('--'));

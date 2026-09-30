@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const { parseArgs, itemFor } = require('../scripts/live-port');
 
 test('live-port: Perfect Dark by default, repos and --keep from the command line', () => {
-  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark'], keep: false });
+  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false });
   assert.deepEqual(parseArgs(['a/b', '--keep', 'c/d']), { repos: ['a/b', 'c/d'], keep: true });
 });
 

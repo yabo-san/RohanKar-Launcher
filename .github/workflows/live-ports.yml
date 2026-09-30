@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
     inputs:
       repos:
-        description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark)'
+        description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark and Dusklight)'
         required: false
 
 permissions:
