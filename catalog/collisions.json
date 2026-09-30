@@ -55,6 +55,7 @@
     "ingest": "place-file",
     "assetPattern": "(?i)win32-x86_64",
     "folderName": "TwilitRealm.dusk",
+    "exe": "dusklight.exe",
     "dataFiles": [
       {
         "name": "Legend of Zelda, The - Twilight Princess (USA).ciso",
