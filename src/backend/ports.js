@@ -101,9 +101,6 @@ function inside(root, ...rel) {
   return p === path.resolve(root) || p.startsWith(path.resolve(root) + path.sep) ? p : null;
 }
 
-// A release archive that holds one folder and nothing else (Perfect Dark's
-// pd-x86_64-windows/) is that folder's contents: returns the folder to copy
-// from, dir itself otherwise
 // The n biggest files under dir, as paths relative to it, to say what an
 // archive holds when the file a collision names isn't there
 function largestFiles(dir, n) {
@@ -119,6 +116,9 @@ function largestFiles(dir, n) {
   return out.sort((a, b) => b[0] - a[0]).slice(0, n).map(([, rel]) => rel);
 }
 
+// A release archive that holds one folder and nothing else (Perfect Dark's
+// pd-x86_64-windows/) is that folder's contents: returns the folder to copy
+// from, dir itself otherwise
 function releaseRoot(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   return entries.length === 1 && entries[0].isDirectory() ? path.join(dir, entries[0].name) : dir;
@@ -191,7 +191,25 @@ function validateCollision(c) {
   return errs;
 }
 
+// N64 dumps come in three byte orders, told apart by the header's first word.
+// Recomps read the big-endian .z64; sets like N64TOSEC ship byteswapped .n64
+const N64_ORDERS = { '80371240': 'z64', '37804012': 'v64', '40123780': 'n64' };
+
+function n64Order(buf) {
+  return buf.length >= 4 ? N64_ORDERS[buf.readUInt32BE(0).toString(16)] || null : null;
+}
+
+// Rewrites an N64 ROM as .z64 in place; returns the order it had (null when
+// it isn't an N64 ROM, which is left as is)
+function toZ64(file) {
+  const buf = fs.readFileSync(file);
+  const order = n64Order(buf);
+  if (order === 'v64' && buf.length % 2 === 0) fs.writeFileSync(file, buf.swap16());
+  else if (order === 'n64' && buf.length % 4 === 0) fs.writeFileSync(file, buf.swap32());
+  return order;
+}
+
 module.exports = {
-  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, largestFiles, assetPatternFor, ARCHIVE_EXT,
+  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, largestFiles, assetPatternFor, n64Order, toZ64, ARCHIVE_EXT,
   expandSource, isGlob, validateCollision, safeRel,
 };

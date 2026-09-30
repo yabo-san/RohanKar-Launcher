@@ -460,6 +460,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
               if (!biggest) return fail(`${f.name} is empty`);
               fs.mkdirSync(path.dirname(to), { recursive: true });
               fs.copyFileSync(path.join(staging, biggest), to);
+              if (/\.z64$/i.test(to)) ports.toZ64(to); // TOSEC's .n64 is byteswapped
             } finally {
               fs.rmSync(staging, { recursive: true, force: true });
             }
@@ -470,6 +471,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
           } else {
             fs.mkdirSync(path.dirname(to), { recursive: true });
             fs.copyFileSync(got.filePath, to);
+            if (/\.z64$/i.test(to)) ports.toZ64(to);
           }
         }
       }

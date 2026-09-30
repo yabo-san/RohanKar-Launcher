@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('fs');
 const path   = require('path');
+const os     = require('os');
 const crypto = require('crypto');
 const ports  = require('../../src/backend/ports');
 const { createInstalls } = require('../../src/backend/installs');
@@ -322,7 +323,9 @@ test('base "binary": one file and a folder placed beside the release, checked ag
 
 test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as` to what the port expects', async (t) => {
   const { dir, installs, item, state } = await setup(t, { bin: PD_REAL() });
-  const romZip = makeZip({ 'Perfect Dark (USA) (Rev A).z64': 'TOSECROM', 'readme.txt': 'hi' });
+  // TOSEC's dump is a byteswapped .n64, as the real one is; the port reads a big-endian .z64
+  const z64 = Buffer.from('80371240' + Buffer.from('PERFECT DARK TOSEC').toString('hex'), 'hex');
+  const romZip = makeZip({ 'Perfect Dark (USA) (Rev A).n64': Buffer.from(z64).swap16(), 'readme.txt': 'hi' });
   state.files['N64TOSEC'] = [{ name: 'Perfect Dark (USA) (Rev A).zip', source: 'original', size: String(romZip.length), sha1: sha1(romZip) }];
   state.routes['/download/N64TOSEC/Perfect%20Dark%20(USA)%20(Rev%20A).zip'] = (req, res) => { res.writeHead(200); res.end(romZip); };
   const source = { ia: 'N64TOSEC', path: 'Perfect Dark (USA) (Rev A).zip', target: 'data', extract: true, as: 'pd.ntsc-final.z64' };
@@ -332,11 +335,29 @@ test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as
   const job = installs.get(r.jobs[0].id);
   const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
   assert.deepEqual([job.status, job.error, job.exePath], ['done', null, path.join(dest, 'pd.x86_64.exe')]);
-  assert.equal(fs.readFileSync(path.join(dest, 'data', 'pd.ntsc-final.z64'), 'utf8'), 'TOSECROM');
+  assert.deepEqual(fs.readFileSync(path.join(dest, 'data', 'pd.ntsc-final.z64')), z64);
   assert.deepEqual(fs.readdirSync(path.join(dest, 'data')).sort(), ['pd.ntsc-final.z64', 'put_your_rom_here.txt'], 'no readme, no staging left');
 
   assert.deepEqual(ports.validateCollision({ repository: 'o/pd', sources: [{ ia: 'i', path: 'x/*', as: 'a.z64' }, { ia: 'i', path: 'x.zip', as: 'data/a.z64' }] }), [
     'sources[0].as only applies to a single file', 'sources[1].as must be a file name',
   ]);
   assert.equal(ports.expandSource({ ia: 'i', path: 'roms/bk.z64', as: 'baserom.z64' }, IA_FILES).files[0].rel, 'baserom.z64');
+});
+
+test('an N64 ROM in any byte order becomes a .z64; other files are left as they are', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-z64-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const z64 = Buffer.from('8037124000000000a1b2c3d4', 'hex');
+  const write = (name, buf) => { const p = path.join(dir, name); fs.writeFileSync(p, buf); return p; };
+  const cases = [['a.z64', Buffer.from(z64), 'z64'], ['b.v64', Buffer.from(z64).swap16(), 'v64'], ['c.n64', Buffer.from(z64).swap32(), 'n64']];
+  for (const [name, buf, order] of cases) {
+    const p = write(name, buf);
+    assert.equal(ports.n64Order(buf), order);
+    assert.equal(ports.toZ64(p), order);
+    assert.deepEqual(fs.readFileSync(p), z64, name);
+  }
+  const text = write('readme.z64', 'not a rom');
+  assert.equal(ports.toZ64(text), null);
+  assert.equal(fs.readFileSync(text, 'utf8'), 'not a rom');
+  assert.equal(ports.n64Order(Buffer.alloc(2)), null);
 });

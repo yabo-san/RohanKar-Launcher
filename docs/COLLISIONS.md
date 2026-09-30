@@ -89,7 +89,7 @@ one file out of it.
 | `extract` | `true` unpacks a zip/7z/rar into `target` instead of copying the archive itself. Default `false`. |
 | `sha1` | For a single file: the sha1 it must have. Without it, archive.org's own sha1 from the item's file list is checked. Folder sources are always checked against archive.org's. |
 | `optional` | `true` skips the source when the item doesn't have it, instead of failing. |
-| `as` | For a single file: the name it lands under, e.g. the `pd.ntsc-final.z64` a port expects. With `extract`, the archive's one file (its biggest, past any readme) lands under that name: a ROM set like N64TOSEC ships one zip per ROM, named its own way. |
+| `as` | For a single file: the name it lands under, e.g. the `pd.ntsc-final.z64` a port expects. With `extract`, the archive's one file (its biggest, past any readme) lands under that name: a ROM set like N64TOSEC ships one zip per ROM, named its own way. A name ending in `.z64` gets a big-endian ROM: N64TOSEC's byteswapped `.n64` dumps are turned around, since recomps read `.z64`. |
 
 Paths never climb out of the install folder: `..`, drive letters and leading slashes are refused.
 
