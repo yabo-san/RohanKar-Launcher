@@ -13,7 +13,8 @@
  *
  * By default the backend reads the live sources (archive.org, the Quiver
  * lists, the catalogs on main), as the app does. --fixtures uses the e2e
- * fixtures instead (no network).
+ * fixtures instead (no network), and gives the preview a small made-up
+ * library (seedLibrary) so the Library page has something on it.
  */
 const fs   = require('fs');
 const os   = require('os');
@@ -77,6 +78,26 @@ async function startBackend({ fixtures }, dataDir) {
   return { backend, catalogUrl: (_, file) => `${f.base}/quiver/${file}`, close: async () => { await backend.stop(); await f.close(); } };
 }
 
+// A made-up library for the fixtures preview: two wall games installed (one
+// a favourite), the first port of each catalog added, and a collection.
+// Nothing is on disk; the paths only have to look real.
+function seedLibrary(backend, wallItems) {
+  const { library, catalogs } = backend;
+  wallItems.slice(0, 2).forEach((it, i) => {
+    const id = it.versions?.[0]?.id || it.id;
+    library.adoptInstall(id, `C:\\Games\\${id}`, `C:\\Games\\${id}\\game.exe`);
+    if (i === 0) library.setFavorite(id, true);
+  });
+  const seen = new Set();
+  for (const it of catalogs.items()) {
+    if (seen.has(it.source.catalog)) continue;
+    seen.add(it.source.catalog);
+    library.add(it.id, it.source.url);
+  }
+  const c = library.createCollection('Weekend');
+  if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
+}
+
 async function build(opts) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-preview-'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), '{}');
@@ -112,14 +133,15 @@ async function build(opts) {
     await save('/settings');
     await save('/sources');
     await save('/featured');
-    await save('/library');
-    await save('/collections');
     await save('/os/updater');
     await save('/os/open-item');
     const wall = await save('/items', { shelf: 'wall' });
     for (const e of wall?.errors || []) console.warn(`source ${e.label || e.source}: ${e.error}`);
     // Better no new preview than an empty wall over the last good one
     if (!wall?.items?.length) throw new Error('the wall is empty: every source failed');
+    if (opts.fixtures) seedLibrary(backend.backend, wall.items);
+    await save('/library');
+    await save('/collections');
     const catalogs = (await save('/catalogs'))?.catalogs || [];
     for (const c of catalogs) {
       await save(`/catalogs/${encodeURIComponent(c.id)}/items`);
@@ -169,4 +191,4 @@ if (require.main === module) {
   build(parseArgs(process.argv.slice(2))).catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, key, quiverLists };
+module.exports = { build, key, quiverLists, seedLibrary };

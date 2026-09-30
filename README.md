@@ -106,6 +106,7 @@ To work on the app without Electron:
 | `mise run dev` | The backend and the frontend together, and prints the page URLs |
 | `mise run backend` | Only the backend, on `127.0.0.1:5170` |
 | `mise run frontend` | Only `src/frontend`, on `127.0.0.1:5173`, pointed at the backend task |
+| `mise run ui` | The UI alone from saved JSON on `0.0.0.0:5180`, no backend and no network (below) |
 
 Open the printed URL in a browser: `new/index.html` is the new interface and
 `index.html` the classic one. The backend keeps its data in `.launcher-data/`
@@ -124,9 +125,16 @@ builds it with `scripts/preview/build.js`: the backend loads the live sources
 once, every response the UIs ask for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
 favorites, Add/Remove and settings work (kept for the tab); installs and
-launching answer 501. main's preview is rebuilt nightly. Locally,
-`node scripts/preview/build.js --fixtures` builds one from the e2e fixtures
-into `preview-site/`; serve that folder with any static server.
+launching answer 501. main's preview is rebuilt nightly.
+
+`mise run ui` is the same thing locally, for seeing the shelves and cards
+without Windows or Electron. It builds the preview from the e2e fixtures
+(uploader walls, Quiver lists joined to the collision catalog, and a small
+made-up library), so it needs no network, and serves it on `0.0.0.0:5180`:
+open the forwarded port in a devcontainer, or `http://127.0.0.1:5180/`.
+There are no installs in this mode. `mise run ui -- --live` saves the real
+sources instead, as the Pages build does; `UI_PORT` and `UI_HOST` change
+where it listens.
 
 To see the app, run `npm start` on Windows. The Windows installer comes only
 from `release.yml` on `windows-latest`; nothing in the container builds it.
