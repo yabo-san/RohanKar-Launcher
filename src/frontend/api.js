@@ -168,6 +168,22 @@ const api = (() => {
       return r.ok || r.status === 404 ? { ok: true } : failure(r);
     },
 
+    fetchItemFiles: async (identifier) => {
+      const r = await call('GET', `/items/${enc(identifier)}/files`);
+      return r.ok ? { ok: true, files: r.body.files, folders: r.body.folders || [] } : { ...failure(r), files: [], folders: [] };
+    },
+
+    // Collisions (docs/COLLISIONS.md): a port's GitHub release bound to archive.org data
+    getCollision: async (repo) => { const r = await call('GET', `/collisions/${enc(repo)}`); return r.ok ? r.body : null; },
+    saveCollision: async (repo, entry) => { const r = await call('PUT', `/collisions/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
+    deleteCollision: async (repo) => { const r = await call('DELETE', `/collisions/${enc(repo)}`); return r.ok || r.status === 404 ? { ok: true } : failure(r); },
+    exportCollisions: async () => (await call('GET', '/collisions/export')).body,
+    previewCollision: async (sources) => { const r = await call('POST', '/collisions/preview', { sources }); return r.ok ? r.body.sources : null; },
+    getCollisionFeeds: async () => (await call('GET', '/collision-feeds')).body?.feeds || [],
+    addCollisionFeed: async ({ url, name }) => { const r = await call('POST', '/collision-feeds', { url, name }); return r.ok ? { ok: true, feed: r.body } : failure(r); },
+    refreshCollisionFeed: async (id) => (await call('POST', `/collision-feeds/${enc(id)}/refresh`)).body,
+    removeCollisionFeed: (id) => call('DELETE', `/collision-feeds/${enc(id)}`),
+
     // Catalogs (Quiver lists) and what changed in them
     getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],
     subscribeCatalog: async ({ url, name, shelf }) => {

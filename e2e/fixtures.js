@@ -8,6 +8,7 @@
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip holding pd.exe, and its archive.org data item holds
  *     PD_ROM, which fixtures/collisions.json expects by sha1
+ *   - /metadata/rk-e2e-romset is a ROM set with folders, for the game data editor
  *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
  *     that isn't on the wall
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -57,9 +58,20 @@ function answer(url, base = '') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');
+  if (kind === 'metadata' && id === 'rk-e2e-romset') return reply(200, JSON.stringify({ files: ROMSET }), 'application/json');
   if (kind === 'metadata') return reply(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
   if (kind === 'download' && file === `${id}.zip`) return reply(200, TINY_ZIP, 'application/zip');
   return reply(404, 'not in fixtures', 'text/plain');
 }
+
+// Shaped like a real ROM-set item, archive.org's bookkeeping files included
+const ROMSET = [
+  { name: 'Nintendo 64/Banjo-Kazooie (USA).z64', source: 'original', size: '16777216', sha1: '1fe1632098865f639e22c11b9a81ee8f29c75d7a' },
+  { name: 'Nintendo 64/Perfect Dark (USA).z64', source: 'original', size: '33554432', sha1: 'a'.repeat(40) },
+  { name: 'Nintendo 64/Textures/bk-hd.png', source: 'original', size: '2048' },
+  { name: 'Full Rip.zip', source: 'original', size: '734003200', sha1: 'b'.repeat(40) },
+  { name: 'rk-e2e-romset_meta.xml', source: 'metadata', size: '900' },
+  { name: '__ia_thumb.jpg', source: 'original', size: '4000' },
+];
 
 module.exports = { answer, SEARCH, TINY_ZIP, PD_ROM };
