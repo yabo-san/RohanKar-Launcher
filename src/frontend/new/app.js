@@ -682,7 +682,7 @@ function gameRow(g) {
   const badge = isInstalled(g) ? '<span class="pill">Installed</span>' : n > 1 ? `<span class="pill">${n} versions</span>` : '';
   return `<button class="list-row" data-open="game" data-id="${esc(g.identifier)}">
     <span class="lr-art" data-thumb="${esc(g.identifier)}" style="background:${tint(title)}"><span class="noart"></span></span>
-    <span class="lr-title"><b>${esc(title)}</b>${badge}</span>
+    <span class="lr-title"><b>${esc(title)}</b>${badge}${state.admin && !g._manual ? `<span class="lr-admin" data-make-tile="${esc(g.identifier)}" title="Admin: a game tile with this item as its data">Make a tile</span>` : ''}</span>
     <span class="lr-col">${esc(g._sourceLabel || '')}</span>
     <span class="lr-col">${esc(fmtDate(g.addeddate))}</span>
     <span class="lr-col num">${g.downloads ? fmtNum(g.downloads) : ''}</span>
@@ -695,7 +695,7 @@ function portRow(p) {
   const badge = p.data.status === 'available' ? '<span class="pill ok">Data</span>' : '';
   return `<button class="list-row port-card" data-open="port" data-id="${esc(p.id)}">
     <span class="lr-art icon" style="background:${tint(p.repository)}">${art}</span>
-    <span class="lr-title"><b>${esc(p.name)}</b>${badge}${inPortLibrary(p) ? '<span class="pill">In library</span>' : ''}</span>
+    <span class="lr-title"><b>${esc(p.name)}</b>${badge}${inPortLibrary(p) ? '<span class="pill">In library</span>' : ''}${p.hidden ? '<span class="pill">Hidden</span>' : ''}${state.admin ? `<span class="lr-admin" data-edit-repo="${esc(p.repository)}" title="Admin: edit its collision">Edit collision</span>` : ''}</span>
     <span class="lr-col">${esc(p.project || '')}</span>
     <span class="lr-col">${esc(p.repository)}</span>
     <span class="lr-col">${esc(p.shelfName || '')}</span>
@@ -2078,6 +2078,12 @@ document.addEventListener('click', (e) => {
     const p = state.ports?.items.find(i => i.id === menuBtn.closest('.port-card')?.dataset.id);
     const r = menuBtn.getBoundingClientRect();
     if (p) { e.stopPropagation(); return openMenu(p, r.left, r.bottom + 4); }
+  }
+  // Admin actions on a list row, before the row opens its details
+  const admin = e.target.closest('[data-make-tile], [data-edit-repo]');
+  if (admin) {
+    e.stopPropagation();
+    return admin.dataset.makeTile ? adminFromItem(admin.dataset.makeTile) : go('collision', admin.dataset.editRepo);
   }
   const t = e.target.closest('button, a, [data-close]');
   if (!t) return;

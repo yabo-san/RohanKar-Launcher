@@ -855,3 +855,5 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .admin-row.is-hidden { opacity: .6; }
 .admin-row .row-actions { display: flex; gap: 6px; }
 @media (max-width: 760px) { .admin-head { display: none; } .admin-row { grid-template-columns: 1fr; } }
+.lr-admin { margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; background: var(--fill2); color: var(--text); cursor: pointer; }
+.lr-admin:hover { background: var(--key); color: #fff; }
