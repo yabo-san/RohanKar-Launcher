@@ -531,10 +531,12 @@ function mdSelect(page, pref, label, options) {
     ${options.map(([v, text]) => `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</optgroup></select>`;
 }
 
+// The search box goes in the page title row (render adds it); the rest sit
+// in a plain row under the title, on the page itself
+let pageHasSearch = false;
 function libraryHeader(page, sorts, { extra = '', total = 0 } = {}) {
+  pageHasSearch = true;
   return `<div class="album-header">
-    <div class="search-input-container"><input type="search" class="search-input" id="lib-search" spellcheck="false"
-      placeholder="Search…" value="${esc(state.libSearch)}" aria-label="Search this page"></div>
     <div class="lib-controls">${extra}
       ${mdSelect(page, 'sort', 'Sort by', Object.entries(sorts).map(([k, [text]]) => [k, text]))}
       ${mdSelect(page, 'order', 'Sort order', [['asc', 'Ascending'], ['desc', 'Descending']])}
@@ -797,6 +799,7 @@ const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Librar
 function render() {
   const v = state.view;
   pagedGrid.pending = {};
+  pageHasSearch = false;
   let html;
   if (state.query) html = viewSearch(state.query);
   else if (v.name === 'new') html = viewNew();
@@ -818,8 +821,10 @@ function render() {
   const body = $('#body');
   const typing = document.activeElement?.id === 'lib-search' ? document.activeElement.selectionStart : null;
   const reload = !state.query && RELOADS[v.name];
-  body.innerHTML = `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1>
-    ${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>` + html;
+  const search = pageHasSearch ? `<input type="search" class="search-input" id="lib-search" spellcheck="false"
+    placeholder="Search ${esc(heading)}" value="${esc(state.libSearch)}" aria-label="Search this page">` : '';
+  body.innerHTML = `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1><span class="grow"></span>
+    ${search}${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>` + html;
   if (typing != null) { const el = $('#lib-search'); el?.focus(); el?.setSelectionRange(typing, typing); }
   observeCovers(body);
   syncRows();
