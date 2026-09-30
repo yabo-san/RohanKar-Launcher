@@ -9,6 +9,7 @@
  */
 const fs   = require('fs');
 const path = require('path');
+const { updateAvailable } = require('./updates');
 
 const SCHEMA_VERSION = 1;
 const PLATFORMS = ['PC', 'Nintendo', 'PlayStation', 'Xbox', 'Other'];
@@ -28,14 +29,6 @@ function platformOf(shelf) {
 // so the same port keeps its id if it moves to another catalog
 const isQuiverId = (id) => typeof id === 'string' && id.startsWith('quiver:');
 const quiverExportId = (identifier) => `quiver:${identifier.split(':').slice(2).join(':')}`;
-
-// A newer upload of the same title than the one installed
-function updateAvailable(row, item) {
-  if (!row.install_dir || !item?.versions?.length) return false;
-  const mine = item.versions.find(v => v.id === row.identifier);
-  if (!mine?.addeddate) return false;
-  return item.versions.some(v => v.id !== mine.id && v.addeddate && v.addeddate > mine.addeddate);
-}
 
 const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
 

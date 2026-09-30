@@ -132,6 +132,10 @@ curl 'http://127.0.0.1:7777/v1/items?search=tycoon&installed=false'
 # {"items":[{"id":"rk-e2e-rollercoaster-tycoon",…}],"errors":[]}
 ```
 
+Each version carries `newer`: the id of the newest upload of the same title added after it
+(a later `addeddate`), or `null`. An installed version with a `newer` is what the launcher badges
+"Newer release" and the Playnite export reports as `updateAvailable`; nothing updates by itself.
+
 `errors` lists sources that failed while others loaded
 (`[{"source":"x@y","label":"x","error":"HTTP 503"}]`). All sources failing is
 `502 {"error":"sources_failed","detail":"…","errors":[…]}`.

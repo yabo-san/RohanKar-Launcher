@@ -120,6 +120,7 @@ function versionFromItem(v) {
     _uploader:    v.source?.uploader,
     _sourceLabel: v.source?.label || v.source?.uploader,
     _override:    v.override || undefined,
+    _newer:       v.newer || null,
   };
 }
 
@@ -300,15 +301,19 @@ function go(name, arg = null) {
 
 // ─── cards ───────────────────────────────────────────────────────────────────
 
+// The installed version of a title that has a newer upload (the backend's `newer`)
+const outdated = (g) => (g._versions || [g]).find(x => x._newer && state.library[x.identifier]?.install_dir) || null;
+
 function gameCard(g) {
   const title = getTitle(g);
   const n = g._versions?.length || 1;
   const installed = isInstalled(g);
   const dl = state.downloads.get(g.identifier);
+  const update = installed && outdated(g);
   return `<button class="card game-card" data-open="game" data-id="${esc(g.identifier)}" title="${esc(title)}">
     <div class="art" data-thumb="${esc(g.identifier)}" style="background:${tint(title)}">
       <div class="noart"><small>${esc(g._sourceLabel)}</small>${esc(title)}</div>
-      ${installed ? '<span class="tag installed">INSTALLED</span>' : dl ? `<span class="tag installed">${dl.percent || 0}%</span>` : ''}
+      ${update ? '<span class="tag installed update">NEWER RELEASE</span>' : installed ? '<span class="tag installed">INSTALLED</span>' : dl ? `<span class="tag installed">${dl.percent || 0}%</span>` : ''}
       ${n > 1 ? `<span class="tag versions">${n} VERSIONS</span>` : ''}
       <span class="play-btn${installed ? '' : ' get'}" aria-hidden="true"></span>
     </div>
@@ -1032,6 +1037,7 @@ function gameDetail(d) {
   const lib = state.library[v.identifier];
   const dl = state.downloads.get(v.identifier);
   const versions = g._versions || [g];
+  const newerOf = lib?.install_dir && v._newer ? versions.find(x => x.identifier === v._newer) || null : null;
   let actions;
   if (dl) {
     actions = `<button class="btn primary" disabled>${dl.status === 'extracting' ? 'Extracting…' : 'Downloading…'}</button>
@@ -1054,9 +1060,12 @@ function gameDetail(d) {
       <div class="actions">${actions}</div>
       ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exes}
+      ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
+        <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}
       ${versions.length > 1 ? `<div class="h3">${versions.length} versions</div><div class="versions">${versions.map(x => `
         <button class="version ${x === v ? 'on' : ''}" data-version="${esc(x.identifier)}"><span class="who">${esc(x._sourceLabel)}</span>
         ${state.library[x.identifier]?.install_dir ? '<span class="tag installed" style="position:static">INSTALLED</span>' : ''}
+        ${newerOf === x ? '<span class="tag installed update" style="position:static">NEWER</span>' : ''}
         <span class="meta">${esc(fmtDate(x.addeddate))} · ${fmtNum(x.downloads)} downloads</span></button>`).join('')}</div>` : ''}
       <dl class="kv">
         <dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>

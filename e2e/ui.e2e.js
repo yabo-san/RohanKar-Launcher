@@ -160,6 +160,23 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   await page.keyboard.press('Escape');
 });
 
+test('An installed upload with a newer one on archive.org gets the Newer release badge', async () => {
+  await page.locator('#q').fill('Zoo Tycoon');
+  const card = page.locator('.game-card', { hasText: 'Zoo Tycoon' }).first();
+  await card.click();
+  await page.locator('#detail [data-version="rk-e2e-zoo-tycoon"]').click();
+  await page.locator('#btn-download').click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const note = page.locator('#detail .newer-note');
+  await expect(note).toContainText('A newer upload of this game is on archive.org');
+  await expect(page.locator('#detail [data-version="rk-e2e-zoo-tycoon-pstriple"] .tag.update')).toHaveText('NEWER');
+  await note.locator('button').click();
+  await expect(page.locator('#detail #btn-download')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(card.locator('.tag.update')).toHaveText('NEWER RELEASE');
+  await page.keyboard.press('Escape');
+});
+
 test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
