@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.6.0-fork.13](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.12...v1.6.0-fork.13) (2026-09-30)
+
+
+### Features
+
+* Allow additional sources toggle, Cider-style modal, Your source badge, hash change prompt ([4ecefcd](https://github.com/yabo-san/RohanKar-Launcher/commit/4ecefcdf73f3759f63299afc1e1fae7bab5711ac))
+* **dev:** mise run ui shows the real data by default; add mise run sandbox ([25214ca](https://github.com/yabo-san/RohanKar-Launcher/commit/25214ca588c78d4ccfe71a96f2714df2b51a0ac2))
+* **dev:** mise run ui shows the real data; add mise run sandbox ([e407f85](https://github.com/yabo-san/RohanKar-Launcher/commit/e407f85e36a3ad6bc575b153ce3b4acc3697e62b))
+* **feeds:** your feed carries GitHub ports and trusted uploaders; import a feed file; trust a feed's uploaders one by one ([4da724e](https://github.com/yabo-san/RohanKar-Launcher/commit/4da724e321c2d98492401e47b0cb497090f5cb73))
+* **feeds:** your feed of GitHub ports and trusted uploaders, with import and trust ([ef36335](https://github.com/yabo-san/RohanKar-Launcher/commit/ef3633501b56304181e73126115bf92e40fe4059))
+* mise run ui shows the UI in a browser from saved JSON ([02a5091](https://github.com/yabo-san/RohanKar-Launcher/commit/02a509134f8e703d59cb9d827da2afc8e56416fa))
+* **ports:** apply a collision's .bps patch before the sha1 check ([d33ca83](https://github.com/yabo-san/RohanKar-Launcher/commit/d33ca83e39365e78852fe28ad30c60e713d378c1))
+* **ports:** apply a collision's .bps patch before the sha1 check ([49cde92](https://github.com/yabo-san/RohanKar-Launcher/commit/49cde928238da1fe1d1463898ad4e58c295ad71b))
+* **ui:** Cider 2 look for the new UI ([5f0fac0](https://github.com/yabo-san/RohanKar-Launcher/commit/5f0fac0d428c0340b2bc2bc5c0c29d3bfa732012))
+* **ui:** Cider 2 look for the new UI ([af25b53](https://github.com/yabo-san/RohanKar-Launcher/commit/af25b53ed88ef4a1318fc310e30cc9c6955ad163))
+* **ui:** newer release badge, with the check moved from the Playnite export to core ([4035214](https://github.com/yabo-san/RohanKar-Launcher/commit/4035214fd78908e44bb5ed2ea296d69966fa6c17))
+* user-added sources behind Allow additional sources (backend) ([7ee7b17](https://github.com/yabo-san/RohanKar-Launcher/commit/7ee7b176c3ea714da4efed28aa78da04fd8a5aa5))
+* your own apps in the library, and announcements ([39e5f18](https://github.com/yabo-san/RohanKar-Launcher/commit/39e5f18be09f6f1c179f28a0fd79176e04af830e))
+
+
+### Bug Fixes
+
+* drop ambientDone from sourcesChanged, main removed it ([51c5837](https://github.com/yabo-san/RohanKar-Launcher/commit/51c58375757f8ca550f459f97e44fa2d67747d13))
+* **ui:** keep game covers portrait so curated box art isn't cropped ([63e2f88](https://github.com/yabo-san/RohanKar-Launcher/commit/63e2f88e5ae5f619d8f62d7e1824ef4d66a9c053))
+
 ## [1.6.0-fork.12](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.11...v1.6.0-fork.12) (2026-09-30)
 
 
