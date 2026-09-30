@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseArgs, itemFor, n64Header } = require('../scripts/live-port');
+const { parseArgs, itemFor, n64Header, summarizeListing } = require('../scripts/live-port');
 
 test('live-port: Perfect Dark by default, repos and --keep from the command line', () => {
   assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false, ia: [], zips: [] });
@@ -36,4 +36,23 @@ test('live-port: an N64 ROM reports its byte order, and a z64 its title and revi
   fs.writeFileSync(path.join(dir, 'b.v64'), v64);
   assert.equal(n64Header(path.join(dir, 'b.v64')), 'v64 (byteswapped)');
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('live-port: a short archive listing prints whole; a long one is summed per folder with its key files', () => {
+  assert.deepEqual(summarizeListing([{ path: 'a', size: null }, { path: 'a/b.exe', size: 3 }]), ['a', 'a/b.exe (3 bytes)']);
+  const long = [
+    { path: 'Pack/Blood/BLOOD.RFF', size: 10 }, { path: 'Pack/Blood/readme.txt', size: 1 },
+    { path: 'Pack/raze.exe', size: 5 }, { path: 'top.txt', size: 2 }, { path: 'Pack/Blood', size: null },
+    { path: 'Pack/mods/a/b/c/deep.grp', size: 7 },
+  ];
+  assert.deepEqual(summarizeListing(long, { limit: 3 }), [
+    '6 entries; by folder:',
+    '  (top) 1 files, 2 bytes',
+    '  Pack/ 1 files, 5 bytes',
+    '  Pack/Blood/ 2 files, 11 bytes',
+    '  Pack/mods/ 1 files, 7 bytes',
+    'key files (2):',
+    '  Pack/Blood/BLOOD.RFF (10 bytes)',
+    '  Pack/raze.exe (5 bytes)',
+  ]);
 });

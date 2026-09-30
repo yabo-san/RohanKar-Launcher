@@ -97,7 +97,31 @@ async function releases(repository, print) {
   }
 }
 
-// "item/file.zip" → what the zip holds, from archive.org's own zip listing
+// An archive listing as { path, size } rows → lines to print. A long one is
+// summed per folder (two levels down), plus the files that say what it is:
+// executables and libraries, and Build-engine and id-style game data
+const KEY_FILE = /\.(exe|dll|grp|pk3|ipk3|rff|con|ssi|wad|z64|n64|v64|iso|ciso)$/i;
+function summarizeListing(entries, { limit = 150 } = {}) {
+  if (entries.length <= limit) return entries.map(e => `${e.path}${e.size != null ? ` (${e.size} bytes)` : ''}`);
+  const dirs = new Map();
+  for (const e of entries) {
+    if (e.size == null) continue;
+    const parts = e.path.split('/');
+    const dir = parts.length > 1 ? parts.slice(0, Math.min(2, parts.length - 1)).join('/') + '/' : '(top)';
+    const d = dirs.get(dir) || { files: 0, bytes: 0 };
+    d.files++; d.bytes += e.size;
+    dirs.set(dir, d);
+  }
+  const out = [`${entries.length} entries; by folder:`];
+  for (const [dir, d] of [...dirs].sort()) out.push(`  ${dir} ${d.files} files, ${d.bytes} bytes`);
+  const keys = entries.filter(e => e.size != null && KEY_FILE.test(e.path) && e.path.split('/').length <= 4);
+  out.push(`key files (${keys.length}):`);
+  for (const e of keys.slice(0, limit)) out.push(`  ${e.path} (${e.size} bytes)`);
+  if (keys.length > limit) out.push(`  … ${keys.length - limit} more`);
+  return out;
+}
+
+// "item/file.zip" → what the archive holds, from archive.org's own listing
 async function listZip(spec, print) {
   const at = spec.indexOf('/');
   const url = `https://archive.org/download/${encodeURIComponent(spec.slice(0, at))}/${encodeURIComponent(spec.slice(at + 1))}/`;
@@ -105,9 +129,12 @@ async function listZip(spec, print) {
   if ([301, 302, 303, 307, 308].includes(r.status) && r.headers?.location) r = await getText(new URL(r.headers.location, url).toString(), { kind: 'archive' });
   print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
   if (r.status !== 200) return 1;
-  const rows = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
-  for (const row of rows.slice(0, 400)) print(`  ${row}`);
-  if (rows.length > 400) print(`  … ${rows.length - 400} more`);
+  const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  const entries = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    .map(m => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(c => text(c[1])))
+    .filter(cells => cells.length && cells[0])
+    .map(cells => ({ path: cells[0].replace(/\/$/, ''), size: /^\d+$/.test(cells[cells.length - 1]) ? Number(cells[cells.length - 1]) : null }));
+  for (const line of summarizeListing(entries)) print(`  ${line}`);
   return 0;
 }
 
@@ -160,4 +187,4 @@ if (require.main === module) {
     .catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { parseArgs, itemFor, n64Header, run };
+module.exports = { parseArgs, itemFor, n64Header, summarizeListing, run };
