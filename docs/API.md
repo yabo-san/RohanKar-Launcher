@@ -245,8 +245,10 @@ curl -X POST -d '{"id":"quiver:8c1f0e2a9b3d:harbourmasters/shipwright","source":
 
 ### `GET /library/:id`, `PATCH /library/:id`
 
-Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`. `favorite` and
-`notes` create the row if needed; the others need it to exist.
+Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`, `installDir`.
+`installDir` adopts a folder already on disk (Locate Existing Install) and picks its executable when
+there's only one. `favorite`, `notes` and `installDir` create the row if needed; the others need it
+to exist.
 
 ```sh
 curl -X PATCH -d '{"favorite":true,"notes":"needs dgVoodoo"}' http://127.0.0.1:7777/v1/library/rk-e2e-halo-ce
