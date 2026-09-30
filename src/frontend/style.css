@@ -78,6 +78,7 @@ input:focus, select:focus { border-color: var(--accent); }
   font-size: 13px;
   letter-spacing: 0.3px;
 }
+.wordmark-bo { color: #fc3c44; }
 #window-controls {
   display: flex;
   gap: 4px;
