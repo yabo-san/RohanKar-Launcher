@@ -1331,7 +1331,7 @@ async function startEditor(repo) {
   const ed = state.editor = { repo: repo || '', isNew: !repo, loading: !!repo, origin: null, feed: null, extra: {},
     name: port?.name || '', folderName: port?.folderName || '', assetPattern: '', base: 'binary', binaryTarget: '',
     // admin mode: the tile's shelf, the exe to launch, and whether users see it
-    shelf: repo ? '' : 'y4bo ports', exe: '', hidden: false, releases: null, search: null,
+    shelf: repo ? '' : 'y4bo ports', exe: '', hidden: false, releases: null, search: null, queries: {},
     sources: repo ? [] : [blankSource()], browse: null, preview: null, errors: null };
   if (!repo) return;
   const c = await api.getCollision(repo);
@@ -1408,7 +1408,7 @@ function sourceCard(x, i) {
     <div class="inline"><input type="text" data-src="${i}" data-key="ia" value="${esc(x.ia)}" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
       <button class="btn" data-action="ed-browse" data-i="${i}">Browse</button>
       <button class="btn" data-action="ed-remove-source" data-i="${i}" aria-label="Remove this source">&#10005;</button></div>
-    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.search?.i === i ? ed.search.q : '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
+    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.queries[i] || '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
       <button class="btn" data-action="ed-search" data-i="${i}">Search</button></div>${ed.search?.i === i ? searchHtml() : ''}` : ''}
     <div class="two"><div><label>Take</label><input type="text" data-src="${i}" data-key="path" value="${esc(x.path)}" placeholder="file, folder/* or *" spellcheck="false"></div>
       <div><label>Into folder</label><input type="text" data-src="${i}" data-key="target" value="${esc(x.target)}" placeholder="the install folder" spellcheck="false"></div></div>
@@ -1598,7 +1598,7 @@ function searchHtml() {
 
 async function editorSearch(i) {
   const ed = state.editor;
-  const q = ($(`#ed-search-${i}`)?.value || '').trim();
+  const q = String(ed.queries[i] || '').trim();
   if (!q) return toast('Type something to search for.');
   const s = ed.search = { i, q, loading: true, items: [] };
   render();
@@ -1677,6 +1677,8 @@ document.addEventListener('input', (e) => {
   if (!ed || state.view.name !== 'collision') return;
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
+  // Kept in state, so a re-render (the release list arriving) doesn't wipe what was typed
+  if (t.dataset.search !== undefined) { ed.queries[t.dataset.search] = t.value; return; }
   if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
 });
 document.addEventListener('keydown', (e) => {
