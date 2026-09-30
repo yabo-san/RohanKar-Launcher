@@ -84,9 +84,9 @@ A recipe is a collision with `needs` in place of pinned `sources`:
 
 Not all data is one ROM. An uploader may put up a big folder of game data, nested however they
 like, and a source port wants some of it in a particular place. Recipes don't spell out exact
-relative paths for that. The install works on a staging area (a "virtual disk") instead:
+relative paths for that. The install works in a staging subdirectory instead:
 
-1. **Stage**: unpack the GitHub release and every data source into one staging folder, each under
+1. **Stage**: unpack the GitHub release and every data source into one staging subdirectory, each under
    its own name, never over each other.
 2. **Anchor**: the recipe names a file the port is known to need, like `pak0.pk3` or `*.z64`. The
    launcher looks for it anywhere in the staged data, so the uploader's nesting doesn't matter.
