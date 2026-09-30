@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — overrides.js
+ * y4bo — overrides.js
  * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero? }.
  * The copy on main is fetched at launch; the one bundled with the app is the fallback.
  */

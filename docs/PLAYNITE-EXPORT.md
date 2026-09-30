@@ -7,14 +7,17 @@ file; it never opens `library.db`.
 ## Where and when
 
 - **Where:** next to `library.db`, in the launcher's data folder
-  (`%APPDATA%\rohankar-launcher\playnite-export.json` on Windows).
+  (`%APPDATA%\y4bo-launcher\playnite-export.json` on Windows). An install
+  that had data before the rename to y4bo keeps its old folder,
+  `%APPDATA%\rohankar-launcher`, so a reader should look in both
+  (see `src/electron/user-data.js`).
 - **When:** after every library change (install, uninstall, add, remove,
   favourite, collections, play), batched so a scan writes it once, and at
   startup. Nothing is fetched to write it: names come from what the launcher
   has loaded, else from the previous export, else the id.
 - **How:** written to `playnite-export.json.<pid>.tmp`, then renamed over the
   old file, so a reader sees the old file or the new one, never half of one.
-- **On demand:** `"RohanKar Launcher.exe" --export-playnite <path>` writes it to `<path>` and exits.
+- **On demand:** `y4bo.exe --export-playnite <path>` writes it to `<path>` and exits.
 
 ## Schema, version 1
 
@@ -79,7 +82,7 @@ categories, notes) across re-exports.
   "workingDir": "C:\\Games\\rk-e2e-halo-ce\\Halo",
   "version": null,
   "updateAvailable": false,
-  "coverPath": "C:\\Users\\k\\AppData\\Roaming\\rohankar-launcher\\thumbcache\\rk-e2e-halo-ce.jpg",
+  "coverPath": "C:\\Users\\k\\AppData\\Roaming\\y4bo-launcher\\thumbcache\\rk-e2e-halo-ce.jpg",
   "heroPath": null,
   "tags": ["Shooters"],
   "lastPlayed": "2026-09-28T21:04:11.000Z",

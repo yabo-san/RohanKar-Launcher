@@ -451,7 +451,7 @@ matching CLI flags: [PLAYNITE-EXPORT.md](PLAYNITE-EXPORT.md).
 
 ```sh
 curl -X POST -d '{}' http://127.0.0.1:7777/v1/export/playnite
-# {"file":"C:\\Users\\k\\AppData\\Roaming\\rohankar-launcher\\playnite-export.json","count":12}
+# {"file":"C:\\Users\\k\\AppData\\Roaming\\y4bo-launcher\\playnite-export.json","count":12}
 ```
 
 ### `POST /os/choose-folder`

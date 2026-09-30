@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — api.js
+ * y4bo — api.js
  * The frontend's only way out: fetch and EventSource against the backend's
  * /v1 API (docs/API.md). Where it runs:
  *   - the desktop app: preload.js sets window.launcher = { apiBase, token }
