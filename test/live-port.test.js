@@ -5,12 +5,13 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseArgs, itemFor, n64Header, parseListing, summarizeListing } = require('../scripts/live-port');
+const crypto = require('crypto');
+const { parseArgs, itemFor, n64Header, parseListing, summarizeListing, checkInstall } = require('../scripts/live-port');
 
 test('live-port: Perfect Dark by default, repos and --keep from the command line', () => {
-  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false, ia: [], zips: [] });
+  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight', 'ZDoom/Raze'], keep: false, ia: [], zips: [] });
   assert.deepEqual(parseArgs(['a/b', '--keep', 'c/d']), { repos: ['a/b', 'c/d'], keep: true, ia: [], zips: [] });
-  assert.deepEqual(parseArgs(['--ia', 'N64TOSEC:(?i)perfect']), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false, ia: ['N64TOSEC:(?i)perfect'], zips: [] });
+  assert.deepEqual(parseArgs(['--ia', 'N64TOSEC:(?i)perfect']), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight', 'ZDoom/Raze'], keep: false, ia: ['N64TOSEC:(?i)perfect'], zips: [] });
 });
 
 test('live-port: a collision becomes the catalog item the install engine takes', () => {
@@ -69,4 +70,19 @@ test('live-port: archive.org\'s archive listing page parses into paths and sizes
     { path: 'Raze Package/Blood & Guts/BLOOD.RFF', size: 9570681 },
     { path: 'Warrior/SW.GRP', size: 47536148 },
   ]);
+});
+
+test('live-port: an install is checked for the exe and the expected files, anywhere, with sha1 and size', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-check-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  fs.mkdirSync(path.join(dir, 'Duke3D'));
+  fs.writeFileSync(path.join(dir, 'raze.exe'), 'MZ');
+  fs.writeFileSync(path.join(dir, 'Duke3D', 'duke3d.grp'), 'GRP');
+  const c = { repository: 'ZDoom/Raze', exe: 'raze.exe' };
+  assert.deepEqual(checkInstall(dir, c, [{ name: 'DUKE3D.GRP', sha1: crypto.createHash('sha1').update('GRP').digest('hex') }]), []);
+  assert.deepEqual(checkInstall(dir, { ...c, exe: 'bin/raze.exe' }, [{ name: 'BLOOD.RFF' }, { path: 'duke3d/DUKE3D.GRP', minSize: 10 }, { name: 'duke3d.grp', sha1: '0'.repeat(40) }]), [
+    'bin/raze.exe is missing', 'BLOOD.RFF is missing', 'Duke3D/duke3d.grp is 3 bytes, expected at least 10',
+    `Duke3D/duke3d.grp has sha1 ${crypto.createHash('sha1').update('GRP').digest('hex')}, expected ${'0'.repeat(40)}`,
+  ]);
+  assert.deepEqual(checkInstall(dir, { repository: 'x/y' }), [], 'nothing expected of an unknown port');
 });
