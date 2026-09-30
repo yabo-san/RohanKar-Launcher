@@ -1,6 +1,6 @@
-# RohanKar Launcher
+# y4bo
 
-A desktop game launcher for the classic PC game collection uploaded to [Archive.org](https://archive.org/search?query=uploader%3Arohanjackson071%40gmail.com) by **rohanjackson071**. Browse, install, and launch games from a single polished interface — no account required.
+y4bo is a desktop game launcher for the classic PC game collection uploaded to [Archive.org](https://archive.org/search?query=uploader%3Arohanjackson071%40gmail.com) by **rohanjackson071**. Browse, install, and launch games from a single polished interface — no account required.
 
 <img width="1280" height="800" alt="Screenshot 2026-03-23 221326" src="https://github.com/user-attachments/assets/bd3b0e92-6f0f-4d99-9138-b4e0deae2155" />
 
@@ -63,8 +63,8 @@ direction, and the choice is remembered. `RK_UI=legacy` also opens the classic o
 
 ## Installation
 
-1. Go to the [latest release](https://github.com/Kilted-Kraken/-RohanKar-Launcher/releases/latest)
-2. Download **RohanKar Launcher Setup x.x.x.exe**
+1. Go to the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest)
+2. Download the installer, **RohanKar-Launcher-Setup-x.x.x.exe**
 3. Run the installer
 
 > **Note:** Windows may show a SmartScreen warning on first run. Click **More info → Run anyway**. This is expected for unsigned installers from new publishers.
