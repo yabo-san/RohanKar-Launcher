@@ -765,3 +765,9 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
   .row.list { grid-auto-columns: min(438px, 88%); }
   .search input:focus { width: 230px; padding: 0 30px 0 10px; background-position: right 9px center; background-color: var(--well); }
 }
+
+/* Game covers stay portrait: the curated box art (overrides.json) is 2:3, and
+   a square crop cuts it. Ports and everything else keep Cider's square. */
+.game-card .art, .game-card:hover .art { aspect-ratio: 2 / 3; }
+.game-card .art img { object-position: center; }
+.row:has(> .game-card) { grid-auto-columns: clamp(130px, calc((100% - 9 * 14px) / 9.45), 220px); }
