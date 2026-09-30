@@ -45,7 +45,9 @@ async function listIa(spec, print) {
   const r = await getText(`https://archive.org/metadata/${encodeURIComponent(id)}`, { kind: 'archive' });
   print(`\n== archive.org ${id}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
   if (r.status !== 200) return 1;
-  const files = JSON.parse(r.body).files || [];
+  const meta = JSON.parse(r.body);
+  const files = meta.files || [];
+  print(`uploader ${meta.metadata?.uploader || '?'}, title ${meta.metadata?.title || '?'}`);
   const hits = files.filter(f => !match || match.test(f.name));
   print(`${files.length} files, ${hits.length} match`);
   for (const f of hits.slice(0, 200)) print(`  ${f.name} (${f.size || '?'} bytes, sha1 ${f.sha1 || '?'})`);
