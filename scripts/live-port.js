@@ -19,6 +19,7 @@ const { createArchive } = require('../src/backend/archive');
 const { createSettings } = require('../src/backend/settings');
 const { createLibrary } = require('../src/backend/library');
 const { getText } = require('../src/backend/net');
+const { itemData } = require('../src/backend/catalogs');
 
 const ROOT = path.join(__dirname, '..');
 const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
@@ -33,7 +34,7 @@ function itemFor(c) {
   return {
     id: `quiver:live:${c.repository.toLowerCase()}`, title: c.name || c.repository, repository: c.repository,
     entry: { folderName: c.folderName || '', ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}) },
-    data: c,
+    data: itemData(c), // as the app's port shelves hand it to the install
   };
 }
 

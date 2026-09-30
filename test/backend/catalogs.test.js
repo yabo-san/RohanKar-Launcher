@@ -10,7 +10,7 @@ const { fakeArchive, tmpDir } = require('./helpers');
 // Cut from catalog/collisions.json
 const COLLISIONS = JSON.parse(fs.readFileSync(path.join(__dirname, '../../catalog/collisions.json'), 'utf8')).slice(0, 2);
 
-async function setup(t) {
+async function setup(t, { collisions = COLLISIONS } = {}) {
   const catalog = { apps: [
     { name: 'Banjo Recomp', repository: 'BanjoRecomp/BanjoRecomp', appIconUrl: 'https://i/b.png', tags: ['n64'] },
     { name: 'Ship of Harkinian', repository: 'HarbourMasters/Shipwright' },
@@ -23,12 +23,19 @@ async function setup(t) {
   });
   const dir = tmpDir(t);
   const collisionsFile = path.join(dir, 'collisions.json');
-  fs.writeFileSync(collisionsFile, JSON.stringify(COLLISIONS));
+  fs.writeFileSync(collisionsFile, JSON.stringify(collisions));
   const settings = createSettings(path.join(dir, 'settings.json'));
   const netLog = [];
   const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, collisionsFile, netLog: (...a) => netLog.push(a) });
   return { fake, dir, settings, catalogs, catalog, netLog };
 }
+
+test('items: a collision\'s exe and keepReleaseFolder reach the install', async (t) => {
+  const { fake, catalogs } = await setup(t, { collisions: [{ ...COLLISIONS[0], exe: 'bin/game.exe', keepReleaseFolder: true }, COLLISIONS[1]] });
+  await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  const banjo = catalogs.items().find(i => i.title === 'Banjo Recomp');
+  assert.deepEqual([banjo.data.exe, banjo.data.keepReleaseFolder], ['bin/game.exe', true]);
+});
 
 test('parse: apps wrapper or bare array; collisions as array or keyed object', () => {
   assert.equal(parseCatalog('[{"name":"a"},{"x":1},null]').length, 1);

@@ -10,7 +10,10 @@ test('live-port: Perfect Dark by default, repos and --keep from the command line
 });
 
 test('live-port: a collision becomes the catalog item the install engine takes', () => {
-  const c = { repository: 'Owner/Repo', name: 'Game', folderName: 'Game', assetPattern: '(?i)win' };
-  assert.deepEqual(itemFor(c), { id: 'quiver:live:owner/repo', title: 'Game', repository: 'Owner/Repo', entry: { folderName: 'Game' }, data: c });
+  const c = { repository: 'Owner/Repo', name: 'Game', folderName: 'Game', assetPattern: '(?i)win', exe: 'game.exe' };
+  assert.deepEqual(itemFor(c), {
+    id: 'quiver:live:owner/repo', title: 'Game', repository: 'Owner/Repo', entry: { folderName: 'Game' },
+    data: { iaIdentifier: null, contentUrl: null, assetPattern: '(?i)win', dataFiles: [], sources: [], base: 'binary', binaryTarget: '', exe: 'game.exe' },
+  });
   assert.equal(itemFor({ repository: 'a/b' }).title, 'a/b');
 });
