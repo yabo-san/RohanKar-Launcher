@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    connect-src 'self' http://127.0.0.1:*;
+    img-src 'self' https: http://127.0.0.1:* blob: data:;
+  ">
+  <title>y4bo</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+  <div id="ambient" aria-hidden="true"></div>
+
+  <div class="app">
+    <nav class="sidebar" id="sidebar" aria-label="Main">
+      <div class="search"><input id="q" type="search" placeholder="Search" aria-label="Search games and ports" autocomplete="off" /></div>
+
+      <button class="navitem active" data-view="home"><span class="dot"></span>Home</button>
+      <button class="navitem" data-view="new"><span class="dot"></span>New</button>
+      <button class="navitem" data-view="wall"><span class="dot"></span>Game wall<span class="n" id="n-wall"></span></button>
+
+      <div class="navgroup">Uploaders</div>
+      <div id="nav-uploaders"></div>
+
+      <div class="navgroup">Ports</div>
+      <div id="nav-shelves"></div>
+
+      <div class="navgroup">Yours</div>
+      <button class="navitem" data-view="library"><span class="dot"></span>Library<span class="n" id="n-library"></span></button>
+      <button class="navitem" data-view="updates"><span class="dot"></span>Keep current<span class="n attn" id="n-updates"></span></button>
+
+      <div class="spacer"></div>
+      <button class="navitem" data-view="settings" id="btn-settings"><span class="dot"></span>Settings</button>
+      <div class="brand">y4<span>bo</span></div>
+    </nav>
+
+    <main class="main">
+      <header class="chrome">
+        <div class="winctl">
+          <button id="win-min" aria-label="Minimise">&#8211;</button>
+          <button id="win-max" aria-label="Maximise">&#9723;</button>
+          <button id="win-close" class="close" aria-label="Close">&#10005;</button>
+        </div>
+      </header>
+      <div class="body" id="body"></div>
+    </main>
+  </div>
+
+  <aside class="detail hidden" id="detail" aria-label="Details">
+    <div class="detail-scrim" data-close></div>
+    <div class="detail-panel" id="detail-panel"></div>
+  </aside>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="../preview.js"></script>
+
+  <script src="../api.js"></script>
+  <script src="../sources.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
