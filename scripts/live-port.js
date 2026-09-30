@@ -34,7 +34,7 @@ function parseArgs(argv) {
     else rest.push(argv[i]);
   }
   const repos = rest.filter(a => !a.startsWith('--'));
-  return { repos: repos.length || ia.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia };
+  return { repos: repos.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia };
 }
 
 // "item" or "item:regex" → the item's files whose path matches, to pick a data source from
