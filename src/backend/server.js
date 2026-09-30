@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
+const quiverImport = require('./quiver-import');
 const { sourcesFromSettings } = require('./sources');
 
 const API_VERSION = 'v1';
@@ -308,6 +309,18 @@ function createApi(backend) {
       if (t && String(t).trim()) titleMap[String(t).trim()] = v.identifier;
     }
     return { body: installs.scan({ scanDir: dir, knownIdentifiers: versions.map(v => v.identifier), titleMap }) };
+  });
+
+  // A Quiver library (apps.json + Apps/): what an import would do, or, with
+  // apply, the import itself. Nothing is downloaded.
+  route('POST', '/library/import/quiver', ({ body }) => {
+    const { dir, apply } = requireObject(body);
+    const read = quiverImport.readQuiverLibrary(requireString(dir, 'dir'), { findExes: disk.findExes });
+    if (read.error) throw new HttpError(400, 'not_quiver', read.error);
+    const plan = quiverImport.planImport(read, { items: catalogs.items(), rows: library.all() });
+    if (!apply) return { body: plan };
+    if (!library.available) needDb({ ok: false });
+    return { body: { ...plan, result: quiverImport.applyImport(plan, { library, catalogs }) } };
   });
 
   // ─── Collections ──────────────────────────────────────────────────────────

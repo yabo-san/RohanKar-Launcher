@@ -332,6 +332,30 @@ curl -X POST -d '{"dir":"D:\\Games"}' http://127.0.0.1:7777/v1/library/scan
 # {"found":[{"identifier":"rk-e2e-halo-ce","installDir":"D:\\Games\\Halo_ Combat Evolved","exePath":null,"matchedBy":"title"}]}
 ```
 
+### `POST /library/import/quiver`
+
+Reads a Quiver Launcher folder (`dir`: the folder holding `apps.json`, or `apps.json` itself) and
+says what importing it would do; with `"apply": true` it imports. Nothing is downloaded: installed
+apps are adopted where they are, found the way Quiver finds them (`installPath`, else
+`settings.json`'s `AppsPath` or `Apps/`, plus `folderName`; `install-incomplete.txt` means not
+installed; `version.txt` and `selected_executable.txt` are read).
+
+Each app's `kind` is `port` (a subscribed catalog lists the repository; the row is that item),
+`new` (none does; a collision with just the repository and name puts it on "Your ports", id
+`quiver:local:<repo>`) or `manual` (no GitHub repository; row `manual:<folderName>`, kept only when
+its folder has something to launch). Tags, the display name and the installed version go to the
+row's `tags`, `title` and `version`. An install already in the library is left as it is, so a
+second import changes nothing. 400 `not_quiver` when there is no readable `apps.json`.
+
+```sh
+curl -X POST -d '{"dir":"D:\\QuiverLauncher","apply":true}' http://127.0.0.1:7777/v1/library/import/quiver
+# {"root":"D:\\QuiverLauncher","appsPath":"D:\\QuiverLauncher\\Apps",
+#  "apps":[{"name":"Perfect Dark","repository":"fgsfdsfgs/perfect_dark","kind":"port","id":"quiver:…",
+#           "installed":true,"installDir":"D:\\QuiverLauncher\\Apps\\PerfectDark","exe":"…\\pd.exe","version":"v1.2.0",…}],
+#  "skipped":[{"name":"Old thing","reason":"manual app with nothing installed"}],
+#  "result":{"added":1,"adopted":4,"ports":2,"unchanged":0}}
+```
+
 ### Collections
 
 `GET /collections`, `POST /collections` (`{ name }`, `409 name_taken` on a duplicate),
