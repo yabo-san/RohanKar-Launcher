@@ -282,7 +282,7 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await toggle.click();
   await modal.locator('.md-btn-primary').click();
   await expect(toggle).toBeChecked();
-  expect(saved().allowAdditionalSources).toBe(true);
+  await expect.poll(() => saved().allowAdditionalSources).toBe(true); // the save lands after the toggle redraws
   await expect(page.locator('#nav-add-repo')).toBeVisible();
 
   // user.json: loaded, its invalid entry and its conflict with the curated list listed
