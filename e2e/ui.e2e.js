@@ -301,7 +301,7 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   await detail.locator('#btn-play').click();
   expect((await launched).postDataJSON().exePath).toBe(path.join(folder, 'homebrew.exe'));
 
-  await page.evaluate(() => { window.prompt = () => 'Homebrew Deluxe'; });
+  await page.evaluate(() => { globalThis.prompt = () => 'Homebrew Deluxe'; });
   await detail.locator('[data-action="manual-rename"]').click();
   await expect(detail.locator('h2')).toHaveText('Homebrew Deluxe');
   await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toContainText('Your folder');
