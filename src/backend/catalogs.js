@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const { getText } = require('./net');
 const { validateCollision } = require('./ports');
 const { parseUploaders } = require('./feed');
+const { githubAsCollision, additionalAllowed } = require('./user-sources');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 
@@ -59,7 +60,10 @@ function diffEntries(seen, current) {
   return out;
 }
 
-function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {}, log = () => {} }) {
+const NO_USER = { entries: () => ({ collisions: [], archive: [], github: [] }) };
+
+// userSources: createUserSources(), for user.json
+function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO_USER, netLog = () => {}, log = () => {} }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = (id, kind) => path.join(dir, `${id}.${kind}.json`);
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
@@ -138,15 +142,49 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   }
   const feedMap = (f) => new Map((feedCache(f.id)?.entries || []).map(c => [repoKey(c.repository), c]));
 
-  // Bundled, then each feed in order, then the user's own on top
-  const collisionMap = () => new Map([...bundledCollisions(), ...feedList().flatMap(f => [...feedMap(f)]), ...localMap()]);
+  // ─── Additional sources: everything that isn't curated ────────────────────
+  // Feeds, then user.json, then the user's own (editor, imports) on top, and
+  // only while Settings allows additional sources. Curated wins: an entry for
+  // a repository the bundled collisions (or, for a standalone github entry,
+  // a port shelf) already have is left out and reported as a conflict.
+  const additional = () => additionalAllowed(settings);
+  function userLayers() {
+    const out = { map: new Map(), origin: new Map(), conflicts: [] };
+    if (!additional()) return out;
+    const u = userSources.entries();
+    const curated = bundledCollisions();
+    const listed = listedRepos();
+    const layers = [
+      ...feedList().map(f => [`feed ${f.name}`, [...feedMap(f).values()]]),
+      ['user.json collisions', u.collisions],
+      ['user.json github', u.github.map(githubAsCollision)],
+      ['your collisions', localList()],
+    ];
+    for (const [from, list] of layers) {
+      for (const c of list) {
+        const k = repoKey(c?.repository);
+        if (!k) continue;
+        if (curated.has(k) || (from === 'user.json github' && listed.has(k))) {
+          out.conflicts.push({ from, key: c.repository, reason: curated.has(k) ? 'the curated collisions have it' : 'a port shelf lists it' });
+          continue;
+        }
+        out.map.set(k, c);
+        out.origin.set(k, from);
+      }
+    }
+    return out;
+  }
 
-  // Saves one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
+  const userConflicts = () => userLayers().conflicts;
+
+  // Saves one (replacing any for the same repository). { ok, entry } or
+  // { ok: false, errors }; a repository the curated collisions have is refused
   function saveCollision(entry) {
     const errors = validateCollision(entry);
     if (errors.length) return { ok: false, errors };
     const clean = { ...entry, repository: entry.repository.trim() };
     const key = repoKey(clean.repository);
+    if (bundledCollisions().has(key)) return { ok: false, curated: true, errors: [`${clean.repository} is in the curated collisions, which win over your own`] };
     writeJson(localFile, [...localList().filter(c => repoKey(c?.repository) !== key), clean]);
     return { ok: true, entry: clean };
   }
@@ -160,26 +198,39 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   }
   const collision = (repository) => {
     const key = repoKey(repository);
+    const curated = bundledCollisions().get(key);
+    if (curated) return { origin: 'bundled', entry: curated };
+    if (!additional()) return null;
     const local = localMap().get(key);
     if (local) return { origin: 'local', entry: local };
+    const u = userSources.entries();
+    const fromFile = u.collisions.find(c => repoKey(c.repository) === key)
+      || (u.github.some(g => repoKey(g.repository) === key) ? githubAsCollision(u.github.find(g => repoKey(g.repository) === key)) : null);
+    if (fromFile) return { origin: 'user.json', entry: fromFile };
     for (const f of feedList().slice().reverse()) {
       const e = feedMap(f).get(key);
       if (e) return { origin: 'feed', feed: { id: f.id, name: f.name, url: f.url }, entry: e };
     }
-    const bundled = bundledCollisions().get(key);
-    return bundled ? { origin: 'bundled', entry: bundled } : null;
+    return null;
   };
 
   const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : []);
 
-  // User collisions for repositories no subscribed catalog lists, as catalog entries
+  // Repositories the port shelves list
+  function listedRepos() {
+    return new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
+  }
+
+  // Additional collisions for repositories no port shelf lists, as catalog
+  // entries: the "Your ports" shelf. Empty while additional sources are off.
   function localEntries() {
-    const listed = new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
-    return localList().filter(c => repoKey(c?.repository) && !listed.has(repoKey(c.repository))).map(c => ({
+    const listed = listedRepos();
+    return [...userLayers().map.values()].filter(c => !listed.has(repoKey(c.repository))).map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
       ...(c.project ? { project: c.project } : {}), ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
       ...(Array.isArray(c.filesToAdd) ? { filesToAdd: c.filesToAdd } : {}),
+      ...(c.sha1 ? { sha1: c.sha1 } : {}),
     }));
   }
 
@@ -265,10 +316,14 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   function items() {
     const subs = shelves();
     if (!subs.length) return [];
-    const joins = collisionMap();
+    const layers = userLayers();
+    const joins = new Map([...layers.map, ...bundledCollisions()]);
     return subs.flatMap(sub => entries(sub.id).map(e => {
-      const data = joins.get(repoKey(e.repository)) || null;
+      const k = repoKey(e.repository);
+      const data = joins.get(k) || null;
       return {
+        // not reviewed by us: a "Your ports" entry, or data bound by an additional source
+        userSource:  !!sub.local || (!!data && !bundledCollisions().has(k)),
         id:          `quiver:${sub.id}:${entryKey(e)}`,
         title:       e.name || e.repository,
         source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
@@ -287,7 +342,8 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   }
 
   return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
-    collision, saveCollision, deleteCollision, localCollisions: localList, feeds, subscribeFeed, refreshFeed, unsubscribeFeed };
+    collision, saveCollision, deleteCollision, localCollisions: localList, feeds, subscribeFeed, refreshFeed, unsubscribeFeed,
+    userConflicts, additionalAllowed: additional, isCurated: (repository) => bundledCollisions().has(repoKey(repository)) };
 }
 
 module.exports = { createCatalogs, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };

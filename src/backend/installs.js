@@ -4,6 +4,8 @@
  * executable, record it in library.db. Ports (catalog items) take the latest
  * GitHub release's Windows build and, when the collision catalog names one,
  * stage their game data from archive.org and check its sha1 (ports.js).
+ * Files from additional sources are checked against the user's sha1, or
+ * pinned on first install (pins); a changed file stops with hashChange set.
  */
 const fs     = require('fs');
 const path   = require('path');
@@ -14,11 +16,13 @@ const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const { applyBps, BpsError } = require('./bps');
+const { checkPin } = require('./user-sources');
 
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
 const GITHUB_API = 'https://api.github.com';
+const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -133,6 +137,7 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
   const view = (job) => ({
     id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
+    ...(job.hashChange ? { hashChange: job.hashChange } : {}),
     startedAt: job.startedAt, finishedAt: job.finishedAt,
   });
 
@@ -142,6 +147,21 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     emit('install', view(job));
   }
 
+  const isRunning = (j) => ['downloading', 'extracting', 'verifying'].includes(j.status);
+
+  // A downloaded file from an additional source: its sha1 against the user's,
+  // else against the pin from its first install. true, or fails the job.
+  async function checkUserFile(job, { pinKey, name, filePath, expected }) {
+    update(job, { status: 'verifying' });
+    const r = checkPin({ file: name, expected, pinned: pins.get(pinKey, name), actual: await ports.sha1File(filePath), accept: job.acceptHashChange });
+    if (!r.ok) {
+      update(job, { status: 'error', error: r.error, ...(r.changed ? { hashChange: { ...r.changed, itemId: job.itemId } } : {}) });
+      return false;
+    }
+    if (r.pin) pins.set(pinKey, name, r.pin);
+    return true;
+  }
+
   async function runJob(job, subFolder) {
     const r = await download({
       key: job.id, identifier: job.itemId, url: archive.downloadUrl(job.itemId, job.file), fileName: job.file,
@@ -149,6 +169,10 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
     });
     if (job.status === 'cancelled') return;
     if (!r.ok) return update(job, { status: 'error', error: r.error });
+    if (job.check) {
+      const expected = job.check.files.find(f => f.name === job.file)?.sha1 || null;
+      if (!(await checkUserFile(job, { pinKey: `archive:${job.itemId}`, name: job.file, filePath: r.filePath, expected }))) return;
+    }
 
     update(job, { status: 'extracting', percent: 100 });
     const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder });
@@ -163,9 +187,11 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
   }
 
   // Starts one job per file. files: names from the item's file list; when
-  // omitted the item must have exactly one installable file. Resolves
+  // omitted the item must have exactly one installable file. check: for an
+  // upload from an additional source, { files: [{ name, sha1? }] } (items.userCheck);
+  // acceptHashChange re-pins a file that changed. Resolves
   // { ok, jobs } or { ok: false, error, detail, choices? }.
-  async function start({ itemId, files }) {
+  async function start({ itemId, files, check = null, acceptHashChange = false }) {
     const list = await archive.fileList(itemId);
     if (!list.ok) return { ok: false, error: 'file_list_failed', detail: list.error };
     const installable = installableFiles(list.files);
@@ -187,11 +213,11 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
 
     const started = [];
     for (const f of chosen) {
-      const running = [...jobs.values()].find(j => j.itemId === itemId && j.file === f.name && ['downloading', 'extracting'].includes(j.status));
+      const running = [...jobs.values()].find(j => j.itemId === itemId && j.file === f.name && isRunning(j));
       if (running) { started.push(view(running)); continue; }
       const job = {
         id: crypto.randomUUID(), itemId, file: f.name, status: 'downloading', percent: 0, error: null,
-        installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null,
+        installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null, check, acceptHashChange,
       };
       jobs.set(job.id, job);
       emit('install', view(job));
@@ -205,17 +231,16 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
 
   // ─── Ports (POST /installs with a catalog item id) ─────────────────────────
 
-  const isRunning = (j) => ['downloading', 'extracting', 'verifying'].includes(j.status);
-
-  // item: a catalog item from catalogs.items(). Resolves { ok, jobs } or
-  // { ok: false, error, detail }.
-  function startPort({ item }) {
+  // item: a catalog item from catalogs.items(). One from an additional source
+  // (userSource) has its release binary checked or pinned per release tag.
+  // Resolves { ok, jobs } or { ok: false, error, detail }.
+  function startPort({ item, acceptHashChange = false }) {
     if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository to install from.` };
     const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
     if (running) return { ok: true, jobs: [view(running)] };
     const job = {
       id: crypto.randomUUID(), itemId: item.id, file: null, status: 'downloading', step: 'binary', percent: 0, error: null,
-      installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null,
+      installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null, acceptHashChange,
     };
     jobs.set(job.id, job);
     emit('install', view(job));
@@ -259,6 +284,10 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
       if (job.status === 'cancelled') return false;
       if (!bin.ok) return fail(bin.error);
       downloads.add(bin.filePath);
+      if (item.userSource) {
+        const ok = await checkUserFile(job, { pinKey: `github:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
+        if (!ok) return false;
+      }
       update(job, { status: 'extracting', percent: 100 });
       fs.mkdirSync(binDest, { recursive: true });
       if (ports.ARCHIVE_EXT.test(bin.filePath)) {

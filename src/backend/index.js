@@ -18,6 +18,7 @@ const { createCovers }   = require('./covers');
 const { createInstalls, GITHUB_API } = require('./installs');
 const { createCatalogs } = require('./catalogs');
 const { createItems }    = require('./items');
+const { createUserSources, createPins } = require('./user-sources');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
 const { loadFeatured, FEATURED_URL } = require('./featured');
 const { currentAnnouncement, isDismissed, ANNOUNCEMENT_URL } = require('./announcement');
@@ -145,9 +146,11 @@ function createBackend({
   })());
 
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, heroesDir, archive, getOverrides, log: netlog.log });
-  const installs = createInstalls({ settings, library, archive, gamesDir, emit, log, netLog: netlog.log, platform, githubApi });
-  const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, netLog: netlog.log, log });
-  const items    = createItems({ archive, settings, catalogs, library, getOverrides, getDefaultSources, emit, log });
+  const userSources = createUserSources({ settings, log });
+  const pins     = createPins(path.join(dataDir, 'pins.json'));
+  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi });
+  const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, userSources, netLog: netlog.log, log });
+  const items    = createItems({ archive, settings, catalogs, library, getOverrides, userSources, getDefaultSources, emit, log });
 
   // ─── Actions that combine a module with the OS ────────────────────────────
 
@@ -292,7 +295,7 @@ function createBackend({
     dataDir, appDir, appVersion, events, emit, os,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
-    settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources, getFeatured,
+    settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources, getFeatured,
     getAnnouncement, dismissAnnouncement, installRoot,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };

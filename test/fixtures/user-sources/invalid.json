@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "collisions": [
+    { "repository": "not-a-repo", "sources": [{ "ia": "x", "path": "a.bin" }] },
+    { "repository": "me/fine-port", "sources": [{ "ia": "fine-data", "path": "rom.bin" }] }
+  ],
+  "archive": [
+    { "identifier": "has spaces" },
+    { "identifier": "my-demo", "files": [{ "name": "my-demo.zip", "sha1": "zz" }] },
+    { "identifier": "ok-item" },
+    { "identifier": "OK-item" },
+    "just a string"
+  ],
+  "github": [
+    { "repository": "me/tool", "assetPattern": "(unclosed", "folderName": 7 }
+  ]
+}

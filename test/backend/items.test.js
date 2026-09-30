@@ -50,7 +50,7 @@ test('items: filters by source, shelf, search, installed, inLibrary', async (t) 
 
 test('items: a disabled source is never queried; one failing source is reported, all failing throws', async (t) => {
   const { backend, fake } = await testBackend(t);
-  backend.settings.save({ sources: [
+  backend.settings.save({ allowAdditionalSources: true, sources: [
     { uploader: 'rohanjackson071@gmail.com', label: 'rj' },
     { uploader: 'frankiemiqueli1@gmail.com', label: 'ps', enabled: false },
     { uploader: 'nobody@example.invalid', label: 'nobody' },

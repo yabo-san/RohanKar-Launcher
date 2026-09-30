@@ -206,6 +206,7 @@ function createApi(backend) {
   route('PUT', '/collisions/:repo', ({ params, body }) => {
     const entry = { ...requireObject(body), repository: params.repo };
     const r = catalogs.saveCollision(entry);
+    if (!r.ok && r.curated) throw new HttpError(409, 'curated', r.errors[0]);
     if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
     return { body: r.entry };
   });
@@ -408,20 +409,24 @@ function createApi(backend) {
 
   const INSTALL_ERRORS = { choose_files: 409, unknown_file: 400, no_installable_file: 422, file_list_failed: 502 };
 
+  // acceptHashChange: the user saw a file from their own source change and
+  // accepted it (the install error carried hashChange)
   route('POST', '/installs', async ({ body }) => {
-    const { id, files } = requireObject(body);
+    const { id, files, acceptHashChange = false } = requireObject(body);
     requireString(id, 'id');
+    if (typeof acceptHashChange !== 'boolean') throw new HttpError(400, 'bad_request', 'acceptHashChange must be true or false');
     if (id.startsWith('quiver:')) {
       const item = catalogs.items().find(i => i.id === id);
       if (!item) throw new HttpError(404, 'not_found', `No catalog item ${id}`);
-      const r = installs.startPort({ item });
+      const r = installs.startPort({ item, acceptHashChange });
       if (!r.ok) throw new HttpError(422, r.error, r.detail);
       return { status: 202, body: { installs: r.jobs } };
     }
     if (files !== undefined && !(Array.isArray(files) && files.every(f => typeof f === 'string'))) {
       throw new HttpError(400, 'bad_request', 'files must be an array of file names');
     }
-    const r = await installs.start({ itemId: id, files });
+    await items.load().catch(() => null);
+    const r = await installs.start({ itemId: id, files, check: items.userCheck(id), acceptHashChange });
     if (!r.ok) throw new HttpError(INSTALL_ERRORS[r.error] || 500, r.error, r.detail, r.choices ? { choices: r.choices } : {});
     return { status: 202, body: { installs: r.jobs } };
   });
@@ -445,7 +450,35 @@ function createApi(backend) {
   });
 
   route('GET', '/settings', () => ({ body: settings.load() }));
-  route('PUT', '/settings', ({ body }) => ({ body: settings.save(requireObject(body)) }));
+  route('PUT', '/settings', ({ body }) => {
+    const s = requireObject(body);
+    if ('allowAdditionalSources' in s && typeof s.allowAdditionalSources !== 'boolean') {
+      throw new HttpError(400, 'bad_request', 'allowAdditionalSources must be true or false');
+    }
+    if ('userSourcesFile' in s && s.userSourcesFile !== null) {
+      const f = s.userSourcesFile;
+      if (typeof f !== 'string') throw new HttpError(400, 'bad_request', 'userSourcesFile must be a file path');
+      if (/^[a-z][a-z0-9+.-]*:\/\//i.test(f.trim())) throw new HttpError(400, 'bad_request', 'user.json must be a file on this computer, not a URL');
+      if (f.trim() && !path.isAbsolute(f.trim())) throw new HttpError(400, 'bad_request', 'user.json must be a full path');
+      s.userSourcesFile = f.trim() || null;
+    }
+    return { body: settings.save(s) };
+  });
+
+  // ─── Additional sources: user.json and what the curated list overrides ───
+  // docs/USER-SOURCES.md. Read even while the setting is off, so Settings can
+  // show a file's problems before the user turns it on.
+  route('GET', '/user-sources', async () => {
+    const f = backend.userSources.read();
+    const enabled = backend.userSources.enabled();
+    if (enabled) await items.load().catch(() => null);
+    const count = (k) => f.entries[k].length;
+    return { body: {
+      enabled, file: f.file, error: f.error, invalid: f.invalid,
+      entries: { collisions: count('collisions'), archive: count('archive'), github: count('github') },
+      conflicts: enabled ? [...catalogs.userConflicts(), ...items.conflicts()] : [],
+    } };
+  });
 
   route('POST', '/export/playnite', async ({ body }) => {
     const { path: target } = requireObject(body);

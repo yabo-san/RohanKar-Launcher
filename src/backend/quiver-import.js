@@ -165,6 +165,8 @@ function applyImport(plan, { library, catalogs }) {
       out.added++;
     }
   }
+  // Ports saved as the user's own show once additional sources are allowed
+  if (out.ports && catalogs.additionalAllowed?.() === false) out.needAdditionalSources = out.ports;
   return out;
 }
 
