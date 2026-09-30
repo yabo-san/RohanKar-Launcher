@@ -158,6 +158,15 @@ test('library: add, get, patch, exes, readme, launch, reveal, delete', async (t)
   assert.equal((await call('GET', '/library/e/readme')).status, 404);
   assert.equal((await call('POST', '/library/e/reveal')).status, 404);
 
+  // Locate an existing install: adopts the folder, picking the exe when there's only one
+  const found = path.join(backend.dataDir, 'found');
+  fs.mkdirSync(found);
+  fs.writeFileSync(path.join(found, 'port.exe'), '');
+  const located = await call('PATCH', `/library/${encodeURIComponent('quiver:abc:o/b')}`, { installDir: found });
+  assert.deepEqual([located.body.install_dir, located.body.exe_path], [found, path.join(found, 'port.exe')]);
+  assert.equal((await call('PATCH', '/library/x', { installDir: path.join(found, 'nope') })).body.error, 'no_folder');
+  assert.equal((await call('PATCH', '/library/x', { installDir: 3 })).status, 400);
+
   assert.equal((await call('DELETE', '/library/g?files=trash')).status, 204);
   assert.equal(backend.library.get('g'), null);
   assert.equal((await call('DELETE', '/library/g')).status, 404);

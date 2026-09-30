@@ -242,13 +242,20 @@ function createApi(backend) {
     favorite: (id, v) => library.setFavorite(id, !!v),
     notes:    (id, v) => library.setNotes(id, v),
     exePath:  (id, v) => library.setExePath(id, v),
+    // Locate an existing install: point the row at a folder already on disk
+    installDir: (id, v) => {
+      requireString(v, 'installDir');
+      if (!fs.existsSync(v) || !fs.statSync(v).isDirectory()) throw new HttpError(422, 'no_folder', `Not a folder: ${v}`);
+      const exes = disk.findExes(v);
+      return library.adoptInstall(id, v, exes.length === 1 ? exes[0] : null);
+    },
   };
   route('PATCH', '/library/:id', ({ params, body }) => {
     const fields = requireObject(body);
     const unknown = Object.keys(fields).filter(k => !PATCHABLE[k]);
     if (unknown.length) throw new HttpError(400, 'bad_request', `Unknown fields: ${unknown.join(', ')}`);
-    // favorite and notes create the row; category and exePath need one
-    if (!('favorite' in fields || 'notes' in fields)) libraryRow(params.id);
+    // favorite, notes and installDir create the row; category and exePath need one
+    if (!('favorite' in fields || 'notes' in fields || 'installDir' in fields)) libraryRow(params.id);
     for (const [k, v] of Object.entries(fields)) needDb(PATCHABLE[k](params.id, v));
     return { body: library.get(params.id) };
   });

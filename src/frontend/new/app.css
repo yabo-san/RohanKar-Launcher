@@ -305,3 +305,23 @@ button { font: inherit; color: inherit; }
   .search input:focus { position: absolute; top: 0; left: 0; width: 240px; z-index: 5; background-color: #2c2c2e; box-shadow: 0 8px 24px rgba(0, 0, 0, .5); padding-right: 10px; background-position: 11px 50%; }
   .search input:focus::placeholder { color: var(--text3); }
 }
+
+/* ---- right-click menu (ports) ---- */
+.ctxmenu {
+  position: fixed; z-index: 80; min-width: 210px; padding: 6px; border-radius: 12px;
+  background: rgba(30, 30, 32, .94); backdrop-filter: var(--glass-heavy); -webkit-backdrop-filter: var(--glass-heavy);
+  border: 1px solid var(--border); box-shadow: 0 16px 40px rgba(0, 0, 0, .55); animation: pop .1s ease-out;
+}
+@keyframes pop { from { opacity: 0; transform: scale(.97); } }
+.ctxmenu .mi {
+  display: flex; align-items: center; width: 100%; padding: 8px 12px; border: 0; border-radius: 7px;
+  background: none; text-align: left; cursor: pointer; font-size: 13px; white-space: nowrap;
+}
+.ctxmenu .mi:hover, .ctxmenu .mi:focus-visible, .ctxmenu .has-sub:hover > .mi { background: var(--fill2); outline: none; }
+.ctxmenu .mi.danger { color: var(--key); }
+.ctxmenu .chev { margin-left: auto; padding-left: 16px; color: var(--text2); font-size: 15px; line-height: 1; }
+.ctxmenu .sep { height: 1px; margin: 5px 8px; background: var(--border); }
+.ctxmenu .has-sub { position: relative; }
+.ctxmenu .sub { display: none; position: absolute; top: -6px; left: 100%; margin-left: 4px; }
+.ctxmenu.flip .sub { left: auto; right: 100%; margin: 0 4px 0 0; }
+.ctxmenu .has-sub:hover > .sub, .ctxmenu .has-sub:focus-within > .sub { display: block; }
