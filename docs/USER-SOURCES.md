@@ -27,7 +27,7 @@ confirmation: everything from additional sources is hidden, and installed files 
 Every card from one of these carries a **Your source · not reviewed** badge: a wall game whose
 every upload is from an additional source, a port on Your ports, and a curated port whose game
 data an additional source supplies. Curated cards never carry it. A single upload from an
-additional source inside a curated game's versions is badged in the detail panel's version list.
+additional source inside a curated game's versions is badged in the details page's version list.
 
 ## user.json
 

@@ -95,6 +95,38 @@ function modal({ title, body, primary, secondary = 'Cancel' }) {
   });
 }
 
+// ─── motion (motion.css): page transitions, cover fade-ins ──────────────────
+
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+const motionOk = () => !reducedMotion.matches;
+
+// A new page fades in and rises a few pixels; renders within a page (the wall
+// streaming in) don't replay it. Transform and opacity only, so nothing shifts.
+function pageEnter() {
+  const body = $('#body');
+  body.classList.remove('page-enter');
+  if (!motionOk()) return;
+  void body.offsetWidth;
+  body.classList.add('page-enter');
+  clearTimeout(pageEnter.timer);
+  pageEnter.timer = setTimeout(() => body.classList.remove('page-enter'), 260);
+}
+
+// Covers fade in the first time they load; one already seen (a re-render)
+// shows at once
+const seenImages = new Set();
+document.addEventListener('load', (e) => {
+  const img = e.target;
+  if (img.tagName !== 'IMG' || !img.closest('#body, #pop')) return;
+  if (!seenImages.has(img.src)) img.classList.add('fade-in');
+  seenImages.add(img.src);
+}, true);
+
+// The frosted title row gets its hairline once the page scrolls under it
+function syncChrome() {
+  $('.main').classList.toggle('scrolled', $('#body').scrollTop > 4);
+}
+
 // The badge on anything from an additional source
 const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
@@ -136,7 +168,12 @@ const coverObserver = new IntersectionObserver((entries) => {
     thumb(id).then(url => {
       if (!url) return;
       const img = new Image();
-      img.onload = () => { e.target.querySelector('.noart')?.remove(); e.target.prepend(img); };
+      img.onload = () => {
+        if (!seenImages.has(url)) img.className = 'fade-in';
+        seenImages.add(url);
+        e.target.querySelector('.noart')?.remove();
+        e.target.prepend(img);
+      };
       img.src = url;
     });
   }
@@ -331,40 +368,40 @@ function markActive() {
   });
 }
 
-// Back and forward in the title row walk the views visited
-const navHistory = { back: [], fwd: [] };
+// Back and forward in the title row walk the pages visited (details.js):
+// a search is a page too, and each page comes back scrolled where it was left
+const navHistory = createHistory();
+const here = () => ({ ...state.view, query: state.query, scroll: $('#body').scrollTop });
 function syncHistory() {
-  $('#nav-back').disabled = !navHistory.back.length;
-  $('#nav-fwd').disabled = !navHistory.fwd.length;
+  $('#nav-back').disabled = !navHistory.canBack;
+  $('#nav-fwd').disabled = !navHistory.canForward;
 }
 function go(name, arg = null) {
-  const v = state.view;
-  if (v.name !== name || (v.arg || null) !== (arg || null)) {
-    navHistory.back.push(v);
-    navHistory.fwd.length = 0;
-  }
+  navHistory.push(here(), { name, arg, query: '' });
   show(name, arg);
 }
 function goHistory(dir) {
-  const from = dir < 0 ? navHistory.back : navHistory.fwd;
-  const v = from.pop();
-  if (!v) return;
-  (dir < 0 ? navHistory.fwd : navHistory.back).push(state.view);
-  show(v.name, v.arg || null);
+  const v = navHistory.step(here(), dir);
+  if (v) show(v.name, v.arg || null, v);
 }
-function show(name, arg) {
+function show(name, arg, { query = '', scroll = 0 } = {}) {
   if (name === 'collision') startEditor(arg);
+  if (!DETAIL_VIEWS.has(name)) state.detail = null;
   state.view = { name, arg };
-  state.query = '';
-  $('#q').value = '';
+  state.query = query;
+  $('#q').value = query;
   libPrefs.shelf.tag = '';   // tags differ from shelf to shelf
   state.libSearch = '';
   state.libPage = 1;
-  $('#body').scrollTop = 0;
   syncHistory();
   render();
-  // A quick fade between views; renders within a view (the wall streaming in) don't fade
-  $('#body').animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'cubic-bezier(.25, .1, .25, 1)' });
+  // Straight to the spot, not a smooth scroll there
+  const body = $('#body');
+  body.style.scrollBehavior = 'auto';
+  body.scrollTop = scroll;
+  body.style.scrollBehavior = '';
+  syncChrome();
+  pageEnter();
 }
 
 // ─── cards ───────────────────────────────────────────────────────────────────
@@ -414,13 +451,14 @@ const skeletons = (n) => Array.from({ length: n }, () =>
 // its own, and the round arrows at the right of a row (as in Cider)
 function section(title, body, { count, sub, seeAll, cls = 'grid' } = {}) {
   const isRow = cls.split(' ')[0] === 'row';
+  const rowHtml = isRow ? `<div class="row-wrap"><div class="${cls}">${body}</div>${rowEdges}</div>` : `<div class="${cls}">${body}</div>`;
   const h2 = seeAll
     ? `<h2><button class="h2link" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">${esc(title)}<i class="ico" data-ico="chev"></i></button></h2>`
     : `<h2>${esc(title)}</h2>`;
   return `<section class="section${isRow ? ' has-row' : ''}"><div class="section-head">${title ? h2 : ''}
     ${count != null && !isRow ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
     ${isRow ? rowNav : ''}</div>
-    <div class="${cls}">${body}</div></section>`;
+    ${rowHtml}</section>`;
 }
 
 // ─── horizontal rows ─────────────────────────────────────────────────────────
@@ -432,11 +470,24 @@ const rowNav = `<span class="row-nav">
   <button class="prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
   <button class="next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button></span>`;
 
-// Arrows only on rows that overflow, each disabled at its end
+// The round arrows that fade in over a row's ends while the pointer is on it
+const rowEdges = `<button class="row-edge prev" data-row-nav="-1" aria-label="Scroll left" tabindex="-1"></button>
+  <button class="row-edge next" data-row-nav="1" aria-label="Scroll right" tabindex="-1"></button>`;
+
+// Arrows only on rows that overflow, each disabled at its end; the row's
+// edges fade out on the sides with more to scroll to
 function syncRowNav(row) {
+  const max = row.scrollWidth - row.clientWidth;
+  const wrap = row.closest('.row-wrap');
+  if (wrap) {
+    const atStart = row.scrollLeft <= 1, atEnd = row.scrollLeft >= max - 1;
+    wrap.classList.toggle('more-left', !atStart);
+    wrap.classList.toggle('more-right', !atEnd);
+    wrap.querySelector('.row-edge.prev').disabled = atStart;
+    wrap.querySelector('.row-edge.next').disabled = atEnd;
+  }
   const nav = row.closest('.section')?.querySelector('.row-nav');
   if (!nav) return;
-  const max = row.scrollWidth - row.clientWidth;
   // The carousel keeps its pager, as in Cider; other rows show arrows only when they overflow
   nav.hidden = max <= 1 && !(row.classList.contains('feature') && row.children.length > 1);
   nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
@@ -464,7 +515,7 @@ function scrollRow(btn) {
   const by = !pitch ? row.clientWidth * 0.85
     : row.classList.contains('feature') ? pitch
     : Math.max(1, Math.floor(row.clientWidth / pitch)) * pitch;
-row.scrollBy({ left: Number(btn.dataset.rowNav) * by, behavior: 'smooth' });
+  row.scrollBy({ left: Number(btn.dataset.rowNav) * by, behavior: motionOk() ? 'smooth' : 'auto' });
 }
 
 // Drag to scroll with the mouse; a drag doesn't open the card it started on
@@ -498,7 +549,7 @@ function stepRow(e) {
   const next = e.key === 'ArrowRight' ? card.nextElementSibling : card.previousElementSibling;
   if (next?.matches('.card')) {
     next.focus({ preventScroll: true });
-    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: motionOk() ? 'smooth' : 'auto' });
   }
   return true;
 }
@@ -1007,6 +1058,7 @@ function render() {
   else if (v.name === 'updates') html = viewUpdates();
   else if (v.name === 'settings') html = viewSettings();
   else if (v.name === 'collision') html = viewCollision();
+  else if (DETAIL_VIEWS.has(v.name)) html = viewDetail(v);
   else html = viewHome();
 
   const heading = state.query ? 'Search'
@@ -1022,8 +1074,10 @@ function render() {
   const reload = !state.query && RELOADS[v.name];
   const search = pageHasSearch ? `<input type="search" class="search-input" id="lib-search" spellcheck="false"
     placeholder="Search ${esc(heading)}" value="${esc(state.libSearch)}" aria-label="Search this page">` : '';
-  body.innerHTML = `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1><span class="grow"></span>
-    ${search}${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>` + html;
+  // The details page has its own header (the album head)
+  const head = onDetailPage() ? '' : `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1><span class="grow"></span>
+    ${search}${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>`;
+  body.innerHTML = head + html;
   if (typing != null) { const el = $('#lib-search'); el?.focus(); el?.setSelectionRange(typing, typing); }
   observeCovers(body);
   syncRows();
@@ -1031,45 +1085,117 @@ function render() {
   if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
   renderNav();
   renderNowbar();
-  if (state.detail) renderDetail();
+  if (onDetailPage()) paintDetail();
 }
 
-// ─── detail panel ────────────────────────────────────────────────────────────
+// ─── details page (after Cider's album page) ─────────────────────────────────
+// A game or a port is a page of its own ('game' / 'port' views): the cover
+// at left over a wash of its colours, title, uploader, the meta line
+// (details.js), the Play/Install pill, a second pill and ⋯, the description,
+// then the versions (or what installs) as a track list and more from the same
+// uploader or shelf. Back returns to the page it was opened from.
 
-function openDetail(kind, id) {
+const DETAIL_VIEWS = new Set(['game', 'port']);
+const onDetailPage = () => !state.query && DETAIL_VIEWS.has(state.view.name);
+const fileSizes = new Map();   // identifier -> bytes an install downloads (null while asked)
+
+function detailFor(kind, id) {
   if (kind === 'game') {
     const g = state.games.find(x => x.identifier === id) || state.versions.find(x => x.identifier === id)
       || (state.library[id] ? rowGame(state.library[id]) : null);
-    if (!g) return;
-    state.detail = { kind, game: g, version: installedVersion(g) || g, exes: null };
-  } else {
-    const p = state.ports?.items.find(x => x.id === id);
-    if (!p) return;
-    state.detail = { kind, port: p, exes: null };
+    return g ? { kind, id, game: g, version: installedVersion(g) || g, exes: null } : null;
   }
-  $('#detail').classList.remove('hidden');
-  renderDetail();
+  const p = state.ports?.items.find(x => x.id === id);
+  return p ? { kind, id, port: p, exes: null } : null;
+}
+
+// The page's state (the version picked, an executable list) lives while the
+// page is showing; coming back to it through history builds it again
+function ensureDetail(kind, id) {
+  const d = state.detail;
+  if (d && d.kind === kind && d.id === id) return d;
+  state.detail = detailFor(kind, id);
+  return state.detail;
+}
+
+function openDetail(kind, id) {
+  const d = detailFor(kind, id);
+  if (!d) return;
+  if (onDetailPage() && state.view.name === kind && state.view.arg === id) { state.detail = d; return render(); }
+  go(kind, id);
 }
 
 function closeDetail() {
-  state.detail = null;
-  $('#detail').classList.add('hidden');
+  if (!DETAIL_VIEWS.has(state.view.name)) return;
+  if (navHistory.canBack) goHistory(-1); else go('home');
 }
 
 function renderDetail() {
+  if (onDetailPage()) render();
+}
+
+function viewDetail(v) {
+  const d = ensureDetail(v.name, v.arg);
+  if (d) return `<div class="album-page" id="detail">${d.kind === 'game' ? gameDetail(d) : portDetail(d)}</div>`;
+  const loading = v.name === 'game' ? state.wall.loading : !state.ports;
+  return loading ? section('', skeletons(6), { cls: 'row' }) : `<p class="empty">That isn't on the wall or a shelf any more.</p>`;
+}
+
+// After render: the cover and its wash, the install size, the description's More
+function paintDetail() {
   const d = state.detail;
-  const panel = $('#detail-panel');
-  if (!d) return;
-  panel.innerHTML = d.kind === 'game' ? gameDetail(d) : portDetail(d);
-  const cover = panel.querySelector('[data-cover]');
+  const page = $('#detail');
+  if (!d || !page) return;
+  const cover = page.querySelector('[data-cover]');
   if (cover) {
     thumb(cover.dataset.cover).then(url => {
-      if (!url || state.detail !== d) return;
-      cover.innerHTML = `<img src="${esc(url)}" alt="">`;
-      panel.querySelector('.d-hero .bg').style.backgroundImage = `url("${url}")`;
+      if (!url || state.detail !== d || !cover.isConnected) return;
+      cover.insertAdjacentHTML('afterbegin', `<img src="${esc(url)}" alt="">`);
+      page.querySelector('.album-wash').style.backgroundImage = `url("${url}")`;
     });
   }
+  const v = d.version;
+  if (d.kind === 'game' && !v._manual && !fileSizes.has(v.identifier)) {
+    fileSizes.set(v.identifier, null);
+    api.fetchFileList({ identifier: v.identifier }).then(r => {
+      fileSizes.set(v.identifier, r.ok ? installBytes(r.installable || r.files) : 0);
+      // Only the meta line changes: no re-render under an open menu
+      const meta = state.detail === d && onDetailPage() && $('#detail .album-meta');
+      if (meta) meta.innerHTML = metaHtml(gameMeta(v, { bytes: fileSizes.get(v.identifier) }));
+    }).catch(() => fileSizes.set(v.identifier, 0));
+  }
+  const desc = page.querySelector('.album-desc');
+  if (desc && !desc.classList.contains('open')) {
+    const p = desc.querySelector('p');
+    desc.classList.toggle('clamped', p.scrollHeight > p.clientHeight + 1);
+  }
 }
+
+const PILL_ICON = { play: 'play', install: 'download' };
+const pill = (label, attrs, { primary = false, icon = '' } = {}) =>
+  `<button class="btn album-pill${primary ? ' primary' : ''}" ${attrs}>${icon ? `<i class="ico" data-ico="${icon}"></i>` : ''}${esc(label)}</button>`;
+const moreBtn = (attrs) => `<button class="album-more" ${attrs} aria-label="More" title="More"><i class="ico" data-ico="more"></i></button>`;
+
+const metaHtml = (meta) => meta.map(esc).join('<span class="sep">·</span>');
+
+function albumHead({ kind, title, cover, wash, sub, meta = [], actions, extra = '', desc = '' }) {
+  return `<div class="album-wash-clip" aria-hidden="true"><div class="album-wash" style="${wash}"></div></div>
+    <header class="album-head">
+      ${cover}
+      <div class="album-info">
+        <div class="album-kind">${esc(kind)}</div>
+        <h1 class="album-title">${esc(title)}</h1>
+        ${sub}
+        <div class="album-meta">${metaHtml(meta)}</div>
+        <div class="album-actions">${actions}</div>
+        ${extra}
+        ${desc ? `<div class="album-desc"><p>${esc(desc)}</p><button class="album-desc-more" data-action="desc-more">More</button></div>` : ''}
+      </div>
+    </header>`;
+}
+
+// Everything the drawer listed, in small type at the foot of the page
+const albumFoot = (rows) => `<dl class="kv album-foot">${rows.filter(Boolean).join('')}</dl>`;
 
 const EXE_HEADINGS = { steam: 'Pick the executable for Steam', default: 'Pick the executable to launch by default', play: 'Pick the executable' };
 function exePicker(d) {
@@ -1078,36 +1204,64 @@ function exePicker(d) {
     <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>`;
 }
 
+// ⋯ on a game's page: the actions that don't get a pill of their own
+function gameMenu(d) {
+  const v = d.version;
+  const lib = state.library[v.identifier];
+  const e = [];
+  if (v._manual) {
+    if (lib?.install_dir) e.push(['Open Folder', 'open-folder'], ['Add to Steam…', 'steam'], '-');
+    e.push(['Rename…', 'manual-rename'], '-', ['Remove from Library', 'manual-remove', 'danger']);
+    return e;
+  }
+  if (state.downloads.get(v.identifier)?.status === 'downloading') e.push(['Cancel Download', 'cancel'], '-');
+  if (lib?.install_dir) e.push(['Play', 'play'], ['Open Folder', 'open-folder'], ['Add to Steam…', 'steam'], '-');
+  else if (!state.downloads.has(v.identifier)) e.push(['Install', 'install'], '-');
+  if (v._uploader) e.push([`Go to ${v._sourceLabel || v._uploader}`, 'go-uploader']);
+  e.push(['View on archive.org', 'archive-page']);
+  if (lib?.install_dir) e.push('-', ['Delete', 'delete', 'danger']);
+  return e;
+}
+
 // A manually managed app: its folder is the whole story
 function manualDetail(d) {
   const v = d.version;
   const title = getTitle(v);
   const lib = state.library[v.identifier] || {};
   const actions = lib.install_dir
-    ? `<button class="btn primary" id="btn-play" data-action="play">Play</button>
-      <button class="btn" data-action="open-folder">Open folder</button>
-      <button class="btn" data-action="steam">Add to Steam</button>
-      <button class="btn" data-action="manual-rename">Rename</button>
-      <button class="btn" data-action="manual-remove">Remove from library</button>`
-    : `<button class="btn primary" data-action="manual-locate">Locate folder…</button>
-      <button class="btn" data-action="manual-remove">Remove from library</button>`;
+    ? `${pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' })}${pill('Open folder', 'data-action="open-folder"')}${moreBtn('data-detail-menu')}`
+    : `${pill('Locate folder…', 'data-action="manual-locate"', { primary: true })}${pill('Remove from library', 'data-action="manual-remove"')}`;
   const note = !lib.install_dir ? 'Its folder is gone. Point it at the folder the app is in now.'
     : !lib.exe_path ? "Put the app's files in its folder, then Play finds the executable." : '';
-  return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
-      <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
-      <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(title)}</h2><div class="by">Your folder</div></div></div>
-    <div class="d-body">
-      <div class="actions">${actions}</div>
-      ${note ? `<p class="hint manual-note">${esc(note)}</p>` : ''}
-      ${exePicker(d)}
-      <dl class="kv">
-        ${lib.install_dir ? `<dt>Folder</dt><dd>${esc(lib.install_dir)}</dd>` : ''}
-        ${lib.exe_path ? `<dt>Launches</dt><dd>${esc(lib.exe_path)}</dd>` : ''}
-        ${lib.version ? `<dt>Version</dt><dd>${esc(lib.version)}</dd>` : ''}
-        ${lib.tags?.length ? `<dt>Tags</dt><dd>${esc(lib.tags.join(', '))}</dd>` : ''}
-      </dl>
-    </div>`;
+  return albumHead({
+    kind: 'Your app', title,
+    cover: `<div class="album-cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>`,
+    wash: `background:${tint(title)}`,
+    sub: '<div class="album-sub by">Your folder</div>',
+    meta: [lib.version ? `Version ${lib.version}` : '', ...(lib.tags || [])].filter(Boolean),
+    actions,
+    extra: `${note ? `<p class="hint manual-note">${esc(note)}</p>` : ''}${exePicker(d)}`,
+  }) + albumFoot([
+    lib.install_dir ? `<dt>Folder</dt><dd>${esc(lib.install_dir)}</dd>` : '',
+    lib.exe_path ? `<dt>Launches</dt><dd>${esc(lib.exe_path)}</dd>` : '',
+    lib.version ? `<dt>Version</dt><dd>${esc(lib.version)}</dd>` : '',
+    lib.tags?.length ? `<dt>Tags</dt><dd>${esc(lib.tags.join(', '))}</dd>` : '',
+  ]);
+}
+
+// The versions of a title as a track list
+function versionsTable(d) {
+  const rows = versionRows(d.game._versions || [d.game], { selected: d.version.identifier, library: state.library });
+  return `<section class="section album-tracks"><div class="tracklist" role="list">
+    <div class="track-head"><span class="num">#</span><span>Version</span><span>Added</span><span class="num">Downloads</span><span></span></div>
+    ${rows.map(r => `<button class="track ${r.on ? 'on' : ''}" data-version="${esc(r.identifier)}" role="listitem">
+      <span class="num tn">${r.on ? '<i class="ico" data-ico="check"></i>' : r.n}</span>
+      <span class="tt"><b>${esc(r.uploader)}</b><small>${esc(r.identifier)}</small></span>
+      <span class="tc">${esc(r.date)}</span>
+      <span class="tc num">${fmtNum(r.downloads)}</span>
+      <span class="tflags">${r.user ? USER_BADGE : ''}${r.installed ? '<span class="tag installed">INSTALLED</span>' : ''}${r.newer ? '<span class="tag installed update">NEWER</span>' : ''}</span>
+    </button>`).join('')}
+  </div><div class="track-sum">${rows.length === 1 ? '1 version' : `${rows.length} versions`}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
 }
 
 function gameDetail(d) {
@@ -1120,42 +1274,40 @@ function gameDetail(d) {
   const newerOf = lib?.install_dir && v._newer ? versions.find(x => x.identifier === v._newer) || null : null;
   let actions;
   if (dl) {
-    actions = `<button class="btn primary" disabled>${dl.status === 'extracting' ? 'Extracting…' : 'Downloading…'}</button>
-      ${dl.status === 'downloading' ? '<button class="btn" data-action="cancel">Cancel</button>' : ''}`;
+    actions = pill(dl.status === 'extracting' ? 'Extracting…' : `Downloading… ${dl.percent || 0}%`, 'disabled', { primary: true })
+      + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
   } else if (lib?.install_dir) {
-    actions = `<button class="btn primary" id="btn-play" data-action="play">Play</button>
-      <button class="btn" data-action="open-folder">Open folder</button>
-      <button class="btn" data-action="steam">Add to Steam</button>
-      <button class="btn" data-action="delete">Delete</button>`;
+    actions = pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"');
   } else {
-    actions = `<button class="btn primary" id="btn-download" data-action="install">Install</button>`;
+    actions = pill('Install', 'id="btn-download" data-action="install"', { primary: true, icon: 'download' })
+      + pill('archive.org', `data-href="https://archive.org/details/${esc(v.identifier)}"`);
   }
-  const exes = exePicker(d);
+  actions += moreBtn('data-detail-menu');
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
-  return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
-      <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
-      <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(title)}</h2><div class="by">${v._manual ? 'Your folder' : `archive.org · ${esc(v._sourceLabel || '')}`}${v.addeddate ? ` · ${fmtDate(v.addeddate)}` : ''}</div></div></div>
-    <div class="d-body">
-      ${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
-      <div class="actions">${actions}</div>
+  const more = moreFrom(state.games, v._uploader, { except: g });
+  return albumHead({
+    kind: versions.length > 1 ? `Game · ${versions.length} versions` : 'Game',
+    title,
+    cover: `<div class="album-cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>`,
+    wash: `background:${tint(title)}`,
+    sub: v._uploader
+      ? `<button class="album-sub by" data-view="uploader" data-arg="${esc(v._uploader)}">${esc(v._sourceLabel || v._uploader)}</button>`
+      : `<div class="album-sub by">archive.org</div>`,
+    meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
+    actions,
+    extra: `${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
       ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
-      ${exes}
+      ${exePicker(d)}
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
-        <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}
-      ${versions.length > 1 ? `<div class="h3">${versions.length} versions</div><div class="versions">${versions.map(x => `
-        <button class="version ${x === v ? 'on' : ''}" data-version="${esc(x.identifier)}"><span class="who">${esc(x._sourceLabel)}</span>${x._user ? USER_BADGE : ''}
-        ${state.library[x.identifier]?.install_dir ? '<span class="tag installed" style="position:static">INSTALLED</span>' : ''}
-        ${newerOf === x ? '<span class="tag installed update" style="position:static">NEWER</span>' : ''}
-        <span class="meta">${esc(fmtDate(x.addeddate))} · ${fmtNum(x.downloads)} downloads</span></button>`).join('')}</div>` : ''}
-      <dl class="kv">
-        <dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>
-        <dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>
-        <dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>
-        ${lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : ''}
-      </dl>
-      ${desc ? `<div class="h3">About</div><div class="desc">${esc(desc)}</div>` : ''}
-    </div>`;
+        <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
+    desc,
+  }) + versionsTable(d) + albumFoot([
+    `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
+    `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
+    `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
+    v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
+    lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : '',
+  ]) + (more.length ? section(`More from ${v._sourceLabel || v._uploader}`, more.map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', v._uploader] }) : '');
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
@@ -1164,13 +1316,12 @@ function portActions(p) {
   const dl = state.downloads.get(p.id);
   if (dl) {
     const what = dl.status === 'verifying' ? 'Checking game data…' : dl.status === 'extracting' ? 'Unpacking…' : 'Downloading…';
-    return `<button class="btn primary" disabled>${what}</button>${dl.status === 'downloading' ? '<button class="btn" data-action="cancel">Cancel</button>' : ''}`;
+    return pill(what, 'disabled', { primary: true }) + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
   }
   if (state.library[p.id]?.install_dir) {
-    return `<button class="btn primary" id="btn-play" data-action="play">Play</button>
-      <button class="btn" data-action="open-folder">Open folder</button>`;
+    return pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"');
   }
-  return `<button class="btn primary" id="btn-install-port" data-action="install">Install</button>`;
+  return pill('Install', 'id="btn-install-port" data-action="install"', { primary: true, icon: 'download' });
 }
 function portProgress(p) {
   const dl = state.downloads.get(p.id);
@@ -1179,39 +1330,58 @@ function portProgress(p) {
     <div class="progress-label">${esc(PORT_STEPS[dl.step] || '')} · ${dl.percent || 0}%</div>`;
 }
 
+// What a port's install brings down, as a track list: the build, then each data file
+function portTracks(p) {
+  const rows = [[`Windows build`, `GitHub release from ${p.repository}`, p.releaseAssetFilter ? `matches ${p.releaseAssetFilter}` : 'latest release']];
+  if (p.data.status === 'available') {
+    const from = `archive.org (${p.data.uploader || p.data.iaIdentifier || p.data.contentUrl || 'item'})`;
+    const files = p.data.files.length ? p.data.files : ['item contents'];
+    for (const f of files) rows.push([f, from, 'sha1-checked after staging', 'ok']);
+  } else if (p.data.status === 'missing') {
+    for (const f of p.data.files) rows.push([f, 'needs this file, not in the catalog', '', 'warn']);
+  } else {
+    rows.push(['No game data', 'none needed, as far as the catalog knows', '']);
+  }
+  return `<section class="section album-tracks"><div class="tracklist ports-tracks" role="list">
+    <div class="track-head"><span class="num">#</span><span>What installs</span><span>From</span><span></span></div>
+    ${rows.map(([name, from, note, cls = ''], i) => `<div class="track" role="listitem"><span class="num tn">${i + 1}</span>
+      <span class="tt"><b>${esc(name)}</b></span><span class="tc ${cls}">${esc(from)}</span><span class="tc">${esc(note)}</span></div>`).join('')}
+  </div></section>`;
+}
+
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
-  const data = p.data.status === 'available'
-    ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="ok">archive.org (${esc(p.data.uploader || p.data.iaIdentifier)})</span>, ${esc(p.data.files.join(', ') || 'item contents')}, sha1-checked after staging`
-    : p.data.status === 'missing'
-      ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="warn">needs ${esc(p.data.files.join(', '))}, not in the catalog</span>`
-      : `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> none needed, as far as the catalog knows`;
-  const icon = p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="">` : '';
-  return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
-      <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
-      <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${esc(p.project)} · Source: Quiver / ${esc(p.shelfName)}</div></div></div>
-    <div class="d-body">
-      ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
-      <div class="actions">
-        <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
-        ${portActions(p)}
-        <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
-        <button class="btn" data-action="edit-collision" data-repo="${esc(p.repository)}">Game data…</button>
-      </div>
-      ${portProgress(p)}
-      ${exePicker(d)}
-      <div class="srcline">${data}</div>
-      ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
-      <dl class="kv">
-        <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
-        <dt>Folder</dt><dd>${esc(p.folderName)}</dd>
-        ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
-        ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
-        <dt>Catalog</dt><dd>${esc(p.catalogUrl)}</dd>
-      </dl>
-    </div>`;
+  const icon = p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="">` : `<div class="noart">${esc(p.name)}</div>`;
+  const more = morePorts(state.ports?.items, p);
+  return albumHead({
+    kind: `Port · Source: Quiver / ${p.shelfName}`,
+    title: p.name,
+    cover: `<div class="album-cover square" style="background:${tint(p.repository)}">${icon}</div>`,
+    wash: `background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}`,
+    sub: `<button class="album-sub by" data-href="https://github.com/${esc(p.repository)}">${esc(p.project || p.repository)}</button>`,
+    meta: portMeta(p),
+    actions: portActions(p) + pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`) + moreBtn('data-detail-menu'),
+    extra: `${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
+      ${portProgress(p)}${exePicker(d)}`,
+  }) + portTracks(p) + albumFoot([
+    `<dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>`,
+    `<dt>Folder</dt><dd>${esc(p.folderName)}</dd>`,
+    p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : '',
+    p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : '',
+    p.tags.length ? `<dt>Tags</dt><dd>${esc(p.tags.join(', '))}</dd>` : '',
+    `<dt>Catalog</dt><dd>${esc(p.catalogUrl)}</dd>`,
+  ]) + (more.length ? section(`More ${p.shelfName} ports`, more.map(portCard).join(''), { cls: 'row ports', seeAll: ['shelf', p.shelf] }) : '');
+}
+
+// ⋯ on the details page: a port's is its right-click menu; a game's lists
+// the actions without a pill. Entries run through onAction.
+function openDetailMenu(btn) {
+  const d = state.detail;
+  if (!d) return;
+  const r = btn.getBoundingClientRect();
+  if (d.kind === 'port') return openMenu(d.port, r.left, r.bottom + 6);
+  openActionMenu(gameMenu(d), r.left, r.bottom + 6);
 }
 
 // ─── actions ─────────────────────────────────────────────────────────────────
@@ -1723,6 +1893,20 @@ function openMenu(p, x, y) {
 }
 function closeMenu() { $('#ctxmenu')?.classList.add('hidden'); menuPort = null; }
 
+// The same menu, for entries that run through onAction ([label, action, cls] or '-')
+function openActionMenu(entries, x, y) {
+  menuPort = null;
+  let el = $('#ctxmenu');
+  if (!el) { el = document.createElement('div'); el.id = 'ctxmenu'; el.className = 'ctxmenu'; el.setAttribute('role', 'menu'); document.body.append(el); }
+  el.innerHTML = entries.map(e => e === '-' ? '<div class="sep"></div>'
+    : `<button class="mi ${e[2] || ''}" data-action="${esc(e[1])}">${esc(e[0])}</button>`).join('');
+  el.classList.remove('hidden', 'flip');
+  const r = el.getBoundingClientRect();
+  el.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  el.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  el.querySelector('.mi')?.focus();
+}
+
 async function runMenu(btn) {
   const p = menuPort;
   const key = btn.dataset.menu;
@@ -1854,7 +2038,10 @@ async function onAction(action, el) {
       await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
       return loadPorts();
     case 'save-settings': return saveSettingsForm();
-    case 'edit-collision': closeDetail(); return go('collision', el.dataset.repo);
+    case 'edit-collision': return go('collision', el.dataset.repo);
+    case 'go-uploader': return v?._uploader && go('uploader', v._uploader);
+    case 'archive-page': return api.openExternal(`https://archive.org/details/${v.identifier}`);
+    case 'desc-more': return el.closest('.album-desc')?.classList.add('open');
     case 'ed-add-source': return editorAddSource();
     case 'ed-remove-source': return editorRemoveSource(Number(el.dataset.i));
     case 'ed-browse': return editorBrowse(Number(el.dataset.i));
@@ -1903,8 +2090,8 @@ async function onAction(action, el) {
     case 'manual-remove': {
       if (!confirm(`Remove ${getTitle(v)} from your library? Its folder stays where it is.`)) return;
       await api.removeFromLibrary({ id: v.identifier });
-      closeDetail();
       await reloadLibrary();
+      closeDetail();
       return render();
     }
     case 'quiver-import-choose': return quiverImport(false);
@@ -1932,6 +2119,8 @@ document.addEventListener('click', (e) => {
   const t = e.target.closest('button, a, [data-close]');
   if (!t) return;
   if (t.matches('[data-close]')) return closeDetail();
+  if (t.matches('[data-detail-menu]')) { e.stopPropagation(); return openDetailMenu(t); }
+  if (t.closest('#ctxmenu') && t.dataset.action) closeMenu();
   if (t.dataset.href) { e.preventDefault(); return api.openExternal(t.dataset.href); }
   if (t.dataset.view) return go(t.dataset.view, t.dataset.arg || null);
   if (t.dataset.go) return go(t.dataset.go, t.dataset.arg || null);
@@ -1983,8 +2172,10 @@ $('#q').addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && popKind) return closePop();
-  if (e.key === 'Escape' && menuPort) return closeMenu();
-  if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
+  if (e.key === 'Escape' && $('#ctxmenu') && !$('#ctxmenu').classList.contains('hidden')) return closeMenu();
+  if (e.key === 'Escape' && !e.target.closest?.('input, textarea, select')) {
+    if (onDetailPage()) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); }
+  }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
   if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('#q').focus(); }
 });
@@ -1993,6 +2184,7 @@ $('#win-min').addEventListener('click', () => api.windowMinimize());
 $('#win-max').addEventListener('click', () => api.windowMaximize());
 $('#win-close').addEventListener('click', () => api.windowClose());
 $('#nav-back').addEventListener('click', () => goHistory(-1));
+$('#body').addEventListener('scroll', syncChrome, { passive: true });
 $('#nav-fwd').addEventListener('click', () => goHistory(1));
 $('#btn-sidebar').addEventListener('click', () => $('#app').classList.toggle('no-sidebar'));
 
@@ -2091,10 +2283,12 @@ function showProgress(identifier, percent) {
   if (!d || d.status !== 'downloading') return;
   d.percent = percent;
   renderNowbar();
-  const bar = document.querySelector('#detail-panel .progress i');
+  const bar = document.querySelector('#detail .progress i');
   if (bar && state.detail?.version?.identifier === identifier) {
     bar.style.width = `${percent}%`;
-    document.querySelector('#detail-panel .progress-label').textContent = `${percent}%`;
+    document.querySelector('#detail .progress-label').textContent = `${percent}%`;
+    const busy = document.querySelector('#detail .album-pill.primary:disabled');
+    if (busy) busy.textContent = `Downloading… ${percent}%`;
   }
 }
 

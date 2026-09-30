@@ -121,7 +121,7 @@ const api = (() => {
     },
     fetchFileList: async ({ identifier }) => {
       const r = await call('GET', `/items/${enc(identifier)}/files`);
-      return r.ok ? { ok: true, files: r.body.files } : { ...failure(r), files: [] };
+      return r.ok ? { ok: true, files: r.body.files, installable: r.body.installable } : { ...failure(r), files: [] };
     },
     fetchReviews: async ({ identifier }) => (await call('GET', `/items/${enc(identifier)}/reviews`)).body?.reviews || [],
     getThumb:        ({ identifier }) => image(`/items/${enc(identifier)}/cover`),
