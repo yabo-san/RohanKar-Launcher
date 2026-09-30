@@ -57,6 +57,7 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--github-api', fixtures.base,
     '--collisions-file', path.join(__dirname, 'fixtures', 'collisions.json'),
     '--featured-url', `${fixtures.base}/featured.json`,
+    '--announcement-url', `${fixtures.base}/announcement.json`,
   ], {}, () => {});
   for (const c of catalogs) {
     await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });
