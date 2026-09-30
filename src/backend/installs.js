@@ -464,6 +464,17 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
             } finally {
               fs.rmSync(staging, { recursive: true, force: true });
             }
+          } else if (s.extract && ports.ARCHIVE_EXT.test(f.name) && s.unwrap) {
+            // An archive that is one folder ("Raze Package/") lays down that folder's contents
+            update(job, { status: 'extracting', percent: 100 });
+            const staging = path.join(root, `.unpack-${job.id}`);
+            try {
+              const xr = await extractTo(got.filePath, staging);
+              if (!xr.ok) return fail(xr.error);
+              fs.cpSync(ports.releaseRoot(staging), root, { recursive: true, force: true });
+            } finally {
+              fs.rmSync(staging, { recursive: true, force: true });
+            }
           } else if (s.extract && ports.ARCHIVE_EXT.test(f.name)) {
             update(job, { status: 'extracting', percent: 100 });
             const xr = await extractTo(got.filePath, root);

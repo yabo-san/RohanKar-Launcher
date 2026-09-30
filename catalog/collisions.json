@@ -217,5 +217,21 @@
     "assetPattern": "(?i)windows",
     "folderName": "mchughalex.skate3recomp",
     "dataFiles": null
+  },
+  {
+    "repository": "ZDoom/Raze",
+    "name": "Raze",
+    "shelf": "y4bo ports",
+    "hidden": true,
+    "assetPattern": "(?i)windows.*\\.zip$",
+    "exe": "raze.exe",
+    "sources": [
+      {
+        "ia": "raze-package",
+        "path": "Raze Package.zip",
+        "extract": true,
+        "unwrap": true
+      }
+    ]
   }
 ]

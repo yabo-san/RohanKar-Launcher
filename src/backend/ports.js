@@ -181,9 +181,10 @@ function validateCollision(c) {
     if (s.target != null && !safeRel(s.target)) errs.push(`${at}.target must be a relative folder`);
     if (s.sha1 != null && !SHA1.test(s.sha1)) errs.push(`${at}.sha1 must be 40 hex characters`);
     if (s.sha1 != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.sha1 only applies to a single file`);
-    for (const k of ['extract', 'optional']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
+    for (const k of ['extract', 'optional', 'unwrap']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
     if (s.as != null && !(typeof s.as === 'string' && /^[^\\/:*?"<>|]+$/.test(s.as) && s.as !== '.' && s.as !== '..')) errs.push(`${at}.as must be a file name`);
     if (s.as != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.as only applies to a single file`);
+    if (s.unwrap && !s.extract) errs.push(`${at}.unwrap only applies with extract`);
   });
   if (!(Array.isArray(c.sources) && c.sources.length) && !(Array.isArray(c.dataFiles) && c.dataFiles.length) && !c.name) {
     errs.push('an entry with no data sources needs a name (it defines a port of its own)');

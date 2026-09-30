@@ -344,6 +344,26 @@ test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as
   assert.equal(ports.expandSource({ ia: 'i', path: 'roms/bk.z64', as: 'baserom.z64' }, IA_FILES).files[0].rel, 'baserom.z64');
 });
 
+test('a data archive that is one folder ("Raze Package/") lays down its contents with `unwrap`', async (t) => {
+  const { dir, installs, item, state } = await setup(t, { bin: PD_REAL() });
+  const pack = makeZip({ 'Raze Package/DUKE3D.GRP': 'GRP', 'Raze Package/Blood/BLOOD.RFF': 'RFF' });
+  state.files['raze-package'] = [{ name: 'Raze Package.zip', source: 'original', size: String(pack.length), sha1: sha1(pack) }];
+  state.routes['/download/raze-package/Raze%20Package.zip'] = (req, res) => { res.writeHead(200); res.end(pack); };
+  const source = { ia: 'raze-package', path: 'Raze Package.zip', extract: true, unwrap: true };
+  assert.deepEqual(ports.validateCollision({ repository: 'o/raze', sources: [source] }), []);
+  const r = installs.startPort({ item: { ...item, data: { assetPattern: '(?i)x86_64-windows', exe: 'pd.x86_64.exe', sources: [source] } } });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.error], ['done', null]);
+  assert.equal(fs.readFileSync(path.join(dest, 'DUKE3D.GRP'), 'utf8'), 'GRP');
+  assert.equal(fs.readFileSync(path.join(dest, 'Blood', 'BLOOD.RFF'), 'utf8'), 'RFF');
+  assert.ok(!fs.readdirSync(dest).some(n => n.startsWith('.unpack-') || n === 'Raze Package'), 'no staging, no wrapper folder');
+  assert.deepEqual(ports.validateCollision({ repository: 'o/raze', sources: [{ ia: 'i', path: 'x.zip', unwrap: true }, { ia: 'i', path: 'x.zip', extract: true, unwrap: 'yes' }] }), [
+    'sources[0].unwrap only applies with extract', 'sources[1].unwrap must be true or false',
+  ]);
+});
+
 test('an N64 ROM in any byte order becomes a .z64; other files are left as they are', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-z64-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
