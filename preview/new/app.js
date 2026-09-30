@@ -21,7 +21,8 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
-  quiverImport: null,   // { plan, busy, result } while importing a Quiver library
+  quiverImport: null,
+  manualForm: null,     // { name, folder } while adding a manual app from the Library   // { plan, busy, result } while importing a Quiver library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   libSearch: '',        // the search box in a library header (Cider's library pages)
@@ -250,6 +251,7 @@ function renderNav() {
   const libCount = Object.values(state.library).filter(l => l.install_dir || l.identifier.startsWith('quiver:')).length;
   $('#n-library').textContent = libCount || '';
   $('#n-updates').textContent = reviewCount() || '';
+  renderBadges();
   markActive();
 }
 
@@ -285,7 +287,28 @@ function markActive() {
   });
 }
 
+// Back and forward in the title row walk the views visited
+const navHistory = { back: [], fwd: [] };
+function syncHistory() {
+  $('#nav-back').disabled = !navHistory.back.length;
+  $('#nav-fwd').disabled = !navHistory.fwd.length;
+}
 function go(name, arg = null) {
+  const v = state.view;
+  if (v.name !== name || (v.arg || null) !== (arg || null)) {
+    navHistory.back.push(v);
+    navHistory.fwd.length = 0;
+  }
+  show(name, arg);
+}
+function goHistory(dir) {
+  const from = dir < 0 ? navHistory.back : navHistory.fwd;
+  const v = from.pop();
+  if (!v) return;
+  (dir < 0 ? navHistory.fwd : navHistory.back).push(state.view);
+  show(v.name, v.arg || null);
+}
+function show(name, arg) {
   if (name === 'collision') startEditor(arg);
   state.view = { name, arg };
   state.query = '';
@@ -294,7 +317,10 @@ function go(name, arg = null) {
   state.libSearch = '';
   state.libPage = 1;
   $('#body').scrollTop = 0;
+  syncHistory();
   render();
+  // A quick fade between views; renders within a view (the wall streaming in) don't fade
+  $('#body').animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 180, easing: 'cubic-bezier(.25, .1, .25, 1)' });
 }
 
 // ─── cards ───────────────────────────────────────────────────────────────────
@@ -334,11 +360,15 @@ function portCard(p) {
 const skeletons = (n) => Array.from({ length: n }, () =>
   '<div class="card skel"><div class="art"></div><div class="title">.</div><div class="sub">.</div></div>').join('');
 
+// A section head is a bold title, with a chevron when it leads to a page of
+// its own, and the round arrows at the right of a row (as in Cider)
 function section(title, body, { count, sub, seeAll, cls = 'grid' } = {}) {
   const isRow = cls.split(' ')[0] === 'row';
-  return `<section class="section${isRow ? ' has-row' : ''}"><div class="section-head"><h2>${esc(title)}</h2>
-    ${count != null ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
-    ${seeAll ? `<button class="seeall" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">See all</button>` : ''}
+  const h2 = seeAll
+    ? `<h2><button class="h2link" data-go="${esc(seeAll[0])}" data-arg="${esc(seeAll[1] || '')}">${esc(title)}<i class="ico" data-ico="chev"></i></button></h2>`
+    : `<h2>${esc(title)}</h2>`;
+  return `<section class="section${isRow ? ' has-row' : ''}"><div class="section-head">${title ? h2 : ''}
+    ${count != null && !isRow ? `<span class="count">${esc(count)}</span>` : ''}${sub ? `<span class="sub">${esc(sub)}</span>` : ''}
     ${isRow ? rowNav : ''}</div>
     <div class="${cls}">${body}</div></section>`;
 }
@@ -357,7 +387,8 @@ function syncRowNav(row) {
   const nav = row.closest('.section')?.querySelector('.row-nav');
   if (!nav) return;
   const max = row.scrollWidth - row.clientWidth;
-  nav.hidden = max <= 1;
+  // The carousel keeps its pager, as in Cider; other rows show arrows only when they overflow
+  nav.hidden = max <= 1 && !(row.classList.contains('feature') && row.children.length > 1);
   nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
   nav.querySelector('.next').disabled = row.scrollLeft >= max - 1;
 }
@@ -366,19 +397,24 @@ const syncRows = () => {
   document.querySelectorAll('#body .row').forEach(syncRowNav);
 };
 
-// A list row fills the width in columns (as many ~280px columns as fit), up to
-// four items deep, then pages sideways like the other rows
-const LIST_COL = 280, LIST_GAP = 28, LIST_DEPTH = 4;
+// A list row runs in columns four items deep, then pages sideways like the
+// other rows; the columns keep their width and the last one peeks (Cider's
+// song lists on New)
+const LIST_DEPTH = 4;
 function layoutList(row) {
-  const n = row.children.length;
-  const cols = Math.max(1, Math.floor((row.clientWidth + LIST_GAP) / (LIST_COL + LIST_GAP)));
-  row.style.gridTemplateRows = `repeat(${Math.min(LIST_DEPTH, Math.ceil(n / cols))}, auto)`;
-  row.style.gridAutoColumns = `calc((100% - ${(cols - 1) * LIST_GAP}px) / ${cols})`;
+  row.style.gridTemplateRows = `repeat(${Math.max(1, Math.min(LIST_DEPTH, row.children.length))}, auto)`;
 }
 
+// One press moves a row by most of its width, in whole cards (whole columns
+// in a list, one card in the feature carousel)
 function scrollRow(btn) {
   const row = btn.closest('.section').querySelector('.row');
-  row.scrollBy({ left: Number(btn.dataset.rowNav) * row.clientWidth * 0.85, behavior: 'smooth' });
+  const first = row.children[0];
+  const pitch = first ? first.offsetWidth + (parseFloat(getComputedStyle(row).columnGap) || 0) : 0;
+  const by = !pitch ? row.clientWidth * 0.85
+    : row.classList.contains('feature') ? pitch
+    : Math.max(1, Math.floor(row.clientWidth / pitch)) * pitch;
+row.scrollBy({ left: Number(btn.dataset.rowNav) * by, behavior: 'smooth' });
 }
 
 // Drag to scroll with the mouse; a drag doesn't open the card it started on
@@ -458,7 +494,7 @@ function viewHome() {
   let html = wallNotice();
 
   const newest = state.games.slice().sort(byNewest).slice(0, 24);
-  html += section('Newest on the wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
+  html += section('Newest on the Wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
     { cls: 'row', seeAll: ['wall'] });
 
   for (const s of enabled) {
@@ -467,7 +503,7 @@ function viewHome() {
     if (failed) continue;
     const body = list.length ? list.slice(0, 20).map(gameCard).join('') : state.wall.loading ? skeletons(8) : '';
     if (!body) continue;
-    html += section(`Most played from ${sourceName(s)}`, body, { count: list.length || null, cls: 'row', seeAll: ['uploader', s.uploader] });
+    html += section(`Most Played from ${sourceName(s)}`, body, { count: list.length || null, cls: 'row', seeAll: ['uploader', s.uploader] });
   }
 
   for (const shelf of ports?.shelves || []) {
@@ -658,24 +694,54 @@ const rowGame = (l) => ({
   _sourceLabel: l.source === 'manual' ? 'Your folder' : 'archive.org', _manual: l.source === 'manual',
 });
 
+// Add your own app: a name, then a new folder in the install folder or one
+// that already holds it. Quiver's "manually managed" apps.
+function manualFormHtml() {
+  const f = state.manualForm;
+  if (!f) return `<div class="lib-tools"><button class="btn" data-action="manual-open">Add your own app…</button></div>`;
+  return `<div class="manual-form" id="manual-form">
+    <div class="field"><label for="manual-name">Name</label>
+      <input type="text" id="manual-name" value="${esc(f.name)}" placeholder="What it's called in your library"></div>
+    <div class="field"><label>Folder</label>
+      <div class="hint">${f.folder ? esc(f.folder) : "A new folder in your install folder. Put the app's files in it and the library launches it."}</div>
+      <div class="inline"><button class="btn" data-action="manual-folder">Use a folder I already have…</button>
+      ${f.folder ? '<button class="btn" data-action="manual-folder-clear">Make a new one instead</button>' : ''}</div></div>
+    <div class="field inline"><button class="btn primary" id="btn-manual-create" data-action="manual-create">Add to library</button>
+      <button class="btn" data-action="manual-cancel">Cancel</button></div>
+  </div>`;
+}
+
+async function createManual() {
+  const name = $('#manual-name')?.value.trim();
+  if (!name) return toast('Give it a name first.');
+  const r = await api.createManualApp({ name, folder: state.manualForm.folder });
+  if (!r.ok) return toast(`Couldn't add it: ${r.error}`);
+  state.manualForm = null;
+  await reloadLibrary();
+  render();
+  openDetail('game', r.row.identifier);
+  if (!r.row.exe_path) api.openGameLocation({ identifier: r.row.identifier });
+}
+
 function viewLibrary() {
   // Installed ports are on the Ports shelf below
-  const installed = Object.values(state.library).filter(l => l.install_dir && !l.identifier.startsWith('quiver:'));
+  const installed = Object.values(state.library).filter(l => (l.install_dir || l.source === 'manual') && !l.identifier.startsWith('quiver:'));
   const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || rowGame(l));
   let uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
   let ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
+  const manual = manualFormHtml();
   if (!uniq.length && !ports.length) {
-    return `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, or open a Ports shelf and add a port.
-      The library is what's yours, not everything that exists.</p>`;
+    return manual + `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, open a Ports shelf and add a port,
+      or add an app of your own. The library is what's yours, not everything that exists.</p>`;
   }
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
   const [, value] = sorts[p.sort] || sorts.name;
   uniq = ciderSort(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), value, p.order);
   ports = ciderSort(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), value, p.order);
-  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length });
+  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
   if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, row: gameRow, head: GAME_HEAD }), { count: uniq.length, cls: 'plain' });
-  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain' });
+  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
   return html;
 }
 
@@ -723,6 +789,7 @@ function listItem(g) {
     <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}"></div>
     <div class="grow"><div class="title">${esc(getTitle(g))}</div>
     <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div></div>
+    <span class="dots" aria-hidden="true"></span>
   </button>`;
 }
 
@@ -735,15 +802,17 @@ function viewNew() {
   if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
 
   const rest = newest.slice(0, 40);
-  if (rest.length) html += section('Recently added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
+  if (rest.length) html += section('Recently Added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
 
   const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
   const week = newest.filter(g => String(newestVersion(g).addeddate || '') >= weekAgo);
-  if (week.length) html += section('New this week', week.slice(0, 24).map(gameCard).join(''), { count: week.length, cls: 'row' });
+  if (week.length) html += section('New This Week', week.slice(0, 24).map(gameCard).join(''), { cls: 'row squares' });
 
   const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
   const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
-  if (newPorts.length) html += section('New ports', newPorts.map(portCard).join(''), { count: newPorts.length, cls: 'row ports', seeAll: ['updates'] });
+  // With nothing new in the catalogs, the ports row shows what they hold
+  const ports = newPorts.length ? newPorts : (state.ports?.items || []).slice(0, 24);
+  if (ports.length) html += section(newPorts.length ? 'New Ports' : 'Ports', ports.map(portCard).join(''), { cls: 'row squares ports', seeAll: newPorts.length ? ['updates'] : null });
   return html;
 }
 
@@ -859,7 +928,7 @@ function viewSearch(q) {
 }
 
 // The round reload button at the right of the page title (Cider's reload-btn)
-const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
+const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
 const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data' };
 
 function render() {
@@ -898,24 +967,9 @@ function render() {
   syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
   if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
-  renderAmbient();
   renderNav();
+  renderNowbar();
   if (state.detail) renderDetail();
-}
-
-// Ambient background: a few covers from the wall, blurred behind the glass
-let ambientDone = false;
-function renderAmbient() {
-  if (ambientDone || state.games.length < 8) return;
-  ambientDone = true;
-  const picks = state.games.slice().sort(byDownloads).slice(0, 8);
-  $('#ambient').innerHTML = picks.map(g => `<div data-amb="${esc(g.identifier)}"></div>`).join('');
-  for (const g of picks) {
-    thumb(g.identifier).then(url => {
-      const el = document.querySelector(`[data-amb="${CSS.escape(g.identifier)}"]`);
-      if (url && el) el.style.backgroundImage = `url("${url}")`;
-    });
-  }
 }
 
 // ─── detail panel ────────────────────────────────────────────────────────────
@@ -962,7 +1016,40 @@ function exePicker(d) {
     <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>`;
 }
 
+// A manually managed app: its folder is the whole story
+function manualDetail(d) {
+  const v = d.version;
+  const title = getTitle(v);
+  const lib = state.library[v.identifier] || {};
+  const actions = lib.install_dir
+    ? `<button class="btn primary" id="btn-play" data-action="play">Play</button>
+      <button class="btn" data-action="open-folder">Open folder</button>
+      <button class="btn" data-action="steam">Add to Steam</button>
+      <button class="btn" data-action="manual-rename">Rename</button>
+      <button class="btn" data-action="manual-remove">Remove from library</button>`
+    : `<button class="btn primary" data-action="manual-locate">Locate folder…</button>
+      <button class="btn" data-action="manual-remove">Remove from library</button>`;
+  const note = !lib.install_dir ? 'Its folder is gone. Point it at the folder the app is in now.'
+    : !lib.exe_path ? "Put the app's files in its folder, then Play finds the executable." : '';
+  return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
+      <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
+      <button class="x" data-close aria-label="Close">&#10005;</button>
+      <div class="titles"><h2>${esc(title)}</h2><div class="by">Your folder</div></div></div>
+    <div class="d-body">
+      <div class="actions">${actions}</div>
+      ${note ? `<p class="hint manual-note">${esc(note)}</p>` : ''}
+      ${exePicker(d)}
+      <dl class="kv">
+        ${lib.install_dir ? `<dt>Folder</dt><dd>${esc(lib.install_dir)}</dd>` : ''}
+        ${lib.exe_path ? `<dt>Launches</dt><dd>${esc(lib.exe_path)}</dd>` : ''}
+        ${lib.version ? `<dt>Version</dt><dd>${esc(lib.version)}</dd>` : ''}
+        ${lib.tags?.length ? `<dt>Tags</dt><dd>${esc(lib.tags.join(', '))}</dd>` : ''}
+      </dl>
+    </div>`;
+}
+
 function gameDetail(d) {
+  if (d.version._manual) return manualDetail(d);
   const g = d.game, v = d.version;
   const title = getTitle(v);
   const lib = state.library[v.identifier];
@@ -1072,7 +1159,7 @@ async function installGame(v) {
   // Largest archive is the game; multi-part picks stay in the classic UI for now
   const file = archives.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0];
 
-  const dl = { percent: 0, status: 'downloading', jobId: null };
+  const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', v.identifier] };
   state.downloads.set(identifier, dl);
   render();
   const job = await api.install({
@@ -1091,14 +1178,15 @@ async function installGame(v) {
 
 async function installPort(p) {
   if (state.downloads.has(p.id)) return;
-  const dl = { percent: 0, status: 'downloading', step: 'binary', jobId: null };
+  const dl = { percent: 0, status: 'downloading', step: 'binary', jobId: null, name: p.name, open: ['port', p.id] };
   state.downloads.set(p.id, dl);
   renderDetail();
+  renderNowbar();
   const job = await api.install({
     identifier:   p.id,
     onStart:      (j) => { dl.jobId = j.id; },
-    onProgress:   (percent, j) => { Object.assign(dl, { percent, status: 'downloading', step: j.step }); renderDetail(); },
-    onExtracting: (j) => { Object.assign(dl, { percent: 100, status: j.status, step: j.step }); renderDetail(); },
+    onProgress:   (percent, j) => { Object.assign(dl, { percent, status: 'downloading', step: j.step }); renderDetail(); renderNowbar(); },
+    onExtracting: (j) => { Object.assign(dl, { percent: 100, status: j.status, step: j.step }); renderDetail(); renderNowbar(); },
   });
   state.downloads.delete(p.id);
   await reloadLibrary();
@@ -1111,7 +1199,7 @@ async function playGame(v) {
   const lib = state.library[v.identifier];
   if (lib?.exe_path) return launch(v, lib.exe_path);
   const exes = await api.findExes({ identifier: v.identifier });
-  if (!exes.length) return toast('No executable found. Try reinstalling.');
+  if (!exes.length) return toast(v._manual ? "No executable yet: put the app's files in its folder." : 'No executable found. Try reinstalling.');
   if (exes.length === 1) return launch(v, exes[0]);
   state.detail.exes = { purpose: 'play', list: exes };
   renderDetail();
@@ -1357,6 +1445,7 @@ async function editorExport() {
 document.addEventListener('input', (e) => {
   const ed = state.editor;
   const t = e.target;
+  if (t.id === 'manual-name' && state.manualForm) { state.manualForm.name = t.value; return; }
   if (!ed || state.view.name !== 'collision') return;
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
@@ -1542,7 +1631,7 @@ async function saveSettingsForm() {
   state.settings = { ...state.settings, ...patch };
   state.sources = sources;
   toast('Settings saved.');
-  if (changed) { ambientDone = false; loadWall({ refresh: true }); }
+  if (changed) loadWall({ refresh: true });
 }
 
 // A port acts through its library row, keyed by the catalog item id
@@ -1574,8 +1663,8 @@ async function onAction(action, el) {
       await reloadLibrary();
       return render();
     }
-    case 'reload-wall': ambientDone = false; return loadWall({ refresh: true });
-    case 'reload-all': ambientDone = false; loadPorts(true); return loadWall({ refresh: true });
+    case 'reload-wall': return loadWall({ refresh: true });
+    case 'reload-all': loadPorts(true); return loadWall({ refresh: true });
     case 'refresh-ports': toast('Checking the catalogs…', 2000); return loadPorts(true);
     case 'mark-seen':
       await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
@@ -1594,6 +1683,44 @@ async function onAction(action, el) {
     case 'feed-add': return addCollisionFeed();
     case 'feed-refresh': await api.refreshCollisionFeed(el.dataset.id); return loadCollisionFeeds();
     case 'feed-remove': await api.removeCollisionFeed(el.dataset.id); await loadCollisionFeeds(); return loadPorts();
+    case 'announce-dismiss':
+      $('#announce').classList.add('hidden');
+      return api.dismissAnnouncement(el.dataset.id);
+    case 'manual-open': state.manualForm = { name: '', folder: null }; render(); return $('#manual-name')?.focus();
+    case 'manual-cancel': state.manualForm = null; return render();
+    case 'manual-folder': {
+      const folder = await api.chooseFolder();
+      if (!folder) return;
+      state.manualForm = { name: $('#manual-name')?.value || folder.split(/[\\/]/).pop(), folder };
+      return render();
+    }
+    case 'manual-folder-clear': state.manualForm = { name: $('#manual-name')?.value || '', folder: null }; return render();
+    case 'manual-create': return createManual();
+    case 'manual-rename': {
+      const title = prompt('Rename to', getTitle(v));
+      if (!title?.trim()) return;
+      const r = await api.renameEntry({ identifier: v.identifier, title: title.trim() });
+      if (!r.ok) return toast(`Couldn't rename: ${r.error}`);
+      await reloadLibrary();
+      openDetail('game', v.identifier);
+      return render();
+    }
+    case 'manual-locate': {
+      const dir = await api.chooseFolder();
+      if (!dir) return;
+      const r = await api.setInstallDir({ identifier: v.identifier, installDir: dir });
+      if (!r.ok) return toast(`Couldn't use that folder: ${r.error}`);
+      await reloadLibrary();
+      openDetail('game', v.identifier);
+      return render();
+    }
+    case 'manual-remove': {
+      if (!confirm(`Remove ${getTitle(v)} from your library? Its folder stays where it is.`)) return;
+      await api.removeFromLibrary({ id: v.identifier });
+      closeDetail();
+      await reloadLibrary();
+      return render();
+    }
     case 'quiver-import-choose': return quiverImport(false);
     case 'quiver-import-apply': return quiverImport(true);
     case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
@@ -1669,6 +1796,7 @@ $('#q').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => { state.query = e.target.value.trim(); render(); }, 120);
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && popKind) return closePop();
   if (e.key === 'Escape' && menuPort) return closeMenu();
   if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
@@ -1678,11 +1806,105 @@ document.addEventListener('keydown', (e) => {
 $('#win-min').addEventListener('click', () => api.windowMinimize());
 $('#win-max').addEventListener('click', () => api.windowMaximize());
 $('#win-close').addEventListener('click', () => api.windowClose());
+$('#nav-back').addEventListener('click', () => goHistory(-1));
+$('#nav-fwd').addEventListener('click', () => goHistory(1));
+$('#btn-sidebar').addEventListener('click', () => $('#app').classList.toggle('no-sidebar'));
+
+// The window buttons dim while the window is in the background, as on macOS
+const syncFocus = () => document.body.classList.toggle('unfocused', !document.hasFocus());
+window.addEventListener('focus', syncFocus);
+window.addEventListener('blur', syncFocus);
+syncFocus();
+
+// The two-way switch under the search box: everything, or only what's yours
+document.querySelectorAll('.seg [data-seg]').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.seg [data-seg]').forEach(x => x.classList.toggle('on', x === b));
+  $('#sidebar').classList.toggle('only-yours', b.dataset.seg === 'yours');
+}));
+
+// ─── title-row popovers: Downloads and ⋯ (Cider's lyrics and ⋯ slots) ──────
+
+let popKind = null;
+function downloadsPopHtml() {
+  const active = [...state.downloads.values()].filter(d => d.name);
+  const kindOf = (id) => (state.ports?.items.some(i => i.id === id) ? 'port' : 'game');
+  const recent = Object.values(state.library).filter(l => l.install_dir)
+    .sort((a, b) => String(b.added_at || '').localeCompare(String(a.added_at || ''))).slice(0, 5);
+  const nameOf = (l) => state.ports?.items.find(i => i.id === l.identifier)?.name
+    || getTitle(state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || { title: l.title || l.identifier });
+  let html = '<div class="pop-h">Downloads</div>';
+  html += active.length ? active.map(d => `<button class="mi pop-dl" data-open="${esc(d.open[0])}" data-id="${esc(d.open[1])}">
+      <span class="pop-name">${esc(d.name)}</span><span class="pop-pct">${d.status === 'downloading' ? `${d.percent || 0}%` : 'Installing…'}</span>
+      <span class="nb-bar"><i style="width:${d.percent || 0}%"></i></span></button>`).join('')
+    : '<div class="pop-empty">Nothing downloading.</div>';
+  if (recent.length) {
+    html += '<div class="sep"></div><div class="pop-h">Recently installed</div>';
+    html += recent.map(l => `<button class="mi" data-open="${kindOf(l.identifier)}" data-id="${esc(l.identifier)}">
+      <span class="pop-name">${esc(nameOf(l))}</span><span class="pop-pct">${esc(fmtDate(l.added_at))}</span></button>`).join('');
+  }
+  return html;
+}
+const morePopHtml = () => `<button class="mi" data-view="settings"><i class="ico" data-ico="settings"></i>Settings</button>
+  <button class="mi" data-action="reload-all"><i class="ico" data-ico="reload"></i>Reload</button>
+  <div class="sep"></div>
+  <button class="mi" data-action="legacy-ui"><i class="ico" data-ico="swap"></i>Switch to the classic interface</button>`;
+
+function renderPop() {
+  const el = $('#pop');
+  if (!popKind) return el.classList.add('hidden');
+  el.innerHTML = popKind === 'downloads' ? downloadsPopHtml() : morePopHtml();
+  el.dataset.kind = popKind;
+  const btn = $(popKind === 'downloads' ? '#btn-downloads' : '#btn-more');
+  const r = btn.getBoundingClientRect(), main = $('.main').getBoundingClientRect();
+  el.classList.remove('hidden');
+  el.style.top = `${r.bottom - main.top + 6}px`;
+  el.style.right = `${Math.max(12, main.right - r.right - 8)}px`;
+}
+function togglePop(kind) {
+  popKind = popKind === kind ? null : kind;
+  renderPop();
+}
+function closePop() { if (popKind) { popKind = null; renderPop(); } }
+document.addEventListener('click', (e) => {
+  const opener = e.target.closest('[data-pop]');
+  if (opener) { e.stopPropagation(); return togglePop(opener.dataset.pop); }
+  // Any other click closes it; a click on one of its items still does its job
+  closePop();
+}, true);
+window.addEventListener('blur', closePop);
+window.addEventListener('resize', closePop);
+
+// The badges in the title row: a dot while something downloads, the count of
+// catalog changes to review on Notifications
+function renderBadges() {
+  const busy = [...state.downloads.values()].some(d => d.name);
+  $('#dl-dot').hidden = !busy;
+  const n = reviewCount();
+  const b = $('#n-notices');
+  b.hidden = !n;
+  b.textContent = n > 99 ? '99+' : n || '';
+}
+
+// The pill at the bottom of the window follows the running download, if any
+function renderNowbar() {
+  renderBadges();
+  if (popKind === 'downloads') renderPop();
+  const el = $('#nowbar');
+  const dl = [...state.downloads.values()].find(d => d.name);
+  el.classList.toggle('hidden', !dl);
+  if (!dl) return;
+  const pct = dl.percent || 0;
+  el.innerHTML = `<button class="nowbar-in" data-open="${esc(dl.open[0])}" data-id="${esc(dl.open[1])}">
+    <i class="ico" data-ico="download"></i><span class="nb-name">${esc(dl.name)}</span>
+    <span class="nb-pct">${dl.status === 'downloading' ? `${pct}%` : 'Installing…'}</span>
+    <span class="nb-bar"><i style="width:${pct}%"></i></span></button>`;
+}
 
 function showProgress(identifier, percent) {
   const d = state.downloads.get(identifier);
   if (!d || d.status !== 'downloading') return;
   d.percent = percent;
+  renderNowbar();
   const bar = document.querySelector('#detail-panel .progress i');
   if (bar && state.detail?.version?.identifier === identifier) {
     bar.style.width = `${percent}%`;
@@ -1692,6 +1914,17 @@ function showProgress(identifier, percent) {
 
 // ─── start ───────────────────────────────────────────────────────────────────
 
+// announcement.json on main: one message, shown until dismissed (by id)
+async function showAnnouncement() {
+  const a = await api.getAnnouncement().catch(() => null);
+  const el = $('#announce');
+  if (!a || !el) return;
+  el.innerHTML = `<span class="msg">${esc(a.message)}</span>
+    ${a.link ? `<a data-href="${esc(a.link)}">More</a>` : ''}
+    <button class="x" data-action="announce-dismiss" data-id="${esc(a.id)}" aria-label="Dismiss">&#10005;</button>`;
+  el.classList.remove('hidden');
+}
+
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
@@ -1699,6 +1932,7 @@ applyFolded();
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
+  showAnnouncement();
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall
   loadPorts();
   loadWall();

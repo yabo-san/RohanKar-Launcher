@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — api.js
+ * y4bo — api.js
  * The frontend's only way out: fetch and EventSource against the backend's
  * /v1 API (docs/API.md). Where it runs:
  *   - the desktop app: preload.js sets window.launcher = { apiBase, token }
@@ -108,6 +108,8 @@ const api = (() => {
     saveSettings: (s) => call('PUT', '/settings', s),
     getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
     getFeatured:  async () => (await call('GET', '/featured')).body?.picks || [],
+    getAnnouncement:     async () => (await call('GET', '/announcement')).body?.announcement || null,
+    dismissAnnouncement: (id) => call('POST', '/announcement/dismiss', { id }),
 
     // Items: { items, errors }; throws when every source failed
     getItems: async (query = {}) => {
@@ -153,6 +155,16 @@ const api = (() => {
     scanForGames: async () => {
       const r = await call('POST', '/library/scan', {});
       return r.ok ? r.body : { found: [], error: r.body?.detail };
+    },
+
+    // A manually managed app: a named folder (made, or an existing one) to fill
+    createManualApp: async ({ name, folder = null }) => {
+      const r = await call('POST', '/library/manual', { name, folder });
+      return r.ok ? { ok: true, row: r.body } : failure(r);
+    },
+    renameEntry: async ({ identifier, title }) => {
+      const r = await call('PATCH', `/library/${enc(identifier)}`, { title });
+      return r.ok ? { ok: true } : failure(r);
     },
 
     // A Quiver folder (apps.json + Apps/): the plan, or with apply the import
