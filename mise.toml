@@ -23,6 +23,10 @@ run = "node scripts/dev.js frontend"
 description = "Backend and frontend together in one process; prints the page URLs"
 run = "node scripts/dev.js"
 
+[tasks.ui]
+description = "The UI in a browser on 0.0.0.0:5180 from saved JSON (e2e fixtures, no network, no installs); --live for real data"
+run = "node scripts/ui.js"
+
 [tasks.test]
 description = "Unit and API tests with the 80% coverage gate"
 run = "npm run test:coverage"
