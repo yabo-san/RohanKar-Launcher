@@ -9,7 +9,9 @@
  *     lists one Windows zip holding pd.exe, and its archive.org data item holds
  *     PD_ROM, which fixtures/collisions.json expects by sha1
  *   - /metadata/rk-e2e-romset is a ROM set with folders, for the game data editor
- *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
+ *   - /featured.json is fixtures/featured.json: a wall game (with a pinned
+ *     banner), a port and a pick not on the wall; /banners.json is
+ *     fixtures/banners.json, whose entry for the wall game the pin overrides
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /feed.json is fixtures/feed.json: a port and an uploader someone curates
  *     that isn't on the wall
@@ -63,8 +65,8 @@ function answer(url, base = '') {
   if (url.pathname === '/feed.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'feed.json')), 'application/json');
   }
-  if (url.pathname === '/featured.json') {
-    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
+  if (url.pathname === '/featured.json' || url.pathname === '/banners.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', url.pathname.slice(1))), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');
   if (kind === 'metadata' && id === 'rk-e2e-user-demo') {
