@@ -121,7 +121,51 @@ test('a data file that fails its sha1 fails the install, naming the file, and is
   assert.ok(!fs.existsSync(path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort', 'data', 'pd.ntsc-final.z64')));
 });
 
-test('missing data, optional data, patches, no Windows build, no repository', async (t) => {
+// The fixture patch (made with python-bps) turns source.bin into target.bin
+const BPS = path.join(__dirname, '..', 'fixtures', 'bps');
+const bpsFile = (f) => fs.readFileSync(path.join(BPS, f));
+
+test('a data file with a .bps patch is patched before its sha1 check, wherever the patch lives', async (t) => {
+  const dataZip = makeZip({ 'Perfect Dark/pd.ntsc-final.z64': bpsFile('source.bin'), 'Perfect Dark/patches/fix.bps': bpsFile('patch.bps') });
+  const { dir, installs, item, state, fake } = await setup(t, { dataZip, deleteAfterInstall: true });
+  const run = async (id, patch, extra = {}) => {
+    const it = { ...item, id, data: { ...item.data, dataFiles: [{ ...item.data.dataFiles[0], sha1: sha1(bpsFile('target.bin')), patch, ...extra }] } };
+    const r = installs.startPort({ item: it });
+    await installs.wait(r.jobs[0].id);
+    return installs.get(r.jobs[0].id);
+  };
+  const staged = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort', 'data', 'pd.ntsc-final.z64');
+
+  // in the data archive, by path and by bare name
+  assert.deepEqual([(await run('quiver:c1:o/p1', 'patches/fix.bps')).error], [null]);
+  assert.deepEqual(fs.readFileSync(staged), bpsFile('target.bin'));
+  assert.equal((await run('quiver:c1:o/p2', 'fix.bps')).status, 'done');
+
+  // at a URL, and in the same archive.org item
+  state.routes['/patches/fix.bps'] = (req, res) => { res.writeHead(200); res.end(bpsFile('patch.bps')); };
+  state.zips['pd_ia/Perfect Dark PC Port.zip'] = makeZip({ 'Perfect Dark/pd.ntsc-final.z64': bpsFile('source.bin') });
+  assert.equal((await run('quiver:c1:o/p3', `${fake.base}/patches/fix.bps`)).status, 'done');
+  state.zips['pd_ia/extras/fix.bps'] = bpsFile('patch.bps');
+  assert.equal((await run('quiver:c1:o/p4', 'extras/fix.bps')).status, 'done');
+  assert.ok(state.requests.includes('/download/pd_ia/extras/fix.bps'));
+  assert.equal((await run('quiver:c1:o/p5', 'https://archive.org/download/pd_ia/extras/fix.bps')).status, 'done');
+  assert.ok(!fs.existsSync(path.join(dir, 'dl', 'pd_ia', 'fix.bps')), 'a downloaded patch goes with deleteAfterInstall');
+
+  // shipped in the release build, which lands first
+  const binWithPatch = makeZip({ 'pd.exe': 'MZ', 'patches/ship.bps': bpsFile('patch.bps') });
+  state.routes['/gh/pd-x86_64-windows.zip'] = (req, res) => { res.writeHead(200, { 'content-length': binWithPatch.length }); res.end(binWithPatch); };
+  assert.equal((await run('quiver:c1:o/p6', 'ship.bps')).status, 'done');
+
+  // failures name the file: a patch for another dump, a download that isn't a patch, a missing one
+  state.zips['pd_ia/Perfect Dark PC Port.zip'] = makeZip({ 'Perfect Dark/pd.ntsc-final.z64': 'A DIFFERENT DUMP' });
+  assert.equal((await run('quiver:c1:o/p7', 'ship.bps')).error, "pd.ntsc-final.z64 couldn't be patched with ship.bps: the file is not the one this patch was made for");
+  assert.ok(!fs.existsSync(staged) || fs.readFileSync(staged).equals(bpsFile('target.bin')), 'nothing half-patched is left');
+  assert.match((await run('quiver:c1:o/p8', 'nowhere.bps')).error, /^pd\.ntsc-final\.z64 couldn't be patched with nowhere\.bps: not a BPS patch$/);
+  state.routes['/patches/gone.bps'] = (req, res) => { res.writeHead(404); res.end(); };
+  assert.equal((await run('quiver:c1:o/p9', `${fake.base}/patches/gone.bps`)).error, `pd.ntsc-final.z64's patch ${fake.base}/patches/gone.bps: HTTP 404`);
+});
+
+test('missing data, optional data, no Windows build, no repository', async (t) => {
   const { installs, item, state, fake } = await setup(t, { dataZip: makeZip({ 'other.bin': 'x' }), deleteAfterInstall: true });
   const run = async (it) => { const r = installs.startPort({ item: it }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
 
@@ -129,8 +173,6 @@ test('missing data, optional data, patches, no Windows build, no repository', as
   const optional = { ...item, id: 'quiver:c1:o/pd2', data: { ...item.data, dataFiles: [{ ...item.data.dataFiles[0], optional: true }] } };
   assert.equal((await run(optional)).status, 'done');
   state.zips['pd_ia/Perfect Dark PC Port.zip'] = makeZip({ 'pd.ntsc-final.z64': 'ROMDATA' });
-  const patched = { ...item, id: 'quiver:c1:o/pd3', data: { ...item.data, dataFiles: [{ ...item.data.dataFiles[0], patch: 'fix.bps' }] } };
-  assert.match((await run(patched)).error, /needs a patch \(fix\.bps\)/);
   const offArchive = { ...item, id: 'quiver:c1:o/pd4', data: { ...item.data, contentUrl: 'https://example.com/x.zip' } };
   assert.match((await run(offArchive)).error, /isn't an archive.org download/);
 

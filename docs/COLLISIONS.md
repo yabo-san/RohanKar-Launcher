@@ -51,7 +51,7 @@ An array of entries, `{ "collisions": [...] }`, or an object keyed by repository
 | `base` | Which half lays down first: `"binary"` (default) or `"data"`. The other goes on top and wins on clashes. |
 | `binaryTarget` | Folder, relative to the install folder, that the release unpacks into. Default: the install folder itself. |
 | `sources` | archive.org data, in order. See below. |
-| `iaIdentifier`, `contentUrl`, `dataFiles` | The first version of the schema, still read: download `contentUrl`, pick each `dataFiles[].name` out of it, place it in `targetSubpath`, check its `sha1`. |
+| `iaIdentifier`, `contentUrl`, `dataFiles` | The first version of the schema, still read: download `contentUrl`, pick each `dataFiles[].name` out of it, place it in `targetSubpath`, check its `sha1`. A `dataFiles[].patch` (a `.bps` file) is applied first, so `sha1` is the patched file's: a URL, else a path found in the unpacked download, then the install folder (a release can ship its patch), then the same archive.org item. |
 
 ### Sources
 
