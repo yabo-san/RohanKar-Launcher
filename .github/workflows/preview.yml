@@ -1,0 +1,140 @@
+# The web preview: both UIs as static pages on GitHub Pages, answering from
+# data a real backend saved at build time (scripts/preview/build.js).
+#   main  → https://yabo-san.github.io/RohanKar-Launcher/preview/new/
+#   PR #N → https://yabo-san.github.io/RohanKar-Launcher/preview/pr-N/new/
+# Pages serves the gh-pages branch (the update channels live there too), so
+# this only ever writes under preview/. A PR's preview is removed when it
+# closes. Nightly, main's preview is rebuilt so its data stays current.
+# PRs from forks get no preview: their token can't push to gh-pages.
+name: Preview
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/frontend/**'
+      - 'src/backend/**'
+      - 'scripts/preview/**'
+      - 'catalog/**'
+      - 'overrides.json'
+      - 'package-lock.json'
+      - '.github/workflows/preview.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    branches:
+      - main
+    paths:
+      - 'src/frontend/**'
+      - 'src/backend/**'
+      - 'scripts/preview/**'
+      - 'catalog/**'
+      - 'overrides.json'
+      - 'package-lock.json'
+      - '.github/workflows/preview.yml'
+  schedule:
+    - cron: '23 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One build per PR (or main) at a time; a newer push replaces a running one
+concurrency:
+  group: preview-${{ github.event.pull_request.number || 'main' }}
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: >-
+      github.event.action != 'closed' &&
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      DEST: ${{ github.event.pull_request.number && format('preview/pr-{0}', github.event.pull_request.number) || 'preview' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Live sources, as the app reads them: archive.org, the Quiver lists,
+      # the catalogs on main. Fails rather than publish an empty wall.
+      - name: Build the preview
+        env:
+          PREVIEW_LABEL: "${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || 'main' }}"
+          PREVIEW_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/preview/build.js --out preview-site
+
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+          path: pages
+
+      # main's preview sits at preview/, so its sync keeps the PR folders
+      - name: Publish to gh-pages
+        working-directory: pages
+        run: |
+          mkdir -p "$DEST"
+          rsync -a --delete --exclude 'pr-*/' ../preview-site/ "$DEST/"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A "$DEST"
+          if git diff --cached --quiet; then echo "no change"; exit 0; fi
+          git commit -q -m "chore: preview for ${DEST#preview/} at ${GITHUB_SHA::7}"
+          for i in 1 2 3 4 5; do
+            git push origin HEAD:gh-pages && exit 0
+            sleep $((i * 3))
+            git pull -q --rebase origin gh-pages
+          done
+          exit 1
+
+      - name: Comment the preview link
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: marocchino/sticky-pull-request-comment@v3.0.5
+        with:
+          header: ui-preview
+          message: |
+            **UI preview** for ${{ github.event.pull_request.head.sha }}: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.DEST }}/new/
+
+            The new UI on live data saved at build time (classic UI: [`${{ env.DEST }}/`](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.DEST }}/)). Browsing, favorites and Add/Remove work; installs and launching need the desktop app. Pages can take a minute to update after this comment.
+
+  remove:
+    if: >-
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      DEST: preview/pr-${{ github.event.pull_request.number }}
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Remove the PR's preview
+        run: |
+          [ -d "$DEST" ] || { echo "no preview"; exit 0; }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git rm -rq "$DEST"
+          git commit -q -m "chore: remove preview for ${DEST#preview/}"
+          for i in 1 2 3 4 5; do
+            git push origin HEAD:gh-pages && exit 0
+            sleep $((i * 3))
+            git pull -q --rebase origin gh-pages
+          done
+          exit 1
