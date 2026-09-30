@@ -4,12 +4,14 @@
  * the fixtures can only imitate (Perfect Dark first). Not part of the test
  * suite: CI runs it as the non-blocking "live ports" job.
  *
- *   node scripts/live-port.js [owner/repo ...] [--keep]
+ *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...]
  *
  * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
  * installs the port into a temp folder with the same install engine the app
- * uses, and lists what landed. Exits 1 if any install fails.
+ * uses, and lists what landed. --ia lists an archive.org item's files (those
+ * whose path matches the regex), to find the file a collision should use.
+ * Exits 1 if any install fails.
  */
 const fs   = require('fs');
 const os   = require('os');
@@ -25,8 +27,29 @@ const ROOT = path.join(__dirname, '..');
 const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
 
 function parseArgs(argv) {
-  const repos = argv.filter(a => !a.startsWith('--'));
-  return { repos: repos.length ? repos : DEFAULT, keep: argv.includes('--keep') };
+  const ia = [];
+  const rest = [];
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--ia') ia.push(argv[++i]);
+    else rest.push(argv[i]);
+  }
+  const repos = rest.filter(a => !a.startsWith('--'));
+  return { repos: repos.length || ia.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia };
+}
+
+// "item" or "item:regex" → the item's files whose path matches, to pick a data source from
+async function listIa(spec, print) {
+  const at = spec.indexOf(':');
+  const id = at < 0 ? spec : spec.slice(0, at);
+  const match = at < 0 ? null : new RegExp(spec.slice(at + 1).replace(/^\(\?i\)/, ''), /^\(\?i\)/.test(spec.slice(at + 1)) ? 'i' : '');
+  const r = await getText(`https://archive.org/metadata/${encodeURIComponent(id)}`, { kind: 'archive' });
+  print(`\n== archive.org ${id}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
+  if (r.status !== 200) return 1;
+  const files = JSON.parse(r.body).files || [];
+  const hits = files.filter(f => !match || match.test(f.name));
+  print(`${files.length} files, ${hits.length} match`);
+  for (const f of hits.slice(0, 200)) print(`  ${f.name} (${f.size || '?'} bytes, sha1 ${f.sha1 || '?'})`);
+  return 0;
 }
 
 // A collision as the catalog item catalogs.items() would build for it
@@ -64,6 +87,7 @@ async function run(opts, print = (l) => console.log(l)) {
   const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
   const installs = createInstalls({ settings, library, archive: createArchive({ log: () => {} }), gamesDir: dir, log: print });
   let failed = 0;
+  for (const spec of opts.ia || []) failed += await listIa(spec, print);
   try {
     for (const repo of opts.repos) {
       const c = catalog.find(x => x.repository.toLowerCase() === repo.toLowerCase());

@@ -5,8 +5,9 @@ const assert = require('node:assert/strict');
 const { parseArgs, itemFor } = require('../scripts/live-port');
 
 test('live-port: Perfect Dark by default, repos and --keep from the command line', () => {
-  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false });
-  assert.deepEqual(parseArgs(['a/b', '--keep', 'c/d']), { repos: ['a/b', 'c/d'], keep: true });
+  assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false, ia: [] });
+  assert.deepEqual(parseArgs(['a/b', '--keep', 'c/d']), { repos: ['a/b', 'c/d'], keep: true, ia: [] });
+  assert.deepEqual(parseArgs(['--ia', 'N64TOSEC:(?i)perfect']), { repos: [], keep: false, ia: ['N64TOSEC:(?i)perfect'] });
 });
 
 test('live-port: a collision becomes the catalog item the install engine takes', () => {

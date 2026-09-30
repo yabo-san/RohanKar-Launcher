@@ -18,6 +18,9 @@ on:
       repos:
         description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark and Dusklight)'
         required: false
+      ia:
+        description: 'archive.org items to list, as item or item:regex, space separated'
+        required: false
 
 permissions:
   contents: read
@@ -36,4 +39,6 @@ jobs:
       - name: Install the ports for real
         env:
           REPOS: ${{ inputs.repos }}
-        run: node scripts/live-port.js $REPOS
+          # The TOSEC N64 set, for collisions that take a ROM from it
+          IA: ${{ inputs.ia || 'N64TOSEC:(?i)perfect.dark' }}
+        run: node scripts/live-port.js $REPOS $(for i in $IA; do printf -- '--ia %s ' "$i"; done)
