@@ -41,7 +41,7 @@ module.exports = [
     // Defined in ../api.js and ../sources.js, which new/index.html loads before app.js
     files: ['src/frontend/new/app.js'],
     languageOptions: {
-      globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly' },
+      globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', ListView: 'readonly' },
     },
   },
   {
@@ -53,6 +53,11 @@ module.exports = [
     // module.exports is guarded by typeof, for the node:test suite
     files: ['src/frontend/sources.js'],
     languageOptions: { globals: { module: 'writable' } },
+  },
+  {
+    // The same, and getTitle is sources.js's in the page, required under node
+    files: ['src/frontend/list-view.js'],
+    languageOptions: { globals: { module: 'writable', require: 'readonly', getTitle: 'readonly' } },
   },
   {
     // page.evaluate callbacks run in the renderer and read its top-level state
