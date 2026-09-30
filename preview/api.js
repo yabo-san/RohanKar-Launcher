@@ -107,6 +107,8 @@ const api = (() => {
     getSettings:  async () => (await call('GET', '/settings')).body || {},
     saveSettings: (s) => call('PUT', '/settings', s),
     getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
+    // Additional sources: user.json's state, invalid entries and conflicts
+    getUserSources: async () => (await call('GET', '/user-sources')).body || null,
     getFeatured:  async () => (await call('GET', '/featured')).body?.picks || [],
     getAnnouncement:     async () => (await call('GET', '/announcement')).body?.announcement || null,
     dismissAnnouncement: (id) => call('POST', '/announcement/dismiss', { id }),
@@ -223,9 +225,11 @@ const api = (() => {
     // the finished job ({ status: done | error | cancelled, error, ... }).
     // onStart(job) gets the job at once, so the caller can cancel it; a port's
     // job says which step (binary, data) onProgress and onExtracting are for.
-    install: async ({ identifier, fileName, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
+    // acceptHashChange: the user accepted a changed file from their own source
+    // (a job that stopped with hashChange)
+    install: async ({ identifier, fileName, acceptHashChange, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
       watchInstalls();
-      const r = await call('POST', '/installs', fileName ? { id: identifier, files: [fileName] } : { id: identifier });
+      const r = await call('POST', '/installs', { id: identifier, ...(fileName ? { files: [fileName] } : {}), ...(acceptHashChange ? { acceptHashChange: true } : {}) });
       if (!r.ok) return { status: 'error', error: r.body?.detail || `HTTP ${r.status}` };
       const job = r.body.installs[0];
       onStart(job);

@@ -797,3 +797,53 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .newer-note { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 14px; border-radius: var(--rad-ctl);
   background: var(--fill); border: 1px solid var(--border); font-size: 13px; }
 .newer-note .btn { margin-left: auto; }
+
+/* ---- modals, after Cider's .modal-fullscreen: a centered window over a
+   dimmed backdrop, title on top, the buttons at the bottom right ---- */
+.modal-fullscreen {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  background: rgb(0 0 0 / 30%); animation: fade .1s var(--ease);
+}
+.modal-window {
+  position: relative; width: calc(100% - 40px); max-width: 360px; display: flex; flex-direction: column;
+  border-radius: 10px; background: rgb(30 30 30 / 92%); color: var(--text);
+  backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 0 0 .5px rgb(255 255 255 / 12%), 0 18px 50px rgb(0 0 0 / 55%);
+  animation: modal-in .1s var(--ease);
+}
+@keyframes modal-in { from { opacity: 0; transform: scale(1.1); } }
+.modal-header { padding: 18px 20px 0; }
+.modal-title { font: 600 15px/1.3 var(--font); letter-spacing: -.2px; text-align: center; }
+.modal-content { padding: 8px 20px 18px; font: 400 13px/1.45 var(--font); color: var(--text2); text-align: center; }
+.modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 0 16px 16px; }
+.modal-footer .md-btn { flex: 1; }
+.modal-footer .md-btn:focus-visible { outline: 2px solid rgb(250 45 72 / 60%); outline-offset: 1px; }
+
+/* ---- additional sources: the badge, the switch and the user.json panel ---- */
+.user-badge {
+  display: inline-block; margin-top: 4px; padding: 1px 6px; border-radius: 4px; max-width: 100%;
+  font: 600 10px/1.5 var(--font); letter-spacing: .1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #ffd60a; background: rgb(255 214 10 / 12%); box-shadow: inset 0 0 0 .5px rgb(255 214 10 / 30%);
+}
+.version .user-badge { margin: 0 6px; }
+.user-note { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12px; color: var(--text2); }
+.user-note .user-badge { margin: 0; }
+.switch-row { display: flex; align-items: flex-start; gap: 16px; cursor: pointer; }
+.switch-row > span { flex: 1; }
+.switch-row .hint { display: block; margin-top: 4px; font-weight: 400; }
+.switch {
+  appearance: none; -webkit-appearance: none; flex: none; position: relative; width: 38px; height: 22px; margin: 2px 0 0;
+  border-radius: 11px; background: rgb(255 255 255 / 16%); cursor: pointer; transition: background .2s var(--ease);
+}
+.switch::after {
+  content: ''; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 35%); transition: transform .2s var(--ease);
+}
+.switch:checked { background: var(--accent); }
+.switch:checked::after { transform: translateX(16px); }
+.switch:focus-visible { outline: 2px solid rgb(250 45 72 / 50%); outline-offset: 2px; }
+.sublabel { display: block; margin: 12px 0 6px; font-weight: 600; font-size: 12px; }
+.user-list { margin-top: 8px; font-size: 12px; line-height: 1.5; }
+.user-list b { display: block; margin-bottom: 2px; }
+/* a badged card is taller: keep every card in its row top-aligned */
+.grid > .card { align-self: start; }
