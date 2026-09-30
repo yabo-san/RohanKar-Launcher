@@ -17,6 +17,7 @@ const ports = require('./ports');
 const quiverImport = require('./quiver-import');
 const { createManualApp } = require('./manual');
 const { sourcesFromSettings } = require('./sources');
+const feedFile = require('./feed');
 const { withNewer } = require('./updates');
 
 const API_VERSION = 'v1';
@@ -177,8 +178,27 @@ function createApi(backend) {
   // docs/COLLISIONS.md. :repo is owner/repo, URL-encoded (owner%2Frepo).
 
   route('GET', '/collisions', () => ({ body: { local: catalogs.localCollisions() } }));
-  // Yours as a feed file (the same shape as catalog/collisions.json) to share
-  route('GET', '/collisions/export', () => ({ body: { schemaVersion: 1, collisions: catalogs.localCollisions() } }));
+  // Your feed, to share: your collisions and the uploaders you have on
+  const currentSources = async () => sourcesFromSettings(settings.load(), await backend.getDefaultSources());
+  route('GET', '/collisions/export', async () => ({
+    body: feedFile.exportFeed({ collisions: catalogs.localCollisions(), sources: await currentSources() }),
+  }));
+  // A feed file the user picked: its collisions become theirs, its uploaders join their list
+  route('POST', '/feed/import', async ({ body }) => {
+    const text = requireString(requireObject(body).text, 'text');
+    const r = feedFile.importFeed(text, { saveCollision: catalogs.saveCollision, sources: await currentSources() });
+    if (!r.ok) throw new HttpError(400, 'bad_feed', r.error);
+    if (r.uploaders.length) settings.save({ sources: r.sources });
+    return { body: { collisions: r.collisions, rejected: r.rejected, uploaders: r.uploaders } };
+  });
+  // Trust one uploader a feed lists: it joins the user's uploaders, turned on
+  route('POST', '/sources/trust', async ({ body }) => {
+    const [u] = feedFile.parseUploaders([requireObject(body)]);
+    if (!u) throw new HttpError(400, 'bad_request', 'uploader must be an archive.org uploader (no spaces)');
+    const r = feedFile.trustUploaders(await currentSources(), [u]);
+    if (r.added.length || r.enabled.length) settings.save({ sources: r.sources });
+    return { body: { sources: r.sources } };
+  });
 
   route('GET', '/collisions/:repo', ({ params }) => {
     const c = catalogs.collision(params.repo);
@@ -201,7 +221,12 @@ function createApi(backend) {
     if (!f) throw new HttpError(404, 'not_found', `No collision feed ${id}`);
     return f;
   };
-  route('GET', '/collision-feeds', () => ({ body: { feeds: catalogs.feeds() } }));
+  // Each feed's uploaders say whether the user already trusts them
+  route('GET', '/collision-feeds', async () => {
+    const on = new Set((await currentSources()).filter(x => x.enabled !== false).map(x => x.uploader.toLowerCase()));
+    const feeds = catalogs.feeds().map(f => ({ ...f, uploaders: f.uploaders.map(u => ({ ...u, trusted: on.has(u.uploader.toLowerCase()) })) }));
+    return { body: { feeds } };
+  });
   route('POST', '/collision-feeds', async ({ body }) => {
     const { url, name } = requireObject(body);
     const r = await catalogs.subscribeFeed({ url: requireString(url, 'url'), name });

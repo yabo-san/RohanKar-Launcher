@@ -248,12 +248,14 @@ The user's own collisions and the collision feeds they subscribe to. The schema 
 | route | does |
 | --- | --- |
 | `GET /collisions` | `{ local: [...] }`, the user's own |
-| `GET /collisions/export` | `{ schemaVersion: 1, collisions: [...] }`, the user's own as a feed file |
+| `GET /collisions/export` | The user's feed: `{ schemaVersion: 1, collisions: [...], uploaders: [{ uploader, label }] }`, their own collisions and the uploaders they have on |
+| `POST /feed/import` | `{ text }`, a feed file's contents: valid collisions become the user's own, its uploaders join their list (turned on). Answers `{ collisions, rejected, uploaders }`; not a feed is `400 bad_feed` |
+| `POST /sources/trust` | `{ uploader, label? }` adds one uploader to the user's list, turned on (or turns it back on). Answers `{ sources }` |
 | `GET /collisions/:repo` | The collision in effect: `{ origin: "local" \| "feed" \| "bundled", entry, feed? }`, `404` if none |
 | `PUT /collisions/:repo` | Saves one (replacing the user's own for that repo); `400 bad_collision` lists every problem |
 | `DELETE /collisions/:repo` | Removes the user's own (`204`), `404` if there wasn't one |
 | `POST /collisions/preview` | `{ sources }` → per source, the archive.org files it places (`to`) and `bytes`, or `error` |
-| `GET /collision-feeds` | Subscribed feeds with `entries`, `rejected`, `fetchedAt`, `error` |
+| `GET /collision-feeds` | Subscribed feeds with `entries`, `rejected`, `uploaders` (each with `trusted`: on in the user's list), `fetchedAt`, `error` |
 | `POST /collision-feeds` | `{ url, name? }` subscribes and fetches; `201` new, `200` already subscribed |
 | `POST /collision-feeds/:id/refresh`, `DELETE /collision-feeds/:id` | Refetch; unsubscribe |
 

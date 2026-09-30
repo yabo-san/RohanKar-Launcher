@@ -368,6 +368,38 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
 });
 
+test('Settings feeds: subscribe, trust its uploader, copy your feed, import a feed file', async () => {
+  const before = await page.evaluate(() => api.getSources());
+  await page.locator('#btn-settings').click();
+  await page.locator('#feed-url').fill(`${stack.base}/feed.json`);
+  await page.locator('[data-action="feed-add"]').click();
+  const row = page.locator('#feed-list .feed-row', { hasText: 'feed' });
+  await expect(row.locator('.feed-uploader')).toContainText('gomes.samuel@gmail.com');
+  await row.locator('[data-action="feed-trust"]').click();
+  await expect(row.locator('.feed-uploader .trusted')).toHaveText('Trusted');
+  await expect(page.locator('#setting-sources')).toHaveValue(/^gomes\.samuel@gmail\.com, /m);
+
+  await page.evaluate(() => {
+    globalThis.copied = null;
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { globalThis.copied = t; } } });
+  });
+  await page.locator('[data-action="ed-export"]').first().click();
+  await expect.poll(() => page.evaluate(() => globalThis.copied)).not.toBeNull();
+  const copied = JSON.parse(await page.evaluate(() => globalThis.copied));
+  expect(copied.uploaders.map(u => u.uploader)).toContain('gomes.samuel@gmail.com');
+
+  await page.locator('#feed-file').setInputFiles({ name: 'mine.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
+    collisions: [{ repository: 'me/imported-port', name: 'Imported Port', sources: [{ ia: 'rk-e2e-feed-data', path: 'x.bin' }] }],
+    uploaders: [{ uploader: 'lawlessb991@gmail.com', label: 'lawless' }],
+  })) });
+  await expect(page.locator('#setting-sources')).toHaveValue(/^lawlessb991@gmail\.com, /m);
+  const col = await page.evaluate(() => api.getCollision('me/imported-port'));
+  expect(col.origin).toBe('local');
+
+  // put the uploaders back, so the rest of the run sees the shipped wall
+  await page.evaluate((s) => api.saveSettings({ sources: s.sources }), before);
+});
+
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {
   const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).ui;
 

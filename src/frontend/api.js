@@ -195,6 +195,8 @@ const api = (() => {
     addCollisionFeed: async ({ url, name }) => { const r = await call('POST', '/collision-feeds', { url, name }); return r.ok ? { ok: true, feed: r.body } : failure(r); },
     refreshCollisionFeed: async (id) => (await call('POST', `/collision-feeds/${enc(id)}/refresh`)).body,
     removeCollisionFeed: (id) => call('DELETE', `/collision-feeds/${enc(id)}`),
+    importFeed: async (text) => { const r = await call('POST', '/feed/import', { text }); return r.ok ? { ok: true, ...r.body } : failure(r); },
+    trustUploader: async ({ uploader, label }) => { const r = await call('POST', '/sources/trust', { uploader, label }); return r.ok ? { ok: true, sources: r.body.sources } : failure(r); },
 
     // Catalogs (Quiver lists) and what changed in them
     getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],
