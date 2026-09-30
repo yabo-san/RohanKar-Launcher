@@ -80,6 +80,38 @@ A recipe is a collision with `needs` in place of pinned `sources`:
 | `formats` | Optional: the extensions the port reads, e.g. `["iso", "ciso"]`, when the platform has several. |
 | `optional` | As in collisions today. |
 
+## Data folders: stage, anchor, lay out
+
+Not all data is one ROM. An uploader may put up a big folder of game data, nested however they
+like, and a source port wants some of it in a particular place. Recipes don't spell out exact
+relative paths for that. The install works on a staging area (a "virtual disk") instead:
+
+1. **Stage**: unpack the GitHub release and every data source into one staging folder, each under
+   its own name, never over each other.
+2. **Anchor**: the recipe names a file the port is known to need, like `pak0.pk3` or `*.z64`. The
+   launcher looks for it anywhere in the staged data, so the uploader's nesting doesn't matter.
+3. **Lay out**: the folder that holds the anchor goes, with everything beside it, where the recipe
+   says (`place`). The release goes to the install root, unwrapped as today.
+4. **Install**: sha1 checks run on the laid-out files, then the result is copied into the install
+   folder in one go. A failed step leaves the install folder untouched.
+
+```json
+"needs": [
+  { "anchor": "pak0.pk3", "place": "baseq3", "sha1": { "pak0.pk3": "…" } }
+]
+```
+
+| Field | Meaning |
+| --- | --- |
+| `anchor` | A file name or glob that marks the data's folder. Several matches: the shallowest wins; if two are equally shallow, the install stops and asks for a `path` to pick one. |
+| `place` | Where the anchor's folder lands, relative to the install folder (`""` is beside the exe). |
+| `take` | Optional: `folder` (default, the anchor's folder and everything in it) or `file` (the anchor alone, like a ROM). |
+| `sha1` | A file name → sha1 map for the files that must be exact. |
+
+A ROM from a set is the `take: "file"` case, except that the set's title match (below) finds the
+file, so it needs no anchor. Exact paths are only needed when two files share a
+name, which is what the optional `path` is for.
+
 ## Matching, in order
 
 1. Take the mounted sets for the recipe's platform: curated first, then the user's in mount order.
@@ -122,10 +154,12 @@ A platform gets a row when the first port that needs it arrives.
 
 ## Rollout
 
-1. Sets: `catalog/sets.json`, the Settings > ROM sets list and Mount, behind Allow additional
+1. Staging: installs build the result in a staging folder and copy it in at the end, with
+   `anchor`/`place`/`take` for data folders. This is useful on its own, before sets exist.
+2. Sets: `catalog/sets.json`, the Settings > ROM sets list and Mount, behind Allow additional
    sources for user sets. Tests on fixtures, no network.
-2. Recipes: `needs` in the collision schema, validation, the matching above; Perfect Dark moves to
+3. Recipes: `needs` in the collision schema, validation, the matching above; Perfect Dark moves to
    it. The Live ports job proves it for real.
-3. Admin console: "New game tile" picks a platform and a title from the mounted sets instead of a
+4. Admin console: "New game tile" picks a platform and a title from the mounted sets instead of a
    file, and fills in the sha1 from the first good install.
-4. Later: No-Intro DATs, more platform rules as ports need them.
+5. Later: No-Intro DATs, more platform rules as ports need them.
