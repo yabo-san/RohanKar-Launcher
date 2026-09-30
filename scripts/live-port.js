@@ -71,10 +71,21 @@ function tree(dir, depth = 0, out = []) {
     const size = e.isDirectory() ? 0 : fs.statSync(p).size;
     // sha1 for the small files, so a staged ROM can be checked against a known dump
     const sum = !e.isDirectory() && size < 128 * 1024 * 1024 ? `, sha1 ${require('crypto').createHash('sha1').update(fs.readFileSync(p)).digest('hex')}` : '';
-    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${size} bytes${sum})`}`);
+    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${size} bytes${sum})`}${/\.(z64|n64|v64)$/i.test(e.name) ? `, ${n64Header(p)}` : ''}`);
     if (e.isDirectory() && depth < 2) tree(p, depth + 1, out);
   }
   return out;
+}
+
+// An N64 ROM's byte order and header, so a dump can be told apart from a byteswapped copy or another revision
+function n64Header(file) {
+  const b = Buffer.alloc(64);
+  const fd = fs.openSync(file, 'r');
+  try { fs.readSync(fd, b, 0, 64, 0); } finally { fs.closeSync(fd); }
+  const magic = b.readUInt32BE(0).toString(16);
+  const order = { 80371240: 'z64 (big-endian)', 37804012: 'v64 (byteswapped)', 40123780: 'n64 (little-endian)' }[magic] || `unknown order ${magic}`;
+  if (!order.startsWith('z64')) return order;
+  return `${order}, title "${b.toString('latin1', 0x20, 0x34).trim()}", code ${b.toString('latin1', 0x3b, 0x3f)}, rev ${b[0x3f]}`;
 }
 
 async function releases(repository, print) {
@@ -90,7 +101,8 @@ async function releases(repository, print) {
 async function listZip(spec, print) {
   const at = spec.indexOf('/');
   const url = `https://archive.org/download/${encodeURIComponent(spec.slice(0, at))}/${encodeURIComponent(spec.slice(at + 1))}/`;
-  const r = await getText(url, { kind: 'archive' });
+  let r = await getText(url, { kind: 'archive' });
+  if ([301, 302, 303, 307, 308].includes(r.status) && r.headers?.location) r = await getText(new URL(r.headers.location, url).toString(), { kind: 'archive' });
   print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
   if (r.status !== 200) return 1;
   const rows = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
@@ -147,4 +159,4 @@ if (require.main === module) {
     .catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { parseArgs, itemFor, run };
+module.exports = { parseArgs, itemFor, n64Header, run };
