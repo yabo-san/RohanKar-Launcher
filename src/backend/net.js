@@ -7,7 +7,7 @@
 const http  = require('http');
 const https = require('https');
 
-const USER_AGENT = 'RohanKar-Launcher';
+const USER_AGENT = 'y4bo-launcher';
 
 const getter = (url) => (String(url).startsWith('https:') ? https : http);
 

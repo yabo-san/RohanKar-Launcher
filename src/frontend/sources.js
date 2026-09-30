@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — sources.js
+ * y4bo — sources.js
  * Pure display helpers for titles, versions and the Settings sources text.
  * Default sources and grouping by title come from the backend (/v1/sources,
  * /v1/items). Loaded as a plain <script> before renderer.js, and required as

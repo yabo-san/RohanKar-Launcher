@@ -1,7 +1,7 @@
 {
-  "name": "rohankar-launcher",
+  "name": "y4bo-launcher",
   "version": "1.6.0-fork.12",
-  "description": "RohanKar Game Launcher",
+  "description": "y4bo game launcher",
   "author": "Kilted-Kraken",
   "main": "src/electron/main.js",
   "scripts": {
@@ -29,7 +29,7 @@
   },
   "build": {
     "appId": "com.rohankar.launcher",
-    "productName": "RohanKar Launcher",
+    "productName": "y4bo",
     "files": [
       "src/**/*",
       "assets/**/*",
@@ -49,7 +49,8 @@
       "icon": "assets/icons/rk-logo.ico"
     },
     "nsis": {
-      "artifactName": "RohanKar-Launcher-Setup-${version}.${ext}"
+      "guid": "2bb8c09d-2711-598b-90f1-e9685ecdb3dc",
+      "artifactName": "y4bo-Setup-${version}.${ext}"
     },
     "mac": {
       "icon": "assets/icons/rk-logo.icns"

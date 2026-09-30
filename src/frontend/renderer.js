@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — renderer.js
+ * y4bo — renderer.js
  * Session 11: Visual + UX polish pass.
  * - Skeleton loading cards
  * - Card hover lift + installed left accent

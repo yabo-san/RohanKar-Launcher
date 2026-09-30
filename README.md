@@ -64,7 +64,7 @@ direction, and the choice is remembered. `RK_UI=legacy` also opens the classic o
 ## Installation
 
 1. Go to the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest)
-2. Download the installer, **RohanKar-Launcher-Setup-x.x.x.exe**
+2. Download the installer, **y4bo-Setup-x.x.x.exe**
 3. Run the installer
 
 > **Note:** Windows may show a SmartScreen warning on first run. Click **More info → Run anyway**. This is expected for unsigned installers from new publishers.
@@ -165,7 +165,7 @@ Each installer and its `latest.yml` carry a build provenance attestation. To
 check that a download was built by this repo's Release workflow:
 
 ```sh
-gh attestation verify RohanKar-Launcher-Setup-1.6.0-fork.0.exe --repo yabo-san/RohanKar-Launcher
+gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher
 ```
 
 ---
