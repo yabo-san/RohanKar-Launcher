@@ -21,7 +21,8 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
-  quiverImport: null,   // { plan, busy, result } while importing a Quiver library
+  quiverImport: null,
+  manualForm: null,     // { name, folder } while adding a manual app from the Library   // { plan, busy, result } while importing a Quiver library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   libSearch: '',        // the search box in a library header (Cider's library pages)
@@ -658,24 +659,54 @@ const rowGame = (l) => ({
   _sourceLabel: l.source === 'manual' ? 'Your folder' : 'archive.org', _manual: l.source === 'manual',
 });
 
+// Add your own app: a name, then a new folder in the install folder or one
+// that already holds it. Quiver's "manually managed" apps.
+function manualFormHtml() {
+  const f = state.manualForm;
+  if (!f) return `<div class="lib-tools"><button class="btn" data-action="manual-open">Add your own app…</button></div>`;
+  return `<div class="manual-form" id="manual-form">
+    <div class="field"><label for="manual-name">Name</label>
+      <input type="text" id="manual-name" value="${esc(f.name)}" placeholder="What it's called in your library"></div>
+    <div class="field"><label>Folder</label>
+      <div class="hint">${f.folder ? esc(f.folder) : "A new folder in your install folder. Put the app's files in it and the library launches it."}</div>
+      <div class="inline"><button class="btn" data-action="manual-folder">Use a folder I already have…</button>
+      ${f.folder ? '<button class="btn" data-action="manual-folder-clear">Make a new one instead</button>' : ''}</div></div>
+    <div class="field inline"><button class="btn primary" id="btn-manual-create" data-action="manual-create">Add to library</button>
+      <button class="btn" data-action="manual-cancel">Cancel</button></div>
+  </div>`;
+}
+
+async function createManual() {
+  const name = $('#manual-name')?.value.trim();
+  if (!name) return toast('Give it a name first.');
+  const r = await api.createManualApp({ name, folder: state.manualForm.folder });
+  if (!r.ok) return toast(`Couldn't add it: ${r.error}`);
+  state.manualForm = null;
+  await reloadLibrary();
+  render();
+  openDetail('game', r.row.identifier);
+  if (!r.row.exe_path) api.openGameLocation({ identifier: r.row.identifier });
+}
+
 function viewLibrary() {
   // Installed ports are on the Ports shelf below
-  const installed = Object.values(state.library).filter(l => l.install_dir && !l.identifier.startsWith('quiver:'));
+  const installed = Object.values(state.library).filter(l => (l.install_dir || l.source === 'manual') && !l.identifier.startsWith('quiver:'));
   const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || rowGame(l));
   let uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
   let ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
+  const manual = manualFormHtml();
   if (!uniq.length && !ports.length) {
-    return `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, or open a Ports shelf and add a port.
-      The library is what's yours, not everything that exists.</p>`;
+    return manual + `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, open a Ports shelf and add a port,
+      or add an app of your own. The library is what's yours, not everything that exists.</p>`;
   }
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
   const [, value] = sorts[p.sort] || sorts.name;
   uniq = ciderSort(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), value, p.order);
   ports = ciderSort(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), value, p.order);
-  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length });
+  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
   if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, row: gameRow, head: GAME_HEAD }), { count: uniq.length, cls: 'plain' });
-  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain' });
+  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
   return html;
 }
 
@@ -962,7 +993,40 @@ function exePicker(d) {
     <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>`;
 }
 
+// A manually managed app: its folder is the whole story
+function manualDetail(d) {
+  const v = d.version;
+  const title = getTitle(v);
+  const lib = state.library[v.identifier] || {};
+  const actions = lib.install_dir
+    ? `<button class="btn primary" id="btn-play" data-action="play">Play</button>
+      <button class="btn" data-action="open-folder">Open folder</button>
+      <button class="btn" data-action="steam">Add to Steam</button>
+      <button class="btn" data-action="manual-rename">Rename</button>
+      <button class="btn" data-action="manual-remove">Remove from library</button>`
+    : `<button class="btn primary" data-action="manual-locate">Locate folder…</button>
+      <button class="btn" data-action="manual-remove">Remove from library</button>`;
+  const note = !lib.install_dir ? 'Its folder is gone. Point it at the folder the app is in now.'
+    : !lib.exe_path ? "Put the app's files in its folder, then Play finds the executable." : '';
+  return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
+      <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
+      <button class="x" data-close aria-label="Close">&#10005;</button>
+      <div class="titles"><h2>${esc(title)}</h2><div class="by">Your folder</div></div></div>
+    <div class="d-body">
+      <div class="actions">${actions}</div>
+      ${note ? `<p class="hint manual-note">${esc(note)}</p>` : ''}
+      ${exePicker(d)}
+      <dl class="kv">
+        ${lib.install_dir ? `<dt>Folder</dt><dd>${esc(lib.install_dir)}</dd>` : ''}
+        ${lib.exe_path ? `<dt>Launches</dt><dd>${esc(lib.exe_path)}</dd>` : ''}
+        ${lib.version ? `<dt>Version</dt><dd>${esc(lib.version)}</dd>` : ''}
+        ${lib.tags?.length ? `<dt>Tags</dt><dd>${esc(lib.tags.join(', '))}</dd>` : ''}
+      </dl>
+    </div>`;
+}
+
 function gameDetail(d) {
+  if (d.version._manual) return manualDetail(d);
   const g = d.game, v = d.version;
   const title = getTitle(v);
   const lib = state.library[v.identifier];
@@ -1111,7 +1175,7 @@ async function playGame(v) {
   const lib = state.library[v.identifier];
   if (lib?.exe_path) return launch(v, lib.exe_path);
   const exes = await api.findExes({ identifier: v.identifier });
-  if (!exes.length) return toast('No executable found. Try reinstalling.');
+  if (!exes.length) return toast(v._manual ? "No executable yet: put the app's files in its folder." : 'No executable found. Try reinstalling.');
   if (exes.length === 1) return launch(v, exes[0]);
   state.detail.exes = { purpose: 'play', list: exes };
   renderDetail();
@@ -1357,6 +1421,7 @@ async function editorExport() {
 document.addEventListener('input', (e) => {
   const ed = state.editor;
   const t = e.target;
+  if (t.id === 'manual-name' && state.manualForm) { state.manualForm.name = t.value; return; }
   if (!ed || state.view.name !== 'collision') return;
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
@@ -1594,6 +1659,44 @@ async function onAction(action, el) {
     case 'feed-add': return addCollisionFeed();
     case 'feed-refresh': await api.refreshCollisionFeed(el.dataset.id); return loadCollisionFeeds();
     case 'feed-remove': await api.removeCollisionFeed(el.dataset.id); await loadCollisionFeeds(); return loadPorts();
+    case 'announce-dismiss':
+      $('#announce').classList.add('hidden');
+      return api.dismissAnnouncement(el.dataset.id);
+    case 'manual-open': state.manualForm = { name: '', folder: null }; render(); return $('#manual-name')?.focus();
+    case 'manual-cancel': state.manualForm = null; return render();
+    case 'manual-folder': {
+      const folder = await api.chooseFolder();
+      if (!folder) return;
+      state.manualForm = { name: $('#manual-name')?.value || folder.split(/[\\/]/).pop(), folder };
+      return render();
+    }
+    case 'manual-folder-clear': state.manualForm = { name: $('#manual-name')?.value || '', folder: null }; return render();
+    case 'manual-create': return createManual();
+    case 'manual-rename': {
+      const title = prompt('Rename to', getTitle(v));
+      if (!title?.trim()) return;
+      const r = await api.renameEntry({ identifier: v.identifier, title: title.trim() });
+      if (!r.ok) return toast(`Couldn't rename: ${r.error}`);
+      await reloadLibrary();
+      openDetail('game', v.identifier);
+      return render();
+    }
+    case 'manual-locate': {
+      const dir = await api.chooseFolder();
+      if (!dir) return;
+      const r = await api.setInstallDir({ identifier: v.identifier, installDir: dir });
+      if (!r.ok) return toast(`Couldn't use that folder: ${r.error}`);
+      await reloadLibrary();
+      openDetail('game', v.identifier);
+      return render();
+    }
+    case 'manual-remove': {
+      if (!confirm(`Remove ${getTitle(v)} from your library? Its folder stays where it is.`)) return;
+      await api.removeFromLibrary({ id: v.identifier });
+      closeDetail();
+      await reloadLibrary();
+      return render();
+    }
     case 'quiver-import-choose': return quiverImport(false);
     case 'quiver-import-apply': return quiverImport(true);
     case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
@@ -1692,6 +1795,17 @@ function showProgress(identifier, percent) {
 
 // ─── start ───────────────────────────────────────────────────────────────────
 
+// announcement.json on main: one message, shown until dismissed (by id)
+async function showAnnouncement() {
+  const a = await api.getAnnouncement().catch(() => null);
+  const el = $('#announce');
+  if (!a || !el) return;
+  el.innerHTML = `<span class="msg">${esc(a.message)}</span>
+    ${a.link ? `<a data-href="${esc(a.link)}">More</a>` : ''}
+    <button class="x" data-action="announce-dismiss" data-id="${esc(a.id)}" aria-label="Dismiss">&#10005;</button>`;
+  el.classList.remove('hidden');
+}
+
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
@@ -1699,6 +1813,7 @@ applyFolded();
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
+  showAnnouncement();
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall
   loadPorts();
   loadWall();

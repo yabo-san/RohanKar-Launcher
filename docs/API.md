@@ -108,6 +108,18 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7777/v1/featured
 # {"picks":[{"identifier":"devil-may-cry-4_202603","blurb":null},{"repository":"perfect-dark-pc-port/perfect_dark","blurb":null}]}
 ```
 
+### `GET /announcement`, `POST /announcement/dismiss`
+
+The message in `announcement.json` on main (`{ id, enabled, message, link? }`, Quiver's shape),
+or `null` when it is disabled, can't be fetched, or its `id` was dismissed. Publish one by editing
+that file and pushing; change `id` to show it again. `POST /announcement/dismiss` with `{ "id" }`
+remembers the id in settings (`dismissedAnnouncements`) and answers `204`.
+
+```sh
+curl http://127.0.0.1:7777/v1/announcement
+# {"announcement":{"id":"2026-09-30-quiver","message":"Coming from Quiver? …","link":"https://…"}}
+```
+
 ### `GET /items`
 
 All items. Filters, all optional and combinable: `source` (uploader email, source label or catalog
@@ -267,7 +279,8 @@ curl -X POST -d '{"id":"quiver:8c1f0e2a9b3d:harbourmasters/shipwright","source":
 
 ### `GET /library/:id`, `PATCH /library/:id`
 
-Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`, `installDir`.
+Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`, `installDir`,
+`title` (the name of an entry no item describes, such as a manual app).
 `installDir` adopts a folder already on disk (Locate Existing Install) and picks its executable when
 there's only one. `favorite`, `notes` and `installDir` create the row if needed; the others need it
 to exist.
@@ -329,6 +342,20 @@ folder) named after a loaded item's identifier or title.
 ```sh
 curl -X POST -d '{"dir":"D:\\Games"}' http://127.0.0.1:7777/v1/library/scan
 # {"found":[{"identifier":"rk-e2e-halo-ce","installDir":"D:\\Games\\Halo_ Combat Evolved","exePath":null,"matchedBy":"title"}]}
+```
+
+### `POST /library/manual`
+
+Adds a manually managed app: one with no GitHub release and no archive.org item, that the user
+fills and keeps up to date. `{ "name", "folder"? }`: without `folder`, a folder named after the app
+is made in the install folder with a "Place app files here.txt" note; with one, that existing
+folder is used as is. The row is `manual:<folder name>`, source `manual`, `title` the name, and
+its executable is picked when the folder holds exactly one. `201` with the row; `409 exists`,
+`422 no_folder`.
+
+```sh
+curl -X POST -d '{"name":"My Homebrew"}' http://127.0.0.1:7777/v1/library/manual
+# {"identifier":"manual:My Homebrew","install_dir":"C:\\Games\\My Homebrew","source":"manual","title":"My Homebrew",…}
 ```
 
 ### `POST /library/import/quiver`

@@ -15,6 +15,7 @@ const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const quiverImport = require('./quiver-import');
+const { createManualApp } = require('./manual');
 const { sourcesFromSettings } = require('./sources');
 
 const API_VERSION = 'v1';
@@ -111,6 +112,11 @@ function createApi(backend) {
   };
 
   // The hand-picked games and ports that lead the New page, in order
+  route('GET', '/announcement', async () => ({ body: { announcement: await backend.getAnnouncement() } }));
+  route('POST', '/announcement/dismiss', ({ body }) => {
+    backend.dismissAnnouncement(requireString(requireObject(body).id, 'id'));
+    return { status: 204 };
+  });
   route('GET', '/featured', async () => ({ body: { picks: await backend.getFeatured() } }));
   route('GET', '/items/:id', async ({ params }) => ({ body: await findItem(params.id) }));
 
@@ -243,6 +249,7 @@ function createApi(backend) {
     favorite: (id, v) => library.setFavorite(id, !!v),
     notes:    (id, v) => library.setNotes(id, v),
     exePath:  (id, v) => library.setExePath(id, v),
+    title:    (id, v) => { requireString(v, 'title'); return library.setDetails(id, { title: v.trim() }); },
     // Locate an existing install: point the row at a folder already on disk
     installDir: (id, v) => {
       requireString(v, 'installDir');
@@ -309,6 +316,20 @@ function createApi(backend) {
       if (t && String(t).trim()) titleMap[String(t).trim()] = v.identifier;
     }
     return { body: installs.scan({ scanDir: dir, knownIdentifiers: versions.map(v => v.identifier), titleMap }) };
+  });
+
+  // A manually managed app: a named folder the user fills; folder is an
+  // existing one to use instead of making one in the install folder
+  route('POST', '/library/manual', ({ body }) => {
+    const { name, folder } = requireObject(body);
+    requireString(name, 'name');
+    if (folder !== undefined && folder !== null) requireString(folder, 'folder');
+    const r = createManualApp({ name, folder, root: backend.installRoot(), library, findExes: disk.findExes });
+    if (!r.ok) {
+      const status = { bad_request: 400, no_folder: 422, exists: 409, library_unavailable: 503 }[r.code];
+      throw new HttpError(status, r.code, r.error);
+    }
+    return { status: 201, body: library.get(r.id) };
   });
 
   // A Quiver library (apps.json + Apps/): what an import would do, or, with

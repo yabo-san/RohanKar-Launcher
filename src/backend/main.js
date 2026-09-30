@@ -2,7 +2,7 @@
 /**
  * The backend process: `node src/backend/main.js --data-dir <dir> [--port N]`
  * (--heroes-dir for the app's bundled heroes; tests add --archive-base,
- * --overrides-url, --uploaders-url, --featured-url, --github-api and
+ * --overrides-url, --uploaders-url, --featured-url, --announcement-url, --github-api and
  * --collisions-file).
  * Prints one JSON line, { port, token, url }, once listening, so a parent
  * process (or a person) can find it. The token is random per start unless
@@ -48,6 +48,7 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['github-api'] ? { githubApi: args['github-api'] } : {}),
     ...(args['collisions-file'] ? { collisionsFile: path.resolve(args['collisions-file']) } : {}),
     ...(args['featured-url'] ? { featuredUrl: args['featured-url'] } : {}),
+    ...(args['announcement-url'] ? { announcementUrl: args['announcement-url'] } : {}),
     ...(bridge ? { host: bridge.host } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),
   });

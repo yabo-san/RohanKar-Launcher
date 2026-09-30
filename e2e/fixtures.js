@@ -10,6 +10,7 @@
  *     PD_ROM, which fixtures/collisions.json expects by sha1
  *   - /metadata/rk-e2e-romset is a ROM set with folders, for the game data editor
  *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
+ *   - /announcement.json is fixtures/announcement.json: one message with a link
  *     that isn't on the wall
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
  *     bundled copies are used
@@ -54,6 +55,9 @@ function answer(url, base = '') {
   if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
   if (decodeURIComponent(url.pathname) === '/download/perfect-dark-pc-port_202510/Perfect Dark PC Port.zip') return reply(200, PD_DATA, 'application/zip');
 
+  if (url.pathname === '/announcement.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'announcement.json')), 'application/json');
+  }
   if (url.pathname === '/featured.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
   }

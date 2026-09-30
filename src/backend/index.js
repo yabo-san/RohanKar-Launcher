@@ -20,6 +20,7 @@ const { createCatalogs } = require('./catalogs');
 const { createItems }    = require('./items');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
 const { loadFeatured, FEATURED_URL } = require('./featured');
+const { currentAnnouncement, isDismissed, ANNOUNCEMENT_URL } = require('./announcement');
 const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
@@ -61,6 +62,7 @@ function createBackend({
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
   featuredUrl = FEATURED_URL,
+  announcementUrl = ANNOUNCEMENT_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
   playniteExportDelayMs = 250,
   host = {},
@@ -104,6 +106,22 @@ function createBackend({
     readBundled: () => fs.readFileSync(path.join(appDir, 'catalog', 'featured.json'), 'utf8'),
     log,
   }));
+
+  // The message on main's announcement.json, unless dismissed; fetched each
+  // time the window asks, so a new one shows without a restart
+  const getAnnouncement = () => currentAnnouncement({
+    url: announcementUrl,
+    fetchText: (url) => getText(url, { kind: 'announcement', timeoutMs: 5000, log: netlog.log })
+      .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
+    dismissed: settings.load().dismissedAnnouncements,
+  });
+  function dismissAnnouncement(id) {
+    const dismissed = Array.isArray(settings.load().dismissedAnnouncements) ? settings.load().dismissedAnnouncements : [];
+    if (!isDismissed(id, dismissed)) settings.save({ dismissedAnnouncements: [...dismissed, id] });
+  }
+
+  // Where new installs and manual apps' folders go
+  const installRoot = () => settings.load().installPath || gamesDir;
 
   // Default sources: catalog/uploaders.json on main at launch, the bundled copy as fallback
   let defaultSourcesPromise = null;
@@ -275,6 +293,7 @@ function createBackend({
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, getOverrides, getDefaultSources, getFeatured,
+    getAnnouncement, dismissAnnouncement, installRoot,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }

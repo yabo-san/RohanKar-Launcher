@@ -14,6 +14,8 @@
  *   the Left/Right keys, and a drag doesn't open a card.
  * - New leads with the featured picks (a wall game and a port), then a
  *   compact list of the latest uploads, newest first.
+ * - The announcement from announcement.json shows until dismissed.
+ * - Your own app: a folder the library makes, fills and launches.
  * - Settings imports a Quiver library (apps.json + Apps/) without downloading.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
@@ -311,6 +313,42 @@ test('Settings imports a Quiver library: preview, import, then the library and Y
   await expect(page.locator('#detail .by')).toHaveText('Your folder');
   await expect(page.locator('#detail #btn-play')).toBeVisible();
   await page.keyboard.press('Escape');
+});
+
+test('the announcement shows once and stays dismissed', async () => {
+  const banner = page.locator('#announce');
+  await expect(banner).toContainText('Welcome to the e2e launcher.');
+  await banner.locator('[data-action="announce-dismiss"]').click();
+  await expect(banner).toBeHidden();
+  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).dismissedAnnouncements).toEqual(['e2e-hello']);
+});
+
+test('Library: add your own app, drop files in its folder, play; rename; remove', async () => {
+  await page.locator('[data-view="library"]').click();
+  await page.locator('[data-action="manual-open"]').click();
+  await page.locator('#manual-name').fill('My Homebrew');
+  await page.locator('#btn-manual-create').click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('h2')).toHaveText('My Homebrew');
+  await expect(detail.locator('.manual-note')).toContainText("Put the app's files in its folder");
+  const folder = await page.evaluate(async () => (await api.getLibrary())['manual:My Homebrew'].install_dir);
+  expect(fs.readdirSync(folder)).toEqual(['Place app files here.txt']);
+
+  fs.writeFileSync(path.join(folder, 'homebrew.exe'), 'MZ');
+  // Play finds the one exe now in the folder and asks the backend to launch it
+  const launched = page.waitForRequest(r => r.url().includes('/launch') && r.method() === 'POST');
+  await detail.locator('#btn-play').click();
+  expect((await launched).postDataJSON().exePath).toBe(path.join(folder, 'homebrew.exe'));
+
+  await page.evaluate(() => { globalThis.prompt = () => 'Homebrew Deluxe'; });
+  await detail.locator('[data-action="manual-rename"]').click();
+  await expect(detail.locator('h2')).toHaveText('Homebrew Deluxe');
+  await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toContainText('Your folder');
+
+  await detail.locator('[data-action="manual-remove"]').click();
+  await expect(detail).toBeHidden();
+  await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
+  expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
 });
 
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {

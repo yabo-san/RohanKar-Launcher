@@ -365,6 +365,18 @@ button { font: inherit; color: inherit; }
 .feed-row .warn { color: var(--warn); }
 @media (max-width: 640px) { .editor .two, .source-card .two { grid-template-columns: 1fr; } }
 
+/* Library: add your own app */
+.lib-tools { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.manual-form { max-width: 640px; margin-bottom: 24px; padding: 4px 18px 18px; border: 1px solid var(--border); border-radius: var(--rad-card); background: var(--fill); }
+.manual-note { color: var(--text2); font-size: 13px; margin: 10px 0 0; }
+
+/* announcement.json, under the window controls */
+.announce { display: flex; align-items: center; gap: 12px; margin: 0 24px 8px; padding: 10px 14px; border-radius: var(--rad-ctl);
+  background: var(--key-soft); border: 1px solid var(--border); font-size: 13px; }
+.announce .msg { flex: 1; }
+.announce a { color: var(--text); font-weight: 600; cursor: pointer; }
+.announce .x { background: none; border: 0; color: var(--text2); cursor: pointer; font-size: 13px; }
+
 /* ============================================================================
    Cider's design language, from the Cider 1 source (ciderapp/Cider,
    src/renderer: style.less, less/appvars.less, less/elements.less,
