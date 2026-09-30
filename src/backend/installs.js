@@ -450,7 +450,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
     disk.unblockDirectory(dest, { platform, log });
     // The collision's exe when it names one (Perfect Dark ships one per region)
-    const named = data.exe && ports.inside(binDest, data.exe);
+    const named = data.exe && ports.inside(dest, data.exe);
     const exes = disk.findExes(dest);
     const exePath = named && fs.existsSync(named) ? named : exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
