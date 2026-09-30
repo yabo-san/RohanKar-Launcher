@@ -183,7 +183,6 @@
     "repository": "ZDoom/Raze",
     "assetPattern": "(?i)^raze-.*-windows\\.zip$",
     "folderName": "ZDoom.Raze",
-    "shelf": "y4bo ports",
     "exe": "raze.exe",
     "sources": [
       {
