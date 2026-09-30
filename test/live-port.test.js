@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { parseArgs, itemFor, n64Header, summarizeListing } = require('../scripts/live-port');
+const { parseArgs, itemFor, n64Header, parseListing, summarizeListing } = require('../scripts/live-port');
 
 test('live-port: Perfect Dark by default, repos and --keep from the command line', () => {
   assert.deepEqual(parseArgs([]), { repos: ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'], keep: false, ia: [], zips: [] });
@@ -54,5 +54,17 @@ test('live-port: a short archive listing prints whole; a long one is summed per 
     'key files (2):',
     '  Pack/Blood/BLOOD.RFF (10 bytes)',
     '  Pack/raze.exe (5 bytes)',
+  ]);
+});
+
+test('live-port: archive.org\'s archive listing page parses into paths and sizes', () => {
+  const html = '<table><tr><th>file</th><th>as jpg</th><th>timestamp</th><th>size</th></tr>'
+    + '<tr><td><a href="x">Raze Package/</a><td><td>2021-12-27 18:15<td></tr>'
+    + '<tr><td><a href="y">Raze Package/Blood &amp; Guts/BLOOD.RFF</a><td><td>2021-12-25 19:31<td id="size">9570681</tr>'
+    + '<tr><td>Warrior/SW.GRP</td><td></td><td>2018-07-06 23:30:34</td><td>47536148</td></tr></table>';
+  assert.deepEqual(parseListing(html), [
+    { path: 'Raze Package', size: null },
+    { path: 'Raze Package/Blood & Guts/BLOOD.RFF', size: 9570681 },
+    { path: 'Warrior/SW.GRP', size: 47536148 },
   ]);
 });

@@ -121,6 +121,16 @@ function summarizeListing(entries, { limit = 150 } = {}) {
   return out;
 }
 
+// archive.org's archive listing page → { path, size } rows. Each row reads
+// "path date time [size]"; folders have no size
+function parseListing(html) {
+  return [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim())
+    .map(row => row.match(/^(.+?) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)(?: (\d+))?$/))
+    .filter(Boolean)
+    .map(([, p, , size]) => ({ path: p.replace(/\/$/, ''), size: size ? Number(size) : null }));
+}
+
 // "item/file.zip" → what the archive holds, from archive.org's own listing
 async function listZip(spec, print) {
   const at = spec.indexOf('/');
@@ -129,11 +139,7 @@ async function listZip(spec, print) {
   if ([301, 302, 303, 307, 308].includes(r.status) && r.headers?.location) r = await getText(new URL(r.headers.location, url).toString(), { kind: 'archive' });
   print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
   if (r.status !== 200) return 1;
-  const text = (h) => h.replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
-  const entries = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
-    .map(m => [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map(c => text(c[1])))
-    .filter(cells => cells.length && cells[0])
-    .map(cells => ({ path: cells[0].replace(/\/$/, ''), size: /^\d+$/.test(cells[cells.length - 1]) ? Number(cells[cells.length - 1]) : null }));
+  const entries = parseListing(r.body);
   for (const line of summarizeListing(entries)) print(`  ${line}`);
   return 0;
 }
@@ -187,4 +193,4 @@ if (require.main === module) {
     .catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { parseArgs, itemFor, n64Header, summarizeListing, run };
+module.exports = { parseArgs, itemFor, n64Header, parseListing, summarizeListing, run };
