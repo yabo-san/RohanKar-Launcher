@@ -203,7 +203,7 @@ test('missing data, optional data, no Windows build, no repository', async (t) =
   const { installs, item, state, fake } = await setup(t, { dataZip: makeZip({ 'other.bin': 'x' }), deleteAfterInstall: true });
   const run = async (it) => { const r = installs.startPort({ item: it }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
 
-  assert.equal((await run(item)).error, "pd.ntsc-final.z64 isn't in Perfect Dark PC Port.zip");
+  assert.equal((await run(item)).error, "pd.ntsc-final.z64 isn't in Perfect Dark PC Port.zip (it holds other.bin)");
   const optional = { ...item, id: 'quiver:c1:o/pd2', data: { ...item.data, dataFiles: [{ ...item.data.dataFiles[0], optional: true }] } };
   assert.equal((await run(optional)).status, 'done');
   state.zips['pd_ia/Perfect Dark PC Port.zip'] = makeZip({ 'pd.ntsc-final.z64': 'ROMDATA' });

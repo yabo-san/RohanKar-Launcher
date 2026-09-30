@@ -336,7 +336,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
             || (path.basename(got.filePath).toLowerCase() === String(df.name).toLowerCase() ? got.filePath : null);
           if (!found) {
             if (df.optional) continue;
-            return fail(`${df.name} isn't in ${src.file}`);
+            const has = staging ? ports.largestFiles(staging, 5) : [];
+            return fail(`${df.name} isn't in ${src.file}${has.length ? ` (it holds ${has.join(', ')})` : ''}`);
           }
           const target = ports.inside(dest, df.targetSubpath, df.name);
           if (!target) return fail(`${df.name} would land outside the install folder`);

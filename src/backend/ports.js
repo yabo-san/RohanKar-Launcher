@@ -96,6 +96,21 @@ function inside(root, ...rel) {
 // A release archive that holds one folder and nothing else (Perfect Dark's
 // pd-x86_64-windows/) is that folder's contents: returns the folder to copy
 // from, dir itself otherwise
+// The n biggest files under dir, as paths relative to it, to say what an
+// archive holds when the file a collision names isn't there
+function largestFiles(dir, n) {
+  const out = [];
+  const walk = (d) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else out.push([fs.statSync(p).size, path.relative(dir, p).split(path.sep).join('/')]);
+    }
+  };
+  walk(dir);
+  return out.sort((a, b) => b[0] - a[0]).slice(0, n).map(([, rel]) => rel);
+}
+
 function releaseRoot(dir) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   return entries.length === 1 && entries[0].isDirectory() ? path.join(dir, entries[0].name) : dir;
@@ -164,6 +179,6 @@ function validateCollision(c) {
 }
 
 module.exports = {
-  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, ARCHIVE_EXT,
+  pickRelease, pickAsset, toRegExp, archiveFile, findFile, sha1File, inside, releaseRoot, largestFiles, ARCHIVE_EXT,
   expandSource, isGlob, validateCollision, safeRel,
 };
