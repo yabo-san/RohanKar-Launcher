@@ -20,22 +20,24 @@
     <nav class="sidebar" id="sidebar" aria-label="Main">
       <div class="search"><input id="q" type="search" placeholder="Search" aria-label="Search games and ports" autocomplete="off" /></div>
 
-      <button class="navitem active" data-view="home"><span class="dot"></span>Home</button>
-      <button class="navitem" data-view="new"><span class="dot"></span>New</button>
-      <button class="navitem" data-view="wall"><span class="dot"></span>Game wall<span class="n" id="n-wall"></span></button>
+      <button class="navitem active" data-view="home"><i class="ico" data-ico="home"></i>Home</button>
+      <button class="navitem" data-view="new"><i class="ico" data-ico="new"></i>New</button>
+      <button class="navitem" data-view="wall"><i class="ico" data-ico="wall"></i>Game wall<span class="n" id="n-wall"></span></button>
 
-      <div class="navgroup">Uploaders</div>
-      <div id="nav-uploaders"></div>
+      <button class="navgroup" data-collapse="uploaders">Uploaders</button>
+      <div class="navlist" id="nav-uploaders" data-group="uploaders"></div>
 
-      <div class="navgroup">Ports</div>
-      <div id="nav-shelves"></div>
+      <button class="navgroup" data-collapse="ports">Ports</button>
+      <div class="navlist" id="nav-shelves" data-group="ports"></div>
 
-      <div class="navgroup">Yours</div>
-      <button class="navitem" data-view="library"><span class="dot"></span>Library<span class="n" id="n-library"></span></button>
-      <button class="navitem" data-view="updates"><span class="dot"></span>Keep current<span class="n attn" id="n-updates"></span></button>
+      <button class="navgroup" data-collapse="yours">Yours</button>
+      <div class="navlist" data-group="yours">
+        <button class="navitem" data-view="library"><i class="ico" data-ico="library"></i>Library<span class="n" id="n-library"></span></button>
+        <button class="navitem" data-view="updates"><i class="ico" data-ico="updates"></i>Keep current<span class="n attn" id="n-updates"></span></button>
+      </div>
 
       <div class="spacer"></div>
-      <button class="navitem" data-view="settings" id="btn-settings"><span class="dot"></span>Settings</button>
+      <button class="navitem" data-view="settings" id="btn-settings"><i class="ico" data-ico="settings"></i>Settings</button>
       <div class="brand">y4<span>bo</span></div>
     </nav>
 

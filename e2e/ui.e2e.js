@@ -193,6 +193,45 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await page.keyboard.press('Escape');
 });
 
+test("The wall's library header sorts, searches, lists and pages, after Cider's", async () => {
+  await page.locator('[data-view="wall"]').click();
+  const titles = () => page.locator('#body .game-card .title').allInnerTexts();
+  const header = page.locator('.album-header');
+
+  await header.locator('[data-pref="sort"]').selectOption('name');
+  await header.locator('[data-pref="order"]').selectOption('asc');
+  const asc = await titles();
+  expect(asc).toEqual([...asc].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+  await header.locator('[data-pref="order"]').selectOption('desc');
+  expect(await titles()).toEqual([...asc].reverse());
+
+  // Punctuation is ignored, as in Cider's library search; focus stays in the box
+  await page.locator('#lib-search').fill('zoo-tycoon');
+  await expect(page.locator('#body .game-card')).toHaveCount(1);
+  await expect(page.locator('#lib-search')).toBeFocused();
+  await page.locator('#lib-search').fill('');
+
+  await header.locator('[data-pref="viewAs"]').selectOption('list');
+  await expect(page.locator('#body .list-row').first()).toBeVisible();
+  await expect(page.locator('#body .game-card')).toHaveCount(0);
+  await header.locator('[data-pref="viewAs"]').selectOption('covers');
+
+  await header.locator('[data-pref="scroll"]').selectOption('paged');
+  await expect(header.locator('.pagination-container')).toBeVisible();
+  await expect(header.locator('.md-input-number')).toContainText('/ 1');
+  await header.locator('[data-pref="scroll"]').selectOption('infinite');
+  await header.locator('[data-pref="sort"]').selectOption('dateAdded');
+});
+
+test('Sidebar groups fold and stay folded', async () => {
+  await page.locator('[data-collapse="uploaders"]').click();
+  await expect(page.locator('#nav-uploaders')).toBeHidden();
+  await page.reload();
+  await expect(page.locator('#nav-uploaders')).toBeHidden();
+  await page.locator('[data-collapse="uploaders"]').click();
+  await expect(page.locator('#nav-uploaders')).toBeVisible();
+});
+
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {
   const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).ui;
 

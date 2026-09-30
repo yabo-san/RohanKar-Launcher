@@ -23,8 +23,8 @@ const state = {
   portLibrary: [],
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
-  wallFilter: { uploader: null, sort: 'newest' },
-  shelfFilter: { tag: null, dataOnly: false },
+  libSearch: '',        // the search box in a library header (Cider's library pages)
+  libPage: 1,           // the page, when a library header is set to paged
   detail: null,
   downloads: new Map(), // identifier -> { percent, status }
 };
@@ -235,17 +235,42 @@ function renderNav() {
     const n = state.versions.filter(v => v._uploader === s.uploader).length;
     const failed = state.wall.failed.some(f => f.src.uploader === s.uploader);
     const loading = state.wall.loading && !state.wall.loaded.includes(s) && !failed;
-    return `<button class="navitem" data-view="uploader" data-arg="${esc(s.uploader)}"><span class="dot"></span>${esc(sourceName(s))}
+    return `<button class="navitem" data-view="uploader" data-arg="${esc(s.uploader)}">${avatar(sourceName(s), true)}${esc(sourceName(s))}
       <span class="n">${failed ? '!' : loading ? '…' : n}</span></button>`;
   }).join('');
   $('#nav-shelves').innerHTML = (state.ports?.shelves || []).map(s =>
-    `<button class="navitem" data-view="shelf" data-arg="${esc(s.id)}"><span class="dot"></span>${esc(s.name)}<span class="n">${s.count || (s.error ? '!' : '')}</span></button>`
-  ).join('') || '<div class="navitem" style="cursor:default;color:var(--text3)"><span class="dot"></span>Loading…</div>';
+    `<button class="navitem" data-view="shelf" data-arg="${esc(s.id)}">${avatar(s.name)}${esc(s.name)}<span class="n">${s.count || (s.error ? '!' : '')}</span></button>`
+  ).join('') || '<div class="navitem" style="cursor:default;color:var(--text3)"><i class="ico" data-ico="wall"></i>Loading…</div>';
   $('#n-wall').textContent = state.games.length || '';
   const libCount = Object.values(state.library).filter(l => l.install_dir).length + state.portLibrary.length;
   $('#n-library').textContent = libCount || '';
   $('#n-updates').textContent = reviewCount() || '';
   markActive();
+}
+
+// Uploaders and shelves have no artwork of their own: a tinted initial stands in,
+// round for people, square for shelves (Cider's artist and playlist chips)
+function avatar(name, round = false) {
+  return `<i class="avatar${round ? ' round' : ''}" style="background:${tint(name)}">${esc(String(name).trim().charAt(0).toUpperCase())}</i>`;
+}
+
+// Sidebar groups fold like Cider's, and stay as left
+const FOLDED_KEY = 'y4bo.sidebarFolded';
+function loadFolded() {
+  try { return new Set(JSON.parse(localStorage.getItem(FOLDED_KEY)) || []); } catch { return new Set(); }
+}
+const folded = loadFolded();
+function applyFolded() {
+  document.querySelectorAll('.sidebar .navgroup').forEach(el => {
+    const on = folded.has(el.dataset.collapse);
+    el.classList.toggle('collapsed', on);
+    document.querySelector(`.navlist[data-group="${el.dataset.collapse}"]`)?.classList.toggle('hidden', on);
+  });
+}
+function toggleFold(name) {
+  folded.has(name) ? folded.delete(name) : folded.add(name);
+  try { localStorage.setItem(FOLDED_KEY, JSON.stringify([...folded])); } catch { /* storage off */ }
+  applyFolded();
 }
 
 function markActive() {
@@ -259,8 +284,9 @@ function go(name, arg = null) {
   state.view = { name, arg };
   state.query = '';
   $('#q').value = '';
-  state.wallFilter.uploader = null;
-  state.shelfFilter = { tag: null, dataOnly: false };
+  libPrefs.shelf.tag = '';   // tags differ from shelf to shelf
+  state.libSearch = '';
+  state.libPage = 1;
   $('#body').scrollTop = 0;
   render();
 }
@@ -277,7 +303,7 @@ function gameCard(g) {
       <div class="noart"><small>${esc(g._sourceLabel)}</small>${esc(title)}</div>
       ${installed ? '<span class="tag installed">INSTALLED</span>' : dl ? `<span class="tag installed">${dl.percent || 0}%</span>` : ''}
       ${n > 1 ? `<span class="tag versions">${n} VERSIONS</span>` : ''}
-      <div class="play${installed ? '' : ' plus'}"></div>
+      <span class="play-btn${installed ? '' : ' get'}" aria-hidden="true"></span>
     </div>
     <div class="title">${esc(title)}</div>
     <div class="sub">${esc([g._sourceLabel, g.addeddate ? new Date(g.addeddate).getFullYear() : ''].filter(Boolean).join(' · '))}</div>
@@ -292,7 +318,8 @@ function portCard(p) {
     ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt=""><div class="noart fallback">${esc(p.name)}</div>`
     : `<div class="noart">${esc(p.name)}</div>`;
   return `<button class="card port-card" data-open="port" data-id="${esc(p.id)}" title="${esc(p.name)}">
-    <div class="art icon" style="background:${tint(p.repository)}">${art}${tag}<div class="play ${added ? 'check' : 'plus'}"></div></div>
+    <div class="art icon" style="background:${tint(p.repository)}">${art}${tag}
+      <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
   </button>`;
@@ -448,72 +475,192 @@ function viewHome() {
   return html;
 }
 
-function viewWall(uploader) {
-  const enabled = state.sources.filter(s => s.enabled !== false);
-  const f = state.wallFilter;
-  const who = uploader || f.uploader;
-  let list = state.games.filter(g => !who || (g._versions || [g]).some(v => v._uploader === who));
-  list = list.slice().sort(f.sort === 'downloads' ? byDownloads : f.sort === 'title' ? byTitle : byNewest);
-  let html = '';
-  if (!uploader) {
-    html += `<div class="toolbar">
-      <button class="chip ${!f.uploader ? 'on' : ''}" data-wall-uploader="">All uploaders</button>
-      ${enabled.map(s => `<button class="chip ${f.uploader === s.uploader ? 'on' : ''}" data-wall-uploader="${esc(s.uploader)}">${esc(sourceName(s))}</button>`).join('')}
-      <span class="grow"></span>${sortSelect()}</div>`;
-  } else {
-    const src = state.sources.find(s => s.uploader === uploader);
-    html += `<div class="toolbar"><span class="sub" style="color:var(--text2)">archive.org uploader <b style="color:var(--text)">${esc(uploader)}</b>${src ? '' : ' (not in your sources)'}</span><span class="grow"></span>${sortSelect()}</div>`;
-  }
-  html += wallNotice(uploader);
-  const title = uploader ? sourceName(state.sources.find(s => s.uploader === uploader) || { uploader }) : 'Game wall';
-  if (!list.length && state.wall.loading) return html + section(title, skeletons(18));
-  if (!list.length) return html + `<p class="empty">Nothing here yet.</p>`;
-  return html + `<section class="section"><div class="section-head"><h2>${esc(title)}</h2><span class="count">${fmtNum(list.length)} titles</span>
-    ${state.wall.loading ? '<span class="sub">still loading uploaders…</span>' : ''}</div>${pagedGrid(list, gameCard)}</section>`;
+// ─── library pages (after Cider's library-albums page) ──────────────────────
+// A sticky header over the grid: a search box, then Sort by, Sort order, View
+// as (cover art or list) and Scroll (infinite or paged). The choices are kept
+// per page. Sorting and search follow Cider's searchLibraryAlbums: numbers
+// compare as numbers, everything else case-insensitively, and the search
+// ignores punctuation.
+
+const PAGE_SIZE = 60;
+const PREFS_KEY = 'y4bo.libraryPrefs';
+const PREF_DEFAULTS = {
+  wall:    { sort: 'dateAdded', order: 'desc', viewAs: 'covers', scroll: 'infinite', uploader: '' },
+  shelf:   { sort: 'data', order: 'desc', viewAs: 'covers', scroll: 'infinite', tag: '', data: '' },
+  library: { sort: 'name', order: 'asc', viewAs: 'covers', scroll: 'infinite' },
+};
+const libPrefs = (() => {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(PREFS_KEY)) || {}; } catch { /* storage off */ }
+  return Object.fromEntries(Object.entries(PREF_DEFAULTS).map(([k, d]) => [k, { ...d, ...saved[k] }]));
+})();
+function setPref(page, key, value) {
+  libPrefs[page][key] = value;
+  if (key !== 'viewAs') state.libPage = 1;
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify(libPrefs)); } catch { /* storage off */ }
 }
 
-function sortSelect() {
-  const s = state.wallFilter.sort;
-  return `<select id="wall-sort" aria-label="Sort">
-    <option value="newest" ${s === 'newest' ? 'selected' : ''}>Newest</option>
-    <option value="downloads" ${s === 'downloads' ? 'selected' : ''}>Most downloaded</option>
-    <option value="title" ${s === 'title' ? 'selected' : ''}>A to Z</option></select>`;
+const GAME_SORTS = {
+  name:      ['Title', g => getTitle(g)],
+  dateAdded: ['Date added', g => g.addeddate],
+  uploader:  ['Uploader', g => g._sourceLabel],
+  downloads: ['Downloads', g => g.downloads || 0],
+  year:      ['Year', g => (g.date || g.addeddate || '').slice(0, 4)],
+};
+const PORT_SORTS = {
+  data:  ['Game data', p => (p.data.status === 'available' ? 1 : 0)],
+  name:  ['Name', p => p.name],
+  repo:  ['Repository', p => p.repository],
+  shelf: ['Shelf', p => p.shelfName],
+};
+
+function ciderSort(list, value, order) {
+  const key = (x) => { const v = value(x); return v == null ? '' : String(v); };
+  const cmp = (a, b) => (/^\d+$/.test(a) && /^\d+$/.test(b) ? a - b : a.toLowerCase().localeCompare(b.toLowerCase()));
+  return list.map(x => [key(x), x]).sort(([a], [b]) => (order === 'asc' ? cmp(a, b) : cmp(b, a))).map(([, x]) => x);
+}
+const searchKey = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '');
+function ciderSearch(list, q, fields) {
+  const t = searchKey(q);
+  return t ? list.filter(x => fields(x).some(f => searchKey(f).includes(t))) : list;
+}
+
+function mdSelect(page, pref, label, options) {
+  const cur = libPrefs[page][pref];
+  return `<select class="md-select" data-page="${page}" data-pref="${pref}" aria-label="${esc(label)}"><optgroup label="${esc(label)}">
+    ${options.map(([v, text]) => `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</optgroup></select>`;
+}
+
+function libraryHeader(page, sorts, { extra = '', total = 0 } = {}) {
+  return `<div class="album-header">
+    <div class="search-input-container"><input type="search" class="search-input" id="lib-search" spellcheck="false"
+      placeholder="Search…" value="${esc(state.libSearch)}" aria-label="Search this page"></div>
+    <div class="lib-controls">${extra}
+      ${mdSelect(page, 'sort', 'Sort by', Object.entries(sorts).map(([k, [text]]) => [k, text]))}
+      ${mdSelect(page, 'order', 'Sort order', [['asc', 'Ascending'], ['desc', 'Descending']])}
+      ${mdSelect(page, 'viewAs', 'View as', [['covers', 'Cover art'], ['list', 'List']])}
+      ${mdSelect(page, 'scroll', 'Scroll', [['infinite', 'Infinite'], ['paged', `Paged (${PAGE_SIZE} per page)`]])}
+    </div>${libPrefs[page].scroll === 'paged' ? pagination(total) : ''}</div>`;
+}
+
+// Cider's pagination: first, previous, five page numbers around the current
+// one, next, last, and a page box
+function pagination(total) {
+  const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const cur = Math.min(state.libPage, pages);
+  let start = cur - 2, end = cur + 2;
+  if (start < 1) { end += 1 - start; start = 1; }
+  if (end > pages) { start = Math.max(1, start - (end - pages)); end = pages; }
+  const btn = (n, body, cls = '', off = false) =>
+    `<button class="md-btn page-btn ${cls}" data-page-go="${n}"${off ? ' disabled' : ''}>${body}</button>`;
+  const nums = [];
+  for (let n = start; n <= end; n++) nums.push(btn(n, n, n === cur ? 'md-btn-primary' : ''));
+  return `<div class="pagination-container">
+    ${btn(1, '<i class="pg first"></i>', '', cur === 1)}${btn(cur - 1, '<i class="pg prev"></i>', '', cur === 1)}
+    ${nums.join('')}
+    ${btn(cur + 1, '<i class="pg next"></i>', '', cur === pages)}${btn(pages, '<i class="pg last"></i>', '', cur === pages)}
+    <label class="page-btn md-input-number"><input type="number" id="page-input" min="1" max="${pages}" value="${cur}"><span>/ ${pages}</span></label>
+  </div>`;
+}
+
+// The sorted, searched list as covers or a list, infinite or paged
+function libraryBody(page, list, { card, row, head, cls = 'grid' }) {
+  const p = libPrefs[page];
+  const asList = p.viewAs === 'list';
+  const fn = asList ? row : card;
+  const wrap = asList ? 'songs-list' : cls;
+  const top = asList ? `<div class="list-head">${head}</div>` : '';
+  if (p.scroll !== 'paged') return top + pagedGrid(list, fn, wrap);
+  const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+  const cur = Math.min(state.libPage, pages);
+  return `${top}<div class="${wrap}">${list.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE).map(fn).join('')}</div>
+    ${pages > 1 ? pagination(list.length) : ''}`;
+}
+
+// A row in list view, after Cider's library song list
+function gameRow(g) {
+  const title = getTitle(g);
+  const n = g._versions?.length || 1;
+  const badge = isInstalled(g) ? '<span class="pill">Installed</span>' : n > 1 ? `<span class="pill">${n} versions</span>` : '';
+  return `<button class="list-row" data-open="game" data-id="${esc(g.identifier)}">
+    <span class="lr-art" data-thumb="${esc(g.identifier)}" style="background:${tint(title)}"><span class="noart"></span></span>
+    <span class="lr-title"><b>${esc(title)}</b>${badge}</span>
+    <span class="lr-col">${esc(g._sourceLabel || '')}</span>
+    <span class="lr-col">${esc(fmtDate(g.addeddate))}</span>
+    <span class="lr-col num">${g.downloads ? fmtNum(g.downloads) : ''}</span>
+  </button>`;
+}
+const GAME_HEAD = '<span></span><span>Title</span><span>Uploader</span><span>Date added</span><span class="num">Downloads</span>';
+
+function portRow(p) {
+  const art = p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : '';
+  const badge = p.data.status === 'available' ? '<span class="pill ok">Data</span>' : '';
+  return `<button class="list-row port-card" data-open="port" data-id="${esc(p.id)}">
+    <span class="lr-art icon" style="background:${tint(p.repository)}">${art}</span>
+    <span class="lr-title"><b>${esc(p.name)}</b>${badge}${inPortLibrary(p) ? '<span class="pill">In library</span>' : ''}</span>
+    <span class="lr-col">${esc(p.project || '')}</span>
+    <span class="lr-col">${esc(p.repository)}</span>
+    <span class="lr-col">${esc(p.shelfName || '')}</span>
+  </button>`;
+}
+const PORT_HEAD = '<span></span><span>Name</span><span>Project</span><span>Repository</span><span>Shelf</span>';
+
+function viewWall(uploader) {
+  const enabled = state.sources.filter(s => s.enabled !== false);
+  const p = libPrefs.wall;
+  const who = uploader || p.uploader || null;
+  let list = state.games.filter(g => !who || (g._versions || [g]).some(v => v._uploader === who));
+  list = ciderSearch(list, state.libSearch, g => [getTitle(g), g._sourceLabel, g.identifier, ...(g._versions || []).map(v => getTitle(v))]);
+  list = ciderSort(list, (GAME_SORTS[p.sort] || GAME_SORTS.dateAdded)[1], p.order);
+  const extra = uploader ? '' : mdSelect('wall', 'uploader', 'Uploader',
+    [['', 'All uploaders'], ...enabled.map(s => [s.uploader, sourceName(s)])]);
+  let html = libraryHeader('wall', GAME_SORTS, { extra, total: list.length }) + wallNotice(uploader);
+  if (!list.length && state.wall.loading) return html + section('', skeletons(18));
+  if (!list.length) return html + `<p class="empty">${state.libSearch ? 'Nothing matches that search.' : 'Nothing here yet.'}</p>`;
+  const note = `${fmtNum(list.length)} titles${state.wall.loading ? ' · still loading uploaders…' : ''}`;
+  return html + `<div class="lib-count">${note}</div>` + libraryBody('wall', list, { card: gameCard, row: gameRow, head: GAME_HEAD });
 }
 
 function viewShelf(id) {
   const shelf = state.ports?.shelves.find(s => s.id === id);
-  if (!shelf) return state.portsError ? `<p class="empty">Couldn't load the catalogs: ${esc(state.portsError)}</p>` : section('Ports', skeletons(12), { cls: 'grid ports' });
-  const f = state.shelfFilter;
+  if (!shelf) return state.portsError ? `<p class="empty">Couldn't load the catalogs: ${esc(state.portsError)}</p>` : section('', skeletons(12), { cls: 'grid ports' });
+  const p = libPrefs.shelf;
   const all = state.ports.items.filter(i => i.shelf === id);
-  const list = all.filter(i => (!f.tag || i.tags.includes(f.tag)) && (!f.dataOnly || i.data.status === 'available'));
-  const tags = shelf.preferredTags.length ? shelf.preferredTags : [...new Set(all.flatMap(i => i.tags))].slice(0, 10);
-  let html = `<div class="toolbar">
-    <button class="chip ${!f.tag && !f.dataOnly ? 'on' : ''}" data-shelf-tag="">All</button>
-    <button class="chip ${f.dataOnly ? 'on' : ''}" data-shelf-data="1">Data available</button>
-    ${tags.map(t => `<button class="chip ${f.tag === t ? 'on' : ''}" data-shelf-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div>`;
+  const tags = shelf.preferredTags.length ? shelf.preferredTags : [...new Set(all.flatMap(i => i.tags))].slice(0, 12);
+  let list = all.filter(i => (!p.tag || i.tags.includes(p.tag)) && (!p.data || i.data.status === 'available'));
+  list = ciderSearch(list, state.libSearch, i => [i.name, i.project, i.repository, ...i.tags]);
+  const [, value] = PORT_SORTS[p.sort] || PORT_SORTS.data;
+  list = ciderSort(ciderSort(list, i => i.name, 'asc'), value, p.order);
+  const extra = mdSelect('shelf', 'data', 'Show', [['', 'All ports'], ['1', 'With game data']])
+    + mdSelect('shelf', 'tag', 'Tag', [['', 'Any tag'], ...tags.map(t => [t, t])]);
+  let html = libraryHeader('shelf', PORT_SORTS, { extra, total: list.length });
   if (shelf.error) {
-    html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="btn" data-action="refresh-ports">Retry</button></div>`;
+    html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   } else if (shelf.fromCache) {
-    html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="btn" data-action="refresh-ports">Retry</button></div>`;
+    html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   }
-  return html + `<section class="section"><div class="section-head"><h2>${esc(shelf.name)}</h2><span class="count">${list.length} ports</span>
-    <span class="sub">Source: Quiver / ${esc(shelf.name)}${shelf.withData ? ` · ${shelf.withData} with data from archive.org` : ''}</span></div>
-    ${list.length ? pagedGrid(list, portCard, 'grid ports') : '<p class="empty">No ports match.</p>'}</section>`;
+  html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}${shelf.withData ? ` · ${shelf.withData} with data from archive.org` : ''}</div>`;
+  return html + (list.length ? libraryBody('shelf', list, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
 function viewLibrary() {
   const installed = Object.values(state.library).filter(l => l.install_dir);
   const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier))
     || { identifier: l.identifier, title: l.identifier, _sourceLabel: 'archive.org' });
-  const uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
-  const ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
+  let uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
+  let ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
   if (!uniq.length && !ports.length) {
     return `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, or open a Ports shelf and add a port.
       The library is what's yours, not everything that exists.</p>`;
   }
-  let html = '';
-  if (uniq.length) html += section('Installed games', uniq.map(gameCard).join(''), { count: uniq.length });
-  if (ports.length) html += section('Ports', ports.map(portCard).join(''), { count: ports.length, cls: 'grid ports', sub: 'Added from a catalog. Installing ports is the next step in the brief.' });
+  const p = libPrefs.library;
+  const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
+  const [, value] = sorts[p.sort] || sorts.name;
+  uniq = ciderSort(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), value, p.order);
+  ports = ciderSort(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), value, p.order);
+  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length });
+  if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, row: gameRow, head: GAME_HEAD }), { count: uniq.length, cls: 'plain' });
+  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain' });
   return html;
 }
 
@@ -643,6 +790,8 @@ function viewSearch(q) {
   return html;
 }
 
+// The round reload button at the right of the page title (Cider's reload-btn)
+const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
 const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings' };
 
 function render() {
@@ -667,7 +816,11 @@ function render() {
   // Keep the settings form as typed while the wall is still streaming in
   if (v.name === 'settings' && !state.query && $('#setting-sources')) { renderNav(); return; }
   const body = $('#body');
-  body.innerHTML = `<h1 class="page-title" id="heading">${esc(heading)}</h1>` + html;
+  const typing = document.activeElement?.id === 'lib-search' ? document.activeElement.selectionStart : null;
+  const reload = !state.query && RELOADS[v.name];
+  body.innerHTML = `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1>
+    ${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>` + html;
+  if (typing != null) { const el = $('#lib-search'); el?.focus(); el?.setSelectionRange(typing, typing); }
   observeCovers(body);
   syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
@@ -1086,6 +1239,7 @@ async function onAction(action, el) {
       return render();
     }
     case 'reload-wall': ambientDone = false; return loadWall({ refresh: true });
+    case 'reload-all': ambientDone = false; loadPorts(true); return loadWall({ refresh: true });
     case 'refresh-ports': toast('Checking the catalogs…', 2000); return loadPorts(true);
     case 'mark-seen':
       await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
@@ -1104,6 +1258,12 @@ async function onAction(action, el) {
 // ─── events ──────────────────────────────────────────────────────────────────
 
 document.addEventListener('click', (e) => {
+  const menuBtn = e.target.closest('[data-card-menu]');
+  if (menuBtn) {
+    const p = state.ports?.items.find(i => i.id === menuBtn.closest('.port-card')?.dataset.id);
+    const r = menuBtn.getBoundingClientRect();
+    if (p) { e.stopPropagation(); return openMenu(p, r.left, r.bottom + 4); }
+  }
   const t = e.target.closest('button, a, [data-close]');
   if (!t) return;
   if (t.matches('[data-close]')) return closeDetail();
@@ -1129,14 +1289,21 @@ document.addEventListener('click', (e) => {
   }
   if (t.dataset.menu !== undefined) return runMenu(t);
   if (t.dataset.sub !== undefined) return;
-  if (t.dataset.wallUploader !== undefined) { state.wallFilter.uploader = t.dataset.wallUploader || null; return render(); }
-  if (t.dataset.shelfTag !== undefined) { state.shelfFilter = { tag: t.dataset.shelfTag || null, dataOnly: false }; return render(); }
-  if (t.dataset.shelfData) { state.shelfFilter = { tag: null, dataOnly: !state.shelfFilter.dataOnly }; return render(); }
+  if (t.dataset.pageGo) { state.libPage = Number(t.dataset.pageGo); render(); $('#body').scrollTop = 0; return; }
+  if (t.dataset.collapse) return toggleFold(t.dataset.collapse);
   if (t.dataset.action) return onAction(t.dataset.action, t);
 });
 
 document.addEventListener('change', (e) => {
-  if (e.target.id === 'wall-sort') { state.wallFilter.sort = e.target.value; render(); }
+  const t = e.target;
+  if (t.dataset.pref) { setPref(t.dataset.page, t.dataset.pref, t.value); return render(); }
+  if (t.id === 'page-input') { state.libPage = Math.max(1, Number(t.value) || 1); render(); $('#body').scrollTop = 0; }
+});
+let libSearchTimer;
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'lib-search') return;
+  clearTimeout(libSearchTimer);
+  libSearchTimer = setTimeout(() => { state.libSearch = e.target.value; state.libPage = 1; render(); }, 120);
 });
 
 // Remote icons that fail to load drop out and leave the tinted plate (CSP rules out inline onerror)
@@ -1173,6 +1340,7 @@ function showProgress(identifier, percent) {
 
 // ─── start ───────────────────────────────────────────────────────────────────
 
+applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
   state.sources = (await api.getSources()).sources;
