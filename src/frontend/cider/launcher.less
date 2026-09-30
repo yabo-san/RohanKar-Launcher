@@ -1,0 +1,500 @@
+// The launcher's additions to Cider's stylesheet: only what the launcher
+// views need that Cider had no class for. Everything else on the page is
+// Cider's own markup and styles (style.less and less/).
+
+body {
+  background: #111;
+}
+
+// The main menu button: a plain menu glyph instead of Cider's logo
+.app-chrome .app-chrome-item > .app-mainmenu {
+  background: url("./assets/hamborgar.svg");
+  background-size: 18px;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-color: transparent;
+}
+
+// The y4bo mark where Cider showed artwork or the user's picture
+.lcd-brand {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--mediaItemRadiusSmall);
+  background: linear-gradient(160deg, #2b2b2b, #161616);
+  box-shadow: var(--mediaItemShadow);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  color: #eee;
+
+  span {
+    color: var(--keyColor);
+  }
+}
+
+.app-sidebar-button > .sidebar-user-icon.lcd-brand {
+  width: 26px;
+  height: 26px;
+  font-size: 10px;
+}
+
+.app-chrome .app-chrome-item > .app-playback-controls {
+  cursor: default;
+
+  .song-progress > input[type="range"] {
+    pointer-events: none;
+  }
+}
+
+// Sidebar: a count at the right of an item, a tinted initial for uploaders and shelves
+.app-sidebar-item {
+  .sidebar-item-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-item-count {
+    font-size: 11px;
+    opacity: 0.5;
+    font-variant-numeric: tabular-nums;
+
+    &.attention {
+      opacity: 1;
+      color: #fff;
+      background: var(--keyColor);
+      border-radius: 10px;
+      padding: 0 6px;
+      line-height: 16px;
+    }
+  }
+
+  .sidebar-initial {
+    width: var(--iconSize);
+    height: var(--iconSize);
+    flex-shrink: 0;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgb(255 255 255 / 90%);
+
+    &.round {
+      border-radius: 50%;
+    }
+  }
+}
+
+#app-sidebar .spinner {
+  height: 32px;
+}
+
+// Art without a cover: the name on the tinted plate
+.mediaitem-artwork {
+  .mediaitem-artwork--noart {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: flex-end;
+    padding: 10%;
+    font-weight: 700;
+    font-size: 0.95em;
+    line-height: 1.2;
+    text-align: left;
+    color: rgb(255 255 255 / 88%);
+    text-shadow: 0 1px 8px rgb(0 0 0 / 40%);
+    overflow: hidden;
+    word-break: break-word;
+  }
+}
+
+// A port's art is an app icon: shown whole, inset on its plate
+.launcher-port .mediaitem-artwork img,
+.launcher-detail .mediaContainer .mediaitem-artwork img {
+  object-fit: contain;
+  padding: 16%;
+  background-image: none;
+}
+
+.launcher-detail[data-kind="game"] .mediaContainer .mediaitem-artwork img {
+  object-fit: cover;
+  padding: 0;
+}
+
+// Tags on a card, where Cider drew friends' avatars
+.cd-mediaitem-square .artwork-container .badge-container {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 2;
+
+  .launcher-badge {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgb(20 20 20 / 72%);
+    backdrop-filter: var(--glassFilter);
+    color: #eee;
+
+    &.launcher-badge--installed,
+    &.launcher-badge--data {
+      background: var(--keyColor);
+      color: #fff;
+    }
+  }
+}
+
+.cd-mediaitem-square .artwork-container > .play-btn > svg,
+.cd-mediaitem-square .artwork-container > .menu-btn > svg {
+  width: 100%;
+  height: 100%;
+}
+
+.cd-mediaitem-square .artwork-container > .play-btn > svg[stroke] {
+  padding: 6px;
+}
+
+// Library pages
+.launcher-library-page .album-header .row {
+  flex-wrap: nowrap;
+}
+
+.launcher-count-line {
+  font-size: 0.85em;
+  opacity: 0.6;
+  margin: 16px 0 0;
+}
+
+.launcher-count {
+  font-size: 0.55em;
+  opacity: 0.5;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.launcher-lede {
+  opacity: 0.7;
+  margin: 8px 0 0;
+}
+
+.launcher-actions {
+  gap: 8px;
+}
+
+.launcher-notice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgb(250 88 106 / 14%);
+  box-shadow: inset 0 0 0 1px rgb(250 88 106 / 30%);
+  font-size: 14px;
+}
+
+.well .no-artist {
+  opacity: 0.7;
+  padding: 16px;
+  text-align: center;
+}
+
+.well .spinner {
+  height: 64px;
+}
+
+.launcher-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: rgb(200 200 200 / 12%);
+  white-space: nowrap;
+}
+
+.cd-mediaitem-list-item {
+  cursor: default;
+
+  &:hover {
+    background: var(--hover);
+  }
+
+  &.mediaitem-selected {
+    background: var(--selected);
+  }
+
+  .duration {
+    min-width: 110px;
+  }
+
+  .launcher-row-action {
+    min-width: 90px;
+  }
+}
+
+// The detail page (Cider's playlist page)
+.launcher-detail {
+  .playlist-display {
+    min-height: 340px;
+  }
+
+  .playlist-desc .content {
+    cursor: pointer;
+    overflow: hidden;
+  }
+
+  .playlist-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 16px;
+    align-items: center;
+
+    > div[style*="float"] {
+      margin-left: auto;
+    }
+  }
+
+  .launcher-progress {
+    margin-top: 12px;
+    max-width: 420px;
+
+    .progress {
+      height: 4px;
+      background: rgb(200 200 200 / 10%);
+
+      .progress-bar {
+        background: var(--keyColor);
+        transition: width 0.2s var(--appleEase);
+      }
+    }
+
+    small {
+      opacity: 0.7;
+    }
+  }
+
+  .md-option-container .md-option-line {
+    background: transparent;
+
+    a {
+      color: var(--keyColor);
+      text-decoration: none;
+    }
+
+    .md-option-segment:first-child {
+      width: 30%;
+      flex-shrink: 0;
+    }
+
+    .md-option-segment_auto {
+      flex: 1;
+      min-width: 0;
+      white-space: normal;
+      text-align: right;
+      overflow-wrap: anywhere;
+    }
+  }
+
+  .launcher-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    span {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      background: rgb(200 200 200 / 10%);
+    }
+  }
+
+  .launcher-desc {
+    white-space: pre-wrap;
+    line-height: 1.5;
+    font-size: 14px;
+    user-select: text;
+  }
+
+  h3 {
+    margin-top: 24px;
+  }
+}
+
+// Settings (Cider's settings window): the form fields it had no style for
+.settings-panel .settings-window {
+  .md-textarea {
+    width: 100%;
+    min-height: 140px;
+    padding: 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(100, 100, 100, 0.35);
+    border-top: 1px solid rgba(100, 100, 100, 0.5);
+    background: #1e1e1e99;
+    color: #eee;
+    font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+    font-size: 13px;
+    resize: vertical;
+  }
+
+  small {
+    opacity: 0.7;
+  }
+}
+
+// The executable picker (Cider's add-to-playlist panel)
+.addtoplaylist-panel .playlist-item .name {
+  word-break: break-all;
+}
+
+// The y4bo wordmark, "bo" in the key colour, as in new/
+.brand {
+  font-weight: 800;
+  letter-spacing: -0.02em;
+
+  span {
+    color: #fc3c44;
+  }
+}
+
+.app-sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .app-sidebar-item {
+    margin: 0;
+  }
+
+  > .brand {
+    font-size: 22px;
+    padding: 0 8px;
+  }
+}
+
+// Inputs Cider styled per page, used on the launcher's forms
+.md-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(100, 100, 100, 0.35);
+  border-top: 1px solid rgba(100, 100, 100, 0.5);
+  background: #1e1e1e99;
+  color: #eee;
+  font-family: inherit;
+  font-size: 14px;
+  width: 280px;
+
+  &:focus {
+    outline: none;
+    border-bottom: 1px solid var(--keyColor);
+  }
+}
+
+.launcher-inline {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+
+  .grow {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+
+  label.grow {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.9em;
+    opacity: 0.9;
+
+    .md-input {
+      width: 100%;
+    }
+  }
+}
+
+// The game data editor
+.launcher-editor {
+  .md-option-container .md-option-line {
+    background: transparent;
+  }
+
+  .md-option-segment_auto .md-input {
+    width: 360px;
+  }
+
+  small, code {
+    opacity: 0.7;
+  }
+
+  .launcher-source {
+    .md-option-line {
+      padding: 10px 14px;
+    }
+  }
+
+  .launcher-browser {
+    border-top: 1px solid var(--borderColor);
+    max-height: 420px;
+    overflow-y: overlay;
+
+    .pick {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      height: 40px;
+      gap: 12px;
+      padding: 0 14px;
+      text-align: left;
+      justify-content: flex-start;
+
+      .grow {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    }
+  }
+
+  .launcher-editor-actions {
+    display: flex;
+    margin-top: 24px;
+  }
+
+  > .md-btn {
+    margin-top: 16px;
+  }
+
+  .launcher-preview-row {
+    padding: 8px 0;
+
+    .launcher-preview-files {
+      font-size: 0.85em;
+      opacity: 0.7;
+      margin-top: 4px;
+    }
+  }
+}
+
+.settings-panel .settings-window .md-option-segment small {
+  display: block;
+}

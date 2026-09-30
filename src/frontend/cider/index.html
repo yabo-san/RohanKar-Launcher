@@ -1,0 +1,1171 @@
+<!DOCTYPE html>
+<!--
+  The launcher UI as a modified Cider 1 renderer.
+  Derived from Cider (https://github.com/ciderapp/Cider), Copyright (C) Cider
+  Collective, licensed under the GNU Affero General Public License v3.0; see
+  LICENSE and NOTICE in this folder for what was taken and what was changed.
+  The templates below are Cider's EJS views (views/main.ejs, views/app/*.ejs,
+  views/components/*.ejs, views/pages/*.ejs) rewritten as Vue x-templates,
+  with the music parts swapped for the launcher's.
+-->
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- Vue 2 compiles the x-templates at runtime, which needs 'unsafe-eval' -->
+    <meta http-equiv="Content-Security-Policy" content="
+      default-src 'self';
+      script-src 'self' 'unsafe-eval';
+      style-src 'self' 'unsafe-inline';
+      font-src 'self';
+      connect-src 'self' http://127.0.0.1:*;
+      img-src 'self' https: http://127.0.0.1:* blob: data:;
+    ">
+    <title>y4bo</title>
+    <link rel="stylesheet" type="text/css" href="cider.css" />
+</head>
+
+<body class="notransparency" loading="1">
+
+<div id="app" :class="getAppClasses()" :window-state="chrome.windowState" :style="getAppStyle()"
+     :library-visible="(chrome.sidebarCollapsed ? 0 : 1)" v-cloak>
+    <transition name="fsModeSwitch">
+        <div id="app-main" v-show="appMode == 'player'">
+            <!-- views/app/chrome-top.ejs -->
+            <div class="app-chrome">
+                <div class="app-chrome--left">
+                    <div class="app-chrome-item full-height">
+                        <button class="app-mainmenu" ref="mainMenuButton" @blur="mainMenuVisibility(false)" @click="mainMenuVisibility(true)"
+                                @contextmenu="mainMenuVisibility(true)" :class="{active: chrome.menuOpened}"
+                                aria-label="Menu"></button>
+                    </div>
+                    <div class="app-chrome-item">
+                        <button class="playback-button navigation" @click="navigateBack()" title="Back" aria-label="Back">
+                            <svg-icon url="./views/svg/chevron-left.svg"></svg-icon>
+                        </button>
+                    </div>
+                    <div class="app-chrome-item">
+                        <button class="playback-button navigation" @click="navigateForward()" title="Forward" aria-label="Forward">
+                            <svg-icon url="./views/svg/chevron-right.svg"></svg-icon>
+                        </button>
+                    </div>
+                    <div class="vdiv display--large"></div>
+                </div>
+                <div class="app-chrome--center">
+                    <!-- The LCD: Cider's now playing, here the running install -->
+                    <div class="app-chrome-item playback-controls">
+                        <div class="app-playback-controls" v-if="activeDownload" @click="routeView({ id: activeDownload.id, type: activeDownload.id.startsWith('quiver:') ? 'port' : 'game' })">
+                            <div class="artwork" id="artworkLCD">
+                                <mediaitem-artwork :url="activeDownload.url"></mediaitem-artwork>
+                            </div>
+                            <div class="playback-info">
+                                <div class="info-rect">
+                                    <div class="song-name">{{ activeDownload.name }}</div>
+                                    <div class="song-artist-album">
+                                        <div class="song-artist-album-content" style="display: inline-block; -webkit-box-orient: horizontal; white-space: nowrap;">
+                                            <div class="song-artist" style="display: inline-block">
+                                                {{ activeDownload.dl.status === 'extracting' ? 'Unpacking' : activeDownload.dl.status === 'verifying' ? 'Checking game data' : 'Downloading' }} · {{ activeDownload.dl.percent || 0 }}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="song-progress">
+                                    <input type="range" step="1" min="0" max="100" :value="activeDownload.dl.percent || 0" disabled
+                                           :style="{ background: 'linear-gradient(to right, var(--songProgressColor) 0%, var(--songProgressColor) ' + (activeDownload.dl.percent || 0) + '%, rgb(200 200 200 / 10%) ' + (activeDownload.dl.percent || 0) + '%)' }" />
+                                </div>
+                            </div>
+                        </div>
+                        <div class="app-playback-controls" v-else>
+                            <div class="artwork" id="artworkLCD" style="pointer-events: none;">
+                                <div class="lcd-brand">y4<span>bo</span></div>
+                            </div>
+                            <div class="playback-info">
+                                <div class="info-rect">
+                                    <div class="song-name">{{ wall.loading ? 'Loading the wall…' : games.length.toLocaleString() + ' games · ' + (ports ? ports.items.length.toLocaleString() : '…') + ' ports' }}</div>
+                                    <div class="song-artist-album">
+                                        <div class="song-artist-album-content" style="display: inline-block; white-space: nowrap;">
+                                            <div class="song-artist" style="display: inline-block">{{ libraryCount }} in your library{{ reviewCount ? ' · ' + reviewCount + ' catalog changes' : '' }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="app-chrome--right">
+                    <div class="app-chrome-item full-height" id="window-controls-container">
+                        <div class="window-controls">
+                            <div class="minimize" @click="windowAction('minimize')"></div>
+                            <div class="minmax restore" v-if="chrome.maximized" @click="windowAction('maximize')"></div>
+                            <div class="minmax" v-else @click="windowAction('maximize')"></div>
+                            <div class="close" @click="windowAction('close')"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- views/app/app-navigation.ejs -->
+            <div class="app-navigation" v-cloak>
+                <transition name="wpfade">
+                    <div class="usermenu-container" v-if="chrome.menuOpened">
+                        <div class="usermenu-body">
+                            <button class="app-sidebar-button" style="width: 100%" @click="appRoute('home')">
+                                <div class="sidebar-user-icon lcd-brand">y4<span>bo</span></div>
+                                <div class="sidebar-user-text">
+                                    <div class="fullname text-overflow-elipsis brand">y4<span>bo</span></div>
+                                    <div class="handle-text text-overflow-elipsis">{{ version ? 'version ' + version : 'launcher' }}</div>
+                                </div>
+                            </button>
+                            <button class="usermenu-item" @click="reloadAll()">
+                                <span class="usermenu-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg></span>
+                                <span class="usermenu-item-name">Reload everything</span>
+                            </button>
+                            <button class="usermenu-item" @click="appRoute('updates')">
+                                <span class="usermenu-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-info"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg></span>
+                                <span class="usermenu-item-name">Keep current</span>
+                            </button>
+                            <button class="usermenu-item" @click="modals.settings = true">
+                                <span class="usermenu-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></span>
+                                <span class="usermenu-item-name">Settings</span>
+                            </button>
+                            <button class="usermenu-item" @click="switchUi('legacy')">
+                                <span class="usermenu-item-icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-grid"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span>
+                                <span class="usermenu-item-name">Switch to the classic interface</span>
+                            </button>
+                            <button class="usermenu-item" @click="windowAction('close')">
+                                <span class="usermenu-item-icon" style="right: 2.5px"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-x"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></span>
+                                <span class="usermenu-item-name">Quit</span>
+                            </button>
+                        </div>
+                    </div>
+                </transition>
+                <transition name="sidebartransition">
+                    <cider-app-sidebar v-if="!chrome.sidebarCollapsed"></cider-app-sidebar>
+                </transition>
+                <app-content-area></app-content-area>
+            </div>
+        </div>
+    </transition>
+    <!-- views/app/panels.ejs -->
+    <cider-menu-panel v-if="menuPanel.visible"></cider-menu-panel>
+    <transition name="wpfade">
+        <div class="bg-artwork--placeholder"></div>
+    </transition>
+    <transition name="modal">
+        <settings-window v-if="modals.settings"></settings-window>
+    </transition>
+    <transition name="modal">
+        <exe-picker v-if="modals.exePicker"></exe-picker>
+    </transition>
+</div>
+
+<!-- main/components/svg-icon.js -->
+<script type="text/x-template" id="svg-icon">
+    <div class="_svg-icon" :class="classes" :svg-name="name" :style="{'--icon': 'url(' + url + ')'}"></div>
+</script>
+
+<!-- main/components/sidebar-library-item.js, with a count -->
+<script type="text/x-template" id="sidebar-library-item">
+    <button class="app-sidebar-item" :class="$root.getSidebarItemClass(page)" @click="$root.setWindowHash(page)" :data-page="page">
+        <svg-icon :url="svgIcon" :name="'sidebar-' + svgIconName" v-if="svgIcon != ''"></svg-icon>
+        <span class="sidebar-initial" v-else :class="{round: round}" :style="{background: $root.$options.L.tint(name)}">{{ name.trim().charAt(0).toUpperCase() }}</span>
+        <span class="sidebar-item-text">{{ name }}</span>
+        <span class="sidebar-item-count" :class="{attention: attention}" v-if="count !== '' && count != null && count !== 0">{{ count }}</span>
+    </button>
+</script>
+
+<!-- views/components/sidebar.ejs -->
+<script type="text/x-template" id="cider-app-sidebar">
+    <div id="app-sidebar">
+        <div class="app-sidebar-header">
+            <div class="search-input-container">
+                <div class="search-input--icon"></div>
+                <input
+                        type="search"
+                        spellcheck="false"
+                        @input="$root.searchQuery()"
+                        v-on:keyup.enter="$root.searchQuery()"
+                        placeholder="Search..."
+                        aria-label="Search games and ports"
+                        v-model="$root.search.term"
+                        ref="searchInput"
+                        class="search-input"
+                />
+            </div>
+        </div>
+        <div class="app-sidebar-content" scrollaxis="y">
+            <div class="sidebarCatalogSection">
+                <div class="app-sidebar-header-text"
+                     @click="$root.cfg.general.sidebarCollapsed.cider = !$root.cfg.general.sidebarCollapsed.cider"
+                     :class="{collapsed: $root.cfg.general.sidebarCollapsed.cider}">
+                    Browse
+                </div>
+                <template v-if="!$root.cfg.general.sidebarCollapsed.cider">
+                    <sidebar-library-item name="Home" svg-icon="./assets/feather/home.svg" svg-icon-name="home" page="home"></sidebar-library-item>
+                    <sidebar-library-item name="New" svg-icon="./assets/feather/plus-circle.svg" svg-icon-name="new" page="new"></sidebar-library-item>
+                    <sidebar-library-item name="Game wall" svg-icon="./assets/feather/globe.svg" svg-icon-name="wall" page="wall" :count="$root.games.length || ''"></sidebar-library-item>
+                </template>
+            </div>
+
+            <div class="app-sidebar-header-text"
+                 @click="$root.cfg.general.sidebarCollapsed.uploaders = !$root.cfg.general.sidebarCollapsed.uploaders"
+                 :class="{collapsed: $root.cfg.general.sidebarCollapsed.uploaders}">
+                Uploaders
+            </div>
+            <template v-if="!$root.cfg.general.sidebarCollapsed.uploaders">
+                <sidebar-library-item v-for="s in $root.enabledSources" :key="s.uploader"
+                                      :name="$root.$options.L.sourceName(s)" :round="true"
+                                      :page="'uploader/' + enc(s.uploader)"
+                                      :count="uploaderCount(s)"></sidebar-library-item>
+            </template>
+
+            <div class="app-sidebar-header-text"
+                 @click="$root.cfg.general.sidebarCollapsed.ports = !$root.cfg.general.sidebarCollapsed.ports"
+                 :class="{collapsed: $root.cfg.general.sidebarCollapsed.ports}">
+                Ports
+            </div>
+            <template v-if="!$root.cfg.general.sidebarCollapsed.ports">
+                <sidebar-library-item v-for="s in ($root.ports ? $root.ports.shelves : [])" :key="s.id"
+                                      :name="s.name" :page="'shelf/' + enc(s.id)"
+                                      :count="s.count || (s.error ? '!' : '')"></sidebar-library-item>
+                <div class="spinner" v-if="!$root.ports && !$root.portsError"></div>
+                <sidebar-library-item name="Add a GitHub repo" svg-icon="./assets/feather/plus.svg" svg-icon-name="add-repo" page="collision" id="nav-add-repo"></sidebar-library-item>
+            </template>
+
+            <div class="app-sidebar-header-text"
+                 @click="$root.cfg.general.sidebarCollapsed.library = !$root.cfg.general.sidebarCollapsed.library"
+                 :class="{collapsed: $root.cfg.general.sidebarCollapsed.library}">
+                Library
+            </div>
+            <template v-if="!$root.cfg.general.sidebarCollapsed.library">
+                <sidebar-library-item name="Library" svg-icon="./assets/feather/hard-drive.svg" svg-icon-name="library" page="library" :count="$root.libraryCount || ''"></sidebar-library-item>
+                <sidebar-library-item name="Keep current" svg-icon="./assets/feather/zap.svg" svg-icon-name="updates" page="updates" :count="$root.reviewCount || ''" :attention="true"></sidebar-library-item>
+            </template>
+        </div>
+        <div class="app-sidebar-footer">
+            <button class="app-sidebar-item" @click="$root.modals.settings = true" data-page="settings">
+                <svg-icon url="./assets/settings.svg" name="sidebar-settings"></svg-icon>
+                <span class="sidebar-item-text">Settings</span>
+            </button>
+            <div class="brand">y4<span>bo</span></div>
+        </div>
+    </div>
+</script>
+
+<!-- views/components/app-content.ejs -->
+<script type="text/x-template" id="app-content-area">
+    <div id="app-content" scrollaxis="y"
+         :style="{'overflow': ($root.chrome.contentAreaScrolling ? '' : 'hidden')}">
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-home v-if="$root.route.name == 'home'"></cider-home>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-new v-if="$root.route.name == 'new'"></cider-new>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-library-page v-if="['wall', 'uploader', 'shelf', 'library'].includes($root.route.name)"
+                                :key="$root.page" :kind="$root.route.name" :arg="$root.route.arg"></cider-library-page>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-updates v-if="$root.route.name == 'updates'"></cider-updates>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-search v-if="$root.route.name == 'search'"></cider-search>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-collision v-if="$root.route.name == 'collision'" :key="$root.page" :repo="$root.route.arg"></cider-collision>
+        </transition>
+        <transition :name="$root.chrome.desiredPageTransition">
+            <cider-detail v-if="$root.route.name == 'game' || $root.route.name == 'port'"
+                          :key="$root.page" :kind="$root.route.name" :id="$root.route.arg"></cider-detail>
+        </transition>
+    </div>
+</script>
+
+<!-- views/components/menu-panel.ejs -->
+<script type="text/x-template" id="cider-menu-panel">
+    <div class="menu-panel" @click.self="menuPanel.visible = false" @contextmenu.self.prevent="menuPanel.visible = false">
+        <div class="menu-panel-body" ref="menubody" :style="elStyle" :class="getBodyClasses()">
+            <div class="menu-header-text" v-if="content.name != ''">
+                <div class="row">
+                    <div class="col">
+                        <h3 class="queue-header-text">{{ content.name }}</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-header-body" v-if="Object.keys(content.headerItems).length != 0">
+                <template v-for="item in content.headerItems">
+                    <button class="menu-option-header" :class="getClasses(item)" :title="item.name" :aria-label="item.name"
+                            v-if="canDisplay(item)" :style="getItemStyle(item)" @click="action(item)">
+                        <div class="sidebar-icon" style="margin: 0;" v-if="item.icon">
+                            <div class="svg-icon" :style="{'--url': 'url(' + item.icon + ')'}"></div>
+                        </div>
+                    </button>
+                </template>
+            </div>
+            <div class="menu-body">
+                <template v-for="item in content.items">
+                    <button class="menu-option" v-if="canDisplay(item)" :style="getItemStyle(item)"
+                            @click="action(item)">
+                        <div class="sidebar-icon" v-if="item.icon">
+                            <div class="svg-icon" :style="{'--url': 'url(' + item.icon + ')'}"></div>
+                        </div>
+                        {{ item.name }}
+                    </button>
+                </template>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- views/components/mediaitem-artwork.ejs -->
+<script type="text/x-template" id="mediaitem-artwork">
+    <div class="mediaitem-artwork" :style="awStyle"
+         :class="[{'rounded': (type == 'artists')}, classes]" :key="url">
+        <img :src="imgSrc"
+             ref="image"
+             decoding="async"
+             loading="lazy"
+             :style="imgStyle"
+             v-if="imgSrc"
+             @load="imgLoaded()"
+             class="mediaitem-artwork--img">
+        <div class="mediaitem-artwork--noart" v-if="!imgSrc && label">{{ label }}</div>
+    </div>
+</script>
+
+<!-- views/components/mediaitem-square.ejs -->
+<script type="text/x-template" id="mediaitem-square">
+    <div tabindex="0" class="cd-mediaitem-square-container"
+         @click.self="app.routeView(item)"
+         @keydown.enter.self="app.routeView(item)"
+         @contextmenu.self.prevent="getContextMenu"
+         v-observe-visibility="{callback: visibilityChanged}"
+         :data-id="item.id" :data-type="item.type">
+        <div class="cd-mediaitem-square" :class="getClasses()" @contextmenu.prevent="getContextMenu">
+            <div class="artwork-container" v-show="isVisible">
+                <div class="artwork" @click='app.routeView(item)'>
+                    <mediaitem-artwork
+                            :url="item.attributes.artwork.url"
+                            :size="size"
+                            :label="item.attributes.name"
+                            shadow="subtle"
+                            :bgcolor="item.attributes.artwork.bgColor"
+                            :type="item.type"></mediaitem-artwork>
+                </div>
+                <button class="menu-btn" @click.stop="getContextMenu" aria-label="More">
+                    <svg fill="white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 27 27" class="glyph"><path d="M8.89547677 13.5330073c0-1.1057457-.97371638-2.0959657-2.09596577-2.0959657-1.13875305 0-2.0794621.99022-2.0794621 2.0959657 0 1.1222494.94070905 2.0794621 2.0794621 2.0794621 1.12224939 0 2.09596577-.9572127 2.09596577-2.0794621zm6.68398533 0c0-1.1057457-.9572127-2.0959657-2.0794621-2.0959657-1.1222494 0-2.0794621.99022-2.0794621 2.0959657 0 1.1222494.9572127 2.0794621 2.0794621 2.0794621 1.1222494 0 2.0794621-.9572127 2.0794621-2.0794621zm6.700489 0c0-1.1057457-.940709-2.0959657-2.0794621-2.0959657-1.1222494 0-2.0959658.99022-2.0959658 2.0959657 0 1.1222494.9737164 2.0794621 2.0959658 2.0794621 1.1387531 0 2.0794621-.9572127 2.0794621-2.0794621z"></path></svg>
+                </button>
+                <button class="play-btn" @click.stop="app.playMediaItem(item)" :aria-label="playLabel()" :title="playLabel()">
+                    <svg v-if="installed()" fill="white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 27 27" class="glyph"><path d="M11.3545232,18.4180929 L18.4676039,14.242665 C19.0452323,13.9290954 19.0122249,13.1204156 18.4676039,12.806846 L11.3545232,8.63141809 C10.7603912,8.26833741 9.98471883,8.54889976 9.98471883,9.19254279 L9.98471883,17.8404645 C9.98471883,18.5006112 10.7108802,18.7976773 11.3545232,18.4180929 Z"></path></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="glyph"><line x1="12" y1="7" x2="12" y2="15"></line><polyline points="8 12 12 16 16 12"></polyline></svg>
+                </button>
+                <div class="badge-container" v-if="badges().length != 0">
+                    <div class="launcher-badge" v-for="badge in badges()" :key="badge" :class="'launcher-badge--' + badge.split(' ')[0].toLowerCase().replace('%', '')">{{ badge }}</div>
+                </div>
+            </div>
+            <div class="info-rect" v-show="isVisible">
+                <div class="title" :title="item.attributes.name" @click='app.routeView(item)'>
+                    <div class="item-navigate text-overflow-elipsis">{{ item.attributes.name }}</div>
+                </div>
+                <div :title="item.attributes.artistName" class="subtitle item-navigate text-overflow-elipsis"
+                     @click="getSubtitleNavigation()"
+                     v-if="item.attributes.artistName">
+                    {{ item.attributes.artistName }}
+                </div>
+                <div class="subtitle" v-else>&nbsp;</div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- views/components/mediaitem-list-item.ejs, the columns a launcher row needs -->
+<script type="text/x-template" id="mediaitem-list-item">
+    <div v-observe-visibility="{callback: visibilityChanged, throttle: 100}"
+         @contextmenu.prevent="contextMenu"
+         @click="onClick"
+         :data-id="item.id"
+         :data-type="item.type"
+         class="cd-mediaitem-list-item"
+         tabindex="0"
+         @keydown.enter="onClick"
+         :class="{'mediaitem-selected': selected}">
+        <div v-show="isVisible" class="listitem-content">
+            <div class="isLibrary" v-if="showIndex">
+                <div style="margin-left:11px; min-width: 24px; text-align: center; opacity: .7">{{ index + 1 }}</div>
+            </div>
+            <div class="artwork" v-if="showArtwork">
+                <mediaitem-artwork
+                        :url="item.attributes.artwork ? item.attributes.artwork.url : ''"
+                        :size="48"
+                        :bgcolor="item.attributes.artwork ? item.attributes.artwork.bgColor : ''"
+                        :type="item.type"></mediaitem-artwork>
+            </div>
+            <div class="info-rect" :style="{'padding-left': (showArtwork ? '' : '16px')}">
+                <div class="title text-overflow-elipsis" :title="item.attributes.name">
+                    {{ item.attributes.name }}
+                </div>
+                <div class="subtitle text-overflow-elipsis" style="-webkit-box-orient: horizontal;" v-if="item.attributes.artistName">
+                    {{ item.attributes.artistName }}
+                </div>
+            </div>
+            <template v-if="showMetaData">
+                <div class="metainfo" v-for="(m, i) in meta" :key="i">{{ m }}</div>
+            </template>
+            <div class="duration" v-if="badge"><span class="launcher-pill">{{ badge }}</span></div>
+            <slot></slot>
+        </div>
+    </div>
+</script>
+
+<!-- views/components/mediaitem-scroller-horizontal.ejs -->
+<script type="text/x-template" id="mediaitem-scroller-horizontal">
+    <vue-horizontal ref="horizontal">
+        <slot></slot>
+        <mediaitem-square :key="item.id" :kind="kind" :item="item" v-for="item in items"></mediaitem-square>
+    </vue-horizontal>
+</script>
+
+<!-- views/components/pagination.ejs -->
+<script type="text/x-template" id="pagination">
+    <div class="pagination-container" v-if="!isInfinite">
+        <button class="md-btn page-btn" :disabled="effectivePage === 1" @click="goToPage(1)" aria-label="First page">
+            <img class="md-ico-first" />
+        </button>
+        <button class="md-btn page-btn prev" :disabled="effectivePage === 1" @click="goToPrevious()" aria-label="Previous page">
+            <img class="md-ico-prev" />
+        </button>
+        <button :class="`md-btn page-btn${ isCurrentPage(page) ? ' md-btn-primary': ''}`"
+                @click="goToPage(page)" v-for="page in pagesToShow" :key="page">{{ page }}
+        </button>
+        <button class="md-btn page-btn next" :disabled="effectivePage === numPages" @click="goToNext()" aria-label="Next page">
+            <img class="md-ico-next" />
+        </button>
+        <button class="md-btn page-btn last" :disabled="effectivePage === numPages" @click="goToEnd()" aria-label="Last page">
+            <img class="md-ico-last" />
+        </button>
+        <div class="page-btn md-input-number">
+            <input type="number" min="1" :max="numPages" :value="effectivePage" @change="changePage" aria-label="Page" />
+            <span>/ {{ numPages }}</span>
+        </div>
+    </div>
+</script>
+
+<!-- views/pages/home.ejs: rows of shelves in wells -->
+<script type="text/x-template" id="cider-home">
+    <div class="content-inner home-page">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">Home</h1>
+            </div>
+            <div class="col-auto">
+                <button class="reload-btn" @click="app.reloadAll()" aria-label="Reload" title="Reload">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 512 512"><path d="M500.33 0h-47.41a12 12 0 0 0-12 12.57l4 82.76A247.42 247.42 0 0 0 256 8C119.34 8 7.9 119.53 8 256.19 8.1 393.07 119.1 504 256 504a247.1 247.1 0 0 0 166.18-63.91 12 12 0 0 0 .48-17.43l-34-34a12 12 0 0 0-16.38-.55A176 176 0 1 1 402.1 157.8l-101.53-4.87a12 12 0 0 0-12.57 12v47.41a12 12 0 0 0 12 12h200.33a12 12 0 0 0 12-12V12a12 12 0 0 0-12-12z"/></svg>
+                </button>
+            </div>
+        </div>
+        <wall-notice></wall-notice>
+        <div class="row" v-for="sec in sections" :key="sec.key">
+            <div class="col">
+                <div class="row">
+                    <div class="col nopadding">
+                        <h3>{{ sec.title }} <small class="launcher-count" v-if="sec.count">{{ sec.count }}</small></h3>
+                    </div>
+                    <div class="col-auto nopadding cider-flex-center">
+                        <button class="cd-btn-seeall" v-if="sec.seeAll" @click="app.appRoute(sec.seeAll)">See All</button>
+                    </div>
+                </div>
+                <div class="well">
+                    <mediaitem-scroller-horizontal :items="sec.items" v-if="sec.items.length"></mediaitem-scroller-horizontal>
+                    <div class="spinner" v-else></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- A notice over a page when an uploader couldn't be reached -->
+<script type="text/x-template" id="wall-notice">
+    <div class="launcher-notice" v-if="failed.length">
+        <div class="col" style="padding:0;">Couldn't reach archive.org for <b>{{ failed.map(f => app.$options.L.sourceName(f.src)).join(', ') }}</b>: {{ failed[0].error }}.</div>
+        <button class="md-btn md-btn-small" @click="app.loadWall({ refresh: true })">Try again</button>
+    </div>
+</script>
+
+<!-- views/pages/home.ejs's two-column wells, for New -->
+<script type="text/x-template" id="cider-new">
+    <div class="content-inner home-page">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">New</h1>
+            </div>
+        </div>
+        <wall-notice></wall-notice>
+        <div class="row" v-if="picks.length">
+            <div class="col">
+                <div class="row">
+                    <div class="col nopadding"><h3>y4bo picks</h3></div>
+                </div>
+                <div class="well">
+                    <mediaitem-scroller-horizontal :items="picks"></mediaitem-scroller-horizontal>
+                </div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col">
+                <div class="row">
+                    <div class="col nopadding"><h3>Recently added</h3></div>
+                    <div class="col-auto nopadding cider-flex-center">
+                        <button class="cd-btn-seeall" @click="app.appRoute('wall')">See All</button>
+                    </div>
+                </div>
+                <div class="well artistfeed-well">
+                    <template v-if="recent.length">
+                        <mediaitem-list-item v-for="item in recent" :item="item" :key="item.id" :show-meta-data="true" :meta="[app.$options.L.fmtDate(item.attributes.releaseDate)]"></mediaitem-list-item>
+                    </template>
+                    <div class="spinner" v-else-if="app.wall.loading"></div>
+                    <div class="no-artist" v-else>Nothing on the wall yet.</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="row">
+                    <div class="col nopadding"><h3>New ports</h3></div>
+                    <div class="col-auto nopadding cider-flex-center">
+                        <button class="cd-btn-seeall" @click="app.appRoute('updates')">See All</button>
+                    </div>
+                </div>
+                <div class="well artistfeed-well" style="margin-top:0;">
+                    <template v-if="newPorts.length">
+                        <mediaitem-list-item v-for="item in newPorts.slice(0, 8)" :item="item" :key="item.id" :show-meta-data="true" :meta="[item._port.shelfName]"></mediaitem-list-item>
+                    </template>
+                    <div class="spinner" v-else-if="!app.ports"></div>
+                    <div class="no-artist" v-else>No new ports since you last looked.</div>
+                </div>
+            </div>
+        </div>
+        <div class="row" v-if="week.length">
+            <div class="col">
+                <div class="row">
+                    <div class="col nopadding"><h3>New this week <small class="launcher-count">{{ week.length }}</small></h3></div>
+                </div>
+                <div class="well">
+                    <mediaitem-scroller-horizontal :items="week.slice(0, 24)"></mediaitem-scroller-horizontal>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- views/pages/library-albums.ejs: the wall, uploaders, port shelves and the library -->
+<script type="text/x-template" id="cider-library-page">
+    <div class="content-inner launcher-library-page">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">{{ app.pageTitle }}</h1>
+            </div>
+            <div class="col-auto">
+                <button v-if="reload" @click="reload()" class="reload-btn" aria-label="Reload" title="Reload">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 512 512"><path d="M500.33 0h-47.41a12 12 0 0 0-12 12.57l4 82.76A247.42 247.42 0 0 0 256 8C119.34 8 7.9 119.53 8 256.19 8.1 393.07 119.1 504 256 504a247.1 247.1 0 0 0 166.18-63.91 12 12 0 0 0 .48-17.43l-34-34a12 12 0 0 0-16.38-.55A176 176 0 1 1 402.1 157.8l-101.53-4.87a12 12 0 0 0-12.57 12v47.41a12 12 0 0 0 12 12h200.33a12 12 0 0 0 12-12V12a12 12 0 0 0-12-12z"/></svg>
+                </button>
+            </div>
+        </div>
+        <div class="album-header">
+            <div class="col" style="padding:0;">
+                <div class="search-input-container" style="width:100%;margin: 16px 0;">
+                    <div class="search-input--icon"></div>
+                    <input type="search"
+                           style="width:100%;"
+                           spellcheck="false"
+                           :placeholder="'Search ' + app.pageTitle + '...'"
+                           :aria-label="'Search ' + app.pageTitle"
+                           v-model="searchTerm" class="search-input" id="lib-search">
+                </div>
+            </div>
+            <div class="col-auto cider-flex-center">
+                <div class="row">
+                    <div class="col" v-if="kind == 'wall'">
+                        <select class="md-select" v-model="prefs.uploader" aria-label="Uploader">
+                            <optgroup label="Uploader">
+                                <option value="">All uploaders</option>
+                                <option v-for="s in app.enabledSources" :value="s.uploader" :key="s.uploader">{{ app.$options.L.sourceName(s) }}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col" v-if="kind == 'shelf'">
+                        <select class="md-select" v-model="prefs.data" aria-label="Show">
+                            <optgroup label="Show">
+                                <option value="">All ports</option>
+                                <option value="1">With game data</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col" v-if="kind == 'shelf'">
+                        <select class="md-select" v-model="shelfTag" aria-label="Tag">
+                            <optgroup label="Tag">
+                                <option value="">Any tag</option>
+                                <option v-for="t in shelfTags" :value="t" :key="t">{{ t }}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <select class="md-select" v-model="prefs.sort" aria-label="Sort by">
+                            <optgroup label="Sort by">
+                                <option v-for="(sort, key) in sorts" :value="key" :key="key">{{ sort[0] }}</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <select class="md-select" v-model="prefs.order" aria-label="Sort order">
+                            <optgroup label="Sort order">
+                                <option value="asc">Ascending</option>
+                                <option value="desc">Descending</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <select class="md-select" v-model="prefs.viewAs" aria-label="View as">
+                            <optgroup label="View as">
+                                <option value="covers">Cover art</option>
+                                <option value="list">List</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="col">
+                        <select class="md-select" v-model="prefs.scroll" aria-label="Scroll">
+                            <optgroup label="Scroll">
+                                <option value="infinite">Infinite</option>
+                                <option value="paged">Paged ({{ pageSize }} per page)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <pagination
+                    :length="list.length"
+                    :pageSize="pageSize"
+                    :scroll="prefs.scroll"
+                    scrollSelector="#app-content"
+                    @onRangeChange="onRangeChange"
+                    style="margin-bottom: 0;"
+            ></pagination>
+        </div>
+        <wall-notice v-if="kind == 'wall' || kind == 'uploader'" :uploader="arg"></wall-notice>
+        <div class="launcher-notice" v-if="shelf && shelf.error">
+            <div class="col" style="padding:0;">Couldn't fetch the {{ shelf.name }} catalog ({{ shelf.error }}).</div>
+            <button class="md-btn md-btn-small" @click="app.loadPorts(true)">Retry</button>
+        </div>
+        <div class="launcher-notice" v-else-if="shelf && shelf.fromCache">
+            <div class="col" style="padding:0;">Showing the cached {{ shelf.name }} catalog from {{ app.$options.L.fmtDate(shelf.fetchedAt) }}; GitHub wasn't reachable.</div>
+            <button class="md-btn md-btn-small" @click="app.loadPorts(true)">Retry</button>
+        </div>
+        <div class="launcher-count-line" v-if="list.length">{{ countLine }}</div>
+        <div class="well">
+            <div class="spinner" v-if="!list.length && loading"></div>
+            <div class="no-artist" v-else-if="!list.length">{{ emptyText }}</div>
+            <div class="albums-square-container" v-if="prefs.viewAs == 'covers'">
+                <div>
+                    <mediaitem-square :size="'300'" :item="item" v-for="item in currentSlice" :key="item.id">
+                    </mediaitem-square>
+                </div>
+            </div>
+            <template v-if="prefs.viewAs == 'list'">
+                <mediaitem-list-item :show-meta-data="true" :key="item.id" :item="item" :meta="metaFor(item)" :badge="badgeFor(item)"
+                                     v-for="item in currentSlice"></mediaitem-list-item>
+            </template>
+        </div>
+    </div>
+</script>
+
+<!-- Keep current: what changed in the catalogs -->
+<script type="text/x-template" id="cider-updates">
+    <div class="content-inner">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">Keep current</h1>
+            </div>
+            <div class="col-auto cider-flex-center launcher-actions">
+                <button class="md-btn" @click="app.toast('Checking the catalogs…', 'info', 2000); app.loadPorts(true)">Check catalogs now</button>
+                <button class="md-btn md-btn-primary" v-if="app.reviewCount" @click="app.markAllSeen()">Mark all seen</button>
+            </div>
+        </div>
+        <p class="launcher-lede">What changed in the catalogs since you last looked. Nothing updates itself; you decide.</p>
+        <div class="well" v-if="!app.review.length"><div class="spinner"></div></div>
+        <div class="well" v-else-if="!app.reviewCount">
+            <div class="no-artist"><b>Everything is current.</b> No catalog entries were added, changed or removed since you last marked them seen.</div>
+        </div>
+        <template v-for="r in app.review">
+            <div class="row" v-if="rows(r).length" :key="r.id">
+                <div class="col">
+                    <h3>{{ r.name }} <small class="launcher-count">{{ rows(r).length }}</small></h3>
+                    <div class="well" style="margin-top:0;">
+                        <mediaitem-list-item v-for="(row, i) in rows(r)" :key="r.id + i" :item="row.item" :badge="row.what.toUpperCase()"
+                                             :show-meta-data="false" @select="row.port && app.routeView(row.item)">
+                            <div class="duration launcher-row-action" v-if="row.port && row.what != 'removed'">
+                                <button class="md-btn md-btn-small" :class="{'md-btn-primary': !app.inPortLibrary(row.port)}"
+                                        @click.stop="app.togglePort(row.port.id)">{{ app.inPortLibrary(row.port) ? 'Remove' : 'Add' }}</button>
+                            </div>
+                        </mediaitem-list-item>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</script>
+
+<!-- Search results, as library wells -->
+<script type="text/x-template" id="cider-search">
+    <div class="content-inner">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">Search</h1>
+            </div>
+        </div>
+        <div class="well" v-if="!games.length && !ports.length">
+            <div class="no-artist">Nothing matches “{{ app.search.term }}”.</div>
+        </div>
+        <template v-if="games.length">
+            <h3>Games <small class="launcher-count">{{ games.length }}</small></h3>
+            <div class="well" style="margin-top:0;">
+                <div class="albums-square-container"><div>
+                    <mediaitem-square :item="item" v-for="item in games.slice(0, 120)" :key="item.id"></mediaitem-square>
+                </div></div>
+            </div>
+        </template>
+        <template v-if="ports.length">
+            <h3>Ports <small class="launcher-count">{{ ports.length }}</small></h3>
+            <div class="well" style="margin-top:0;">
+                <div class="albums-square-container"><div>
+                    <mediaitem-square :item="item" v-for="item in ports.slice(0, 120)" :key="item.id"></mediaitem-square>
+                </div></div>
+            </div>
+        </template>
+    </div>
+</script>
+
+<!-- views/pages/cider-playlist.ejs: a game or port as an album page -->
+<script type="text/x-template" id="cider-detail">
+    <div class="content-inner playlist-page launcher-detail" v-if="target">
+        <div class="playlist-display">
+            <div class="playlistInfo">
+                <div class="row">
+                    <div class="col-auto cider-flex-center">
+                        <div class="mediaContainer">
+                            <mediaitem-artwork shadow="large" :url="artUrl" :bgcolor="tintBg" :label="name" size="500"></mediaitem-artwork>
+                        </div>
+                    </div>
+                    <div class="col playlist-info">
+                        <div>
+                            <div class="playlist-name">{{ name }}</div>
+                            <div class="playlist-time genre" style="margin: 0px;">{{ genre }}</div>
+                            <div class="playlist-artist item-navigate" @click="artistClick()">{{ artist }}</div>
+                            <div class="playlist-desc" v-if="blurb">
+                                <div class="content" @click="tab = 'details'">{{ blurb }}</div>
+                            </div>
+                        </div>
+                        <div class="playlist-controls" style="z-index: 20;">
+                            <template v-if="dl">
+                                <button class="md-btn md-btn-primary md-btn-icon" style="min-width: 100px;" disabled>
+                                    {{ dl.status === 'extracting' ? 'Unpacking…' : dl.status === 'verifying' ? 'Checking game data…' : 'Downloading…' }}
+                                </button>
+                                <button class="md-btn md-btn-icon" v-if="dl.status === 'downloading'" @click="app.cancelDownload(targetId)">Cancel</button>
+                            </template>
+                            <template v-else-if="installed">
+                                <button class="md-btn md-btn-primary md-btn-icon" id="btn-play" style="min-width: 100px;" @click="play()"><img class="md-ico-play"> Play</button>
+                                <button class="md-btn md-btn-icon" @click="api.openGameLocation({ identifier: targetId })">Open folder</button>
+                                <button class="md-btn md-btn-icon" @click="app.pickExe(actTarget, 'steam')">Add to Steam</button>
+                            </template>
+                            <template v-else>
+                                <button class="md-btn md-btn-primary md-btn-icon" id="btn-install" style="min-width: 100px;" @click="install()"><img class="md-ico-play"> Install</button>
+                            </template>
+                            <button class="md-btn md-btn-icon" style="min-width: 180px;" v-if="kind == 'port'" @click="app.togglePort(port.id)">
+                                <img :class="!inLibrary ? 'md-ico-add' : 'md-ico-remove'">
+                                {{ !inLibrary ? 'Add to Library' : 'Remove from Library' }}
+                            </button>
+                            <button class="md-btn md-btn-icon" v-if="kind == 'port'" @click="app.appRoute('collision/' + enc(port.repository))">Game data…</button>
+                            <div style="display: flex; float: right;">
+                                <button class="more-btn-round" @click="menu" aria-label="More">
+                                    <div class="svg-icon"></div>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="launcher-progress" v-if="dl">
+                            <div class="progress"><div class="progress-bar" :style="{width: (dl.percent || 0) + '%'}"></div></div>
+                            <small>{{ stepText }}{{ dl.percent || 0 }}%</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="artworkContainer" v-if="artSrc">
+                <div class="artworkMaterial"><img :src="artSrc" alt=""><img :src="artSrc" alt=""></div>
+            </div>
+        </div>
+        <div class="playlist-body scrollbody">
+            <div class="tabs track-pills pilldim fancy-pills">
+                <div>
+                    <ul role="tablist" class="nav nav-pills justify-content-center">
+                        <li class="nav-item" role="presentation" v-if="versions.length > 1">
+                            <a role="tab" class="nav-link" href="#" :class="{active: tab == 'versions'}" @click.prevent="tab = 'versions'">Versions</a>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <a role="tab" class="nav-link" href="#" :class="{active: tab == 'details'}" @click.prevent="tab = 'details'">Details</a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content mt-3">
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 'versions' && versions.length > 1">
+                        <div class="well">
+                            <mediaitem-list-item v-for="(v, index) in versions" :key="v.identifier" :item="versionItem(v)" :index="index"
+                                                 :show-index="true" :show-artwork="false" :show-meta-data="true"
+                                                 :meta="[app.$options.L.fmtDate(v.addeddate), app.$options.L.fmtNum(v.downloads) + ' downloads']"
+                                                 :badge="app.library[v.identifier] && app.library[v.identifier].install_dir ? 'INSTALLED' : ''"
+                                                 :selected="v === version" @select="version = v"></mediaitem-list-item>
+                        </div>
+                    </div>
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 'details' || versions.length < 2">
+                        <div class="well md-option-container">
+                            <div class="md-option-line" v-for="row in details" :key="row[0]">
+                                <div class="md-option-segment">{{ row[0] }}</div>
+                                <div class="md-option-segment md-option-segment_auto">
+                                    <a v-if="row[2]" href="#" @click.prevent="api.openExternal(row[2])">{{ row[1] }}</a>
+                                    <span v-else>{{ row[1] }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        <template v-if="kind == 'port' && port.tags.length">
+                            <h3>Tags</h3>
+                            <div class="launcher-tags"><span v-for="t in port.tags" :key="t">{{ t }}</span></div>
+                        </template>
+                        <template v-if="description">
+                            <h3>About</h3>
+                            <div class="well launcher-desc">{{ description }}</div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="content-inner centered" v-else>
+        <div class="spinner" v-if="app.wall.loading || !app.ports"></div>
+        <div class="no-artist" v-else>That item isn't on the wall or in the catalogs.</div>
+    </div>
+</script>
+
+<!-- Game data: the collision editor (docs/COLLISIONS.md), on Cider's option lines -->
+<script type="text/x-template" id="cider-collision">
+    <div class="content-inner launcher-editor">
+        <div class="row">
+            <div class="col" style="padding:0;">
+                <h1 class="header-text">{{ !repo ? 'Add a GitHub repo' : 'Game data' }}</h1>
+            </div>
+        </div>
+        <div class="well" v-if="!ed || ed.loading"><div class="spinner"></div></div>
+        <template v-else>
+            <p class="launcher-lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. {{ ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : fromText }}</p>
+            <div class="well md-option-container">
+                <div class="md-option-line">
+                    <div class="md-option-segment">GitHub repository</div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <input v-if="ed.isNew" type="text" class="md-input" id="ed-repo" v-model="ed.repo" placeholder="owner/repo" spellcheck="false" aria-label="GitHub repository">
+                        <a v-else href="#" @click.prevent="api.openExternal('https://github.com/' + ed.repo)">{{ ed.repo }}</a>
+                    </div>
+                </div>
+                <div class="md-option-line">
+                    <div class="md-option-segment">Name</div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <input type="text" class="md-input" id="ed-name" v-model="ed.name" :placeholder="ed.isNew ? 'Required for a repo of your own' : 'From the catalog'" aria-label="Name">
+                    </div>
+                </div>
+                <div class="md-option-line">
+                    <div class="md-option-segment">Install folder name</div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <input type="text" class="md-input" id="ed-folder" v-model="ed.folderName" placeholder="owner.repo" aria-label="Install folder name">
+                    </div>
+                </div>
+                <div class="md-option-line">
+                    <div class="md-option-segment">Release asset<br><small>A pattern for the release file to take, e.g. <code>(?i)x86_64-windows</code>. Empty picks the Windows build.</small></div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <input type="text" class="md-input" id="ed-asset" v-model="ed.assetPattern" spellcheck="false" aria-label="Release asset">
+                    </div>
+                </div>
+                <div class="md-option-line">
+                    <div class="md-option-segment">Order</div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <select class="md-select" v-model="ed.base" aria-label="Order">
+                            <option value="binary">Release first, then the game data beside or inside it</option>
+                            <option value="data">Game data first (a full rip), then the release unpacked over it</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="md-option-line">
+                    <div class="md-option-segment">Release folder<br><small>Where the release unpacks, inside the install folder. Empty is the install folder itself.</small></div>
+                    <div class="md-option-segment md-option-segment_auto">
+                        <input type="text" class="md-input" id="ed-bintarget" v-model="ed.binaryTarget" placeholder="e.g. bin" spellcheck="false" aria-label="Release folder">
+                    </div>
+                </div>
+            </div>
+            <h3>Game data from archive.org</h3>
+            <p class="launcher-lede" v-if="legacy">{{ legacy }}</p>
+            <div class="well md-option-container launcher-source" v-for="(x, i) in ed.sources" :key="i">
+                <div class="md-option-line launcher-inline">
+                    <input type="text" class="md-input grow" :data-src="i" data-key="ia" v-model="x.ia" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
+                    <button class="md-btn" data-action="ed-browse" :data-i="i" @click="browse(i)">Browse</button>
+                    <button class="md-btn" @click="removeSource(i)" aria-label="Remove this source">Remove</button>
+                </div>
+                <div class="md-option-line launcher-inline">
+                    <label class="grow">Take<input type="text" class="md-input" :data-src="i" data-key="path" v-model="x.path" placeholder="file, folder/* or *" spellcheck="false"></label>
+                    <label class="grow">Into folder<input type="text" class="md-input" :data-src="i" data-key="target" v-model="x.target" placeholder="the install folder" spellcheck="false"></label>
+                </div>
+                <div class="md-option-line launcher-inline">
+                    <label><input type="checkbox" switch v-model="x.extract" :data-src="i" data-key="extract"> Unpack the archive</label>
+                    <label><input type="checkbox" switch v-model="x.optional" :data-src="i" data-key="optional"> Optional</label>
+                    <input type="text" class="md-input grow" :data-src="i" data-key="sha1" v-model="x.sha1" placeholder="sha1 (optional; archive.org's is checked anyway)" spellcheck="false" aria-label="sha1">
+                </div>
+                <div class="launcher-browser" v-if="ed.browse && ed.browse.i === i">
+                    <div class="md-option-line launcher-inline">
+                        <input type="text" class="md-input grow" id="ed-filter" v-model="ed.browse.filter" :placeholder="'Filter ' + ed.browse.ia" spellcheck="false">
+                        <button class="md-btn" @click="take('*')">Whole item</button>
+                        <button class="md-btn" @click="ed.browse = null">Done</button>
+                    </div>
+                    <div id="browse-list">
+                        <div class="spinner" v-if="ed.browse.loading"></div>
+                        <div class="no-artist" v-else-if="ed.browse.error">Couldn't list {{ ed.browse.ia }}: {{ ed.browse.error }}</div>
+                        <template v-else>
+                            <template v-if="browseFolders.length">
+                                <div class="md-option-header">Folders</div>
+                                <button class="pick cd-mediaitem-list-item" v-for="d in browseFolders.slice(0, 200)" :key="'d' + d" :data-path="d + '/*'" @click="take(d + '/*')">
+                                    <span class="launcher-pill">DIR</span><span class="grow">{{ d }}/</span><small>take everything under it</small>
+                                </button>
+                            </template>
+                            <div class="md-option-header">Files</div>
+                            <button class="pick cd-mediaitem-list-item" v-for="f in browseFiles.slice(0, 200)" :key="'f' + f.name" :data-path="f.name" @click="take(f.name)">
+                                <span class="launcher-pill">{{ /\.(zip|7z|rar)$/i.test(f.name) ? 'ZIP' : 'FILE' }}</span><span class="grow">{{ f.name }}</span><small>{{ fmtBytes(f.size) }}</small>
+                            </button>
+                            <div class="no-artist" v-if="!browseFiles.length">No files match.</div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+            <button class="md-btn" data-action="ed-add-source" @click="addSource()">Add a source</button>
+            <div class="launcher-notice" v-if="ed.errors"><div class="col" style="padding:0;"><div v-for="e in ed.errors" :key="e">{{ e }}</div></div></div>
+            <div class="launcher-actions launcher-editor-actions">
+                <button class="md-btn" data-action="ed-preview" @click="preview()">Preview</button>
+                <button class="md-btn md-btn-primary" id="btn-save-collision" @click="save()">Save</button>
+                <button class="md-btn" v-if="ed.origin === 'local'" @click="remove()">Remove mine</button>
+                <button class="md-btn" @click="exportFeed()">Copy my collisions as a feed</button>
+            </div>
+            <div id="ed-preview" v-if="ed.preview">
+                <div class="spinner" v-if="ed.preview.loading"></div>
+                <template v-else>
+                    <h3>What an install places</h3>
+                    <div class="well">
+                        <div class="launcher-preview-row" v-for="(r, n) in ed.preview.list" :key="n">
+                            <div class="launcher-notice" v-if="r.error">{{ r.source.path || '?' }}: {{ r.error }}</div>
+                            <template v-else>
+                                <b>{{ r.source.ia }}/{{ r.source.path }}</b> · {{ r.files.length.toLocaleString() }} file{{ r.files.length === 1 ? '' : 's' }}, {{ fmtBytes(r.bytes) }}{{ r.source.extract ? ', unpacked' : '' }}
+                                <div class="launcher-preview-files">
+                                    <div v-for="f in r.files.slice(0, 8)" :key="f.name">{{ f.name }} → {{ r.source.extract && /\.(zip|7z|rar)$/i.test(f.name) ? (r.source.target || '.') + '/ (unpacked)' : f.to }}</div>
+                                    <div v-if="r.files.length > 8">and {{ (r.files.length - 8).toLocaleString() }} more</div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </template>
+            </div>
+        </template>
+    </div>
+</script>
+
+<!-- views/components/settings-window.ejs (bootstrap-vue's b-tabs written out) -->
+<script type="text/x-template" id="settings-window">
+    <div class="settings-panel" @click.self="close()">
+        <div class="settings-window" :class="{'maxed': maxed}">
+            <button class="close-btn minmax-btn" @click="maxed = !maxed" :class="{'min': maxed}" aria-label="Maximise"></button>
+            <button class="close-btn" @click="close()" aria-label="Close"></button>
+            <div class="tabs no-style row no-gutters">
+                <div class="col-auto">
+                    <ul role="tablist" aria-orientation="vertical" class="nav nav-pills flex-column card-header h-100 border-bottom-0 rounded-0">
+                        <li class="nav-item" role="presentation" v-for="(t, i) in tabs" :key="t.id">
+                            <a role="tab" href="#" class="nav-link" :class="{active: tab == i}" @click.prevent="tab = i" :data-tab="t.id">
+                                <div><svg-icon :url="t.icon" classes="svg-md" :name="'settings-' + t.id"></svg-icon></div>
+                                <div>{{ t.name }}</div>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content col mt-3">
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 0">
+                        <div class="settings-tab-content">
+                            <div class="md-option-container">
+                                <div class="md-option-header"><span>General</span></div>
+                                <div class="settings-option-body">
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">
+                                            Uploaders<br>
+                                            <small>One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.</small>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <textarea class="md-textarea" id="setting-sources" spellcheck="false" v-model="form.sourcesText" aria-label="Uploaders"></textarea>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">Install folder<br><small>Default: the app's games folder</small></div>
+                                        <div class="md-option-segment md-option-segment_auto launcher-inline">
+                                            <input type="text" class="md-input" id="setting-install" v-model="form.installPath" placeholder="Default" aria-label="Install folder">
+                                            <button class="md-btn" @click="choose('installPath')">Choose…</button>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">Download folder<br><small>Default: the install folder</small></div>
+                                        <div class="md-option-segment md-option-segment_auto launcher-inline">
+                                            <input type="text" class="md-input" id="setting-download" v-model="form.downloadPath" placeholder="Default" aria-label="Download folder">
+                                            <button class="md-btn" @click="choose('downloadPath')">Choose…</button>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment"></div>
+                                        <div class="md-option-segment md-option-segment_auto">
+                                            <button class="md-btn md-btn-primary" id="btn-save-settings" @click="app.saveSettings(form)">Save</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 1">
+                        <div class="settings-tab-content">
+                            <div class="md-option-container">
+                                <div class="md-option-header"><span>Catalogs</span></div>
+                                <div class="settings-option-body">
+                                    <div class="md-option-line" v-for="sh in (app.ports ? app.ports.shelves : [])" :key="sh.id">
+                                        <div class="md-option-segment">{{ sh.name }}<br><small>{{ sh.url }}</small></div>
+                                        <div class="md-option-segment md-option-segment_auto">{{ sh.count }} ports{{ sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : '' }}</div>
+                                    </div>
+                                    <div class="md-option-line" v-if="!app.ports"><div class="spinner"></div></div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">Fetch every catalog again from GitHub</div>
+                                        <div class="md-option-segment md-option-segment_auto">
+                                            <button class="md-btn" @click="app.toast('Checking the catalogs…', 'info', 2000); app.loadPorts(true)">Refresh catalogs</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="md-option-header"><span>Collision feeds</span></div>
+                                <div class="settings-option-body" id="feed-list">
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment"><small>Other people's collisions: which archive.org data goes with which port. Yours win over a feed's, and a feed's over the bundled ones.</small></div>
+                                    </div>
+                                    <div class="md-option-line" v-if="!feeds"><div class="spinner"></div></div>
+                                    <div class="md-option-line" v-else-if="!feeds.length"><div class="md-option-segment">None yet.</div></div>
+                                    <div class="md-option-line" v-for="f in (feeds || [])" :key="f.id">
+                                        <div class="md-option-segment">
+                                            <span><b>{{ f.name }}</b> · {{ f.entries }} collision{{ f.entries === 1 ? '' : 's' }}{{ f.rejected.length ? ', ' + f.rejected.length + ' skipped as invalid' : '' }}{{ f.error ? ' · ' + f.error : '' }}</span>
+                                            <small>{{ f.url }}</small>
+                                        </div>
+                                        <div class="md-option-segment md-option-segment_auto launcher-inline">
+                                            <button class="md-btn" @click="refreshFeed(f.id)">Refresh</button>
+                                            <button class="md-btn" @click="removeFeed(f.id)">Remove</button>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment launcher-inline">
+                                            <input type="text" class="md-input grow" id="feed-url" v-model="feedUrl" placeholder="https://…/collisions.json" aria-label="Feed URL">
+                                            <button class="md-btn" @click="addFeed()">Subscribe</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 2">
+                        <div class="settings-tab-content">
+                            <div class="md-option-container">
+                                <div class="md-option-header"><span>Interface</span></div>
+                                <div class="settings-option-body">
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">
+                                            The classic interface<br>
+                                            <small>Still there while this one catches up. The choice is saved.</small>
+                                        </div>
+                                        <div class="md-option-segment md-option-segment_auto">
+                                            <button class="md-btn" id="btn-classic-ui" @click="app.switchUi('legacy')">Switch to the classic interface</button>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">
+                                            The current new interface<br>
+                                            <small>src/frontend/new, for comparing with this one.</small>
+                                        </div>
+                                        <div class="md-option-segment md-option-segment_auto">
+                                            <button class="md-btn" id="btn-new-ui" @click="app.switchUi('new')">Switch to the new interface</button>
+                                        </div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment">Collapse the sidebar</div>
+                                        <div class="md-option-segment md-option-segment_auto">
+                                            <label><input type="checkbox" v-model="app.chrome.sidebarCollapsed" switch aria-label="Collapse the sidebar" /></label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div role="tabpanel" class="tab-pane active" v-if="tab == 3">
+                        <div class="settings-tab-content">
+                            <div class="md-option-container">
+                                <div class="md-option-header"><span>About</span></div>
+                                <div class="settings-option-body">
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment brand">y4<span>bo</span></div>
+                                        <div class="md-option-segment md-option-segment_auto" id="app-version">{{ app.version ? 'y4bo ' + app.version : '' }}</div>
+                                    </div>
+                                    <div class="md-option-line">
+                                        <div class="md-option-segment"><a href="#" id="based-on-cider" @click.prevent="api.openExternal('https://github.com/ciderapp/Cider')">Based on Cider (AGPL-3.0)</a></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<!-- views/components/add-to-playlist.ejs: the executable picker -->
+<script type="text/x-template" id="exe-picker">
+    <div class="modal-fullscreen addtoplaylist-panel" @click.self="close()" @contextmenu.self="close()">
+        <div class="modal-window">
+            <div class="modal-header">
+                <div class="modal-title">{{ title }}</div>
+                <button class="close-btn" @click="close()" aria-label="Close"></button>
+            </div>
+            <div class="modal-content">
+                <button class="playlist-item"
+                        :class="{ focused: exe == focused }"
+                        @click="app.choseExe(exe)" style="width:100%;" v-for="exe in sorted" :key="exe" :data-exe="exe">
+                    <div class="icon"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg></div>
+                    <div class="name">{{ exe.split(/[\\/]/).pop() }}<br><small style="opacity:.6">{{ exe }}</small></div>
+                </button>
+            </div>
+            <div class="modal-search">
+                <div class="search-input-container" style="width:100%;margin: 16px 0;">
+                    <div class="search-input--icon"></div>
+                    <input type="search" ref="searchInput" style="width:100%;" spellcheck="false"
+                           placeholder="Search..." v-model="searchQuery" @input="search()" class="search-input" aria-label="Search executables">
+                </div>
+            </div>
+        </div>
+    </div>
+</script>
+
+<script src="lib/vue.js"></script>
+<script src="lib/vue-horizontal.js"></script>
+<script src="lib/vue-observe-visibility.min.js"></script>
+<script src="lib/notyf.min.js"></script>
+<script src="../api.js"></script>
+<script src="../sources.js"></script>
+<script src="app/launcher.js"></script>
+<script src="app/components.js"></script>
+<script src="app/vueapp.js"></script>
+</body>
+
+</html>
