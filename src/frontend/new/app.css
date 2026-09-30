@@ -140,6 +140,7 @@ button { font: inherit; color: inherit; }
 .tag.data { background: var(--ok); color: #04210d; }
 .tag.needs { background: var(--warn); color: #2a2200; }
 .tag.installed { background: var(--key); }
+.tag.update { background: var(--warn); color: #2a2200; }
 .tag.versions { left: auto; right: 8px; }
 .card .title { margin-top: 9px; font-weight: 600; font-size: 13px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card .sub { color: var(--text2); font-size: 11px; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -791,3 +792,8 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .feed-uploader .trusted { color: var(--ok); font-size: 12px; }
 .feed-own { margin-top: 8px; }
 .feed-own label.btn { cursor: pointer; }
+
+/* installed version with a newer upload (GET /items versions[].newer) */
+.newer-note { display: flex; align-items: center; gap: 12px; margin: 12px 0; padding: 10px 14px; border-radius: var(--rad-ctl);
+  background: var(--fill); border: 1px solid var(--border); font-size: 13px; }
+.newer-note .btn { margin-left: auto; }
