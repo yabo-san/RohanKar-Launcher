@@ -1,6 +1,6 @@
 {
   "name": "y4bo-launcher",
-  "version": "1.6.0-fork.12",
+  "version": "1.6.0-fork.13",
   "description": "y4bo game launcher",
   "author": "Kilted-Kraken",
   "main": "src/electron/main.js",
