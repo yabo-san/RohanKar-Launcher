@@ -7,13 +7,18 @@ archive.org hosts the data, and the launcher puts them together. There's no serv
 
 ## Where they come from
 
-The launcher merges three layers per repository (lowercase `owner/repo`). A later layer replaces
-an earlier one's entry for the same repository outright; entries aren't merged field by field.
+The launcher merges layers per repository (lowercase `owner/repo`). A later layer replaces an
+earlier one's entry for the same repository outright; entries aren't merged field by field.
 
-1. `catalog/collisions.json`, bundled with the app (this repo's own).
-2. Collision feeds the user subscribes to by URL (`POST /collision-feeds`), in subscription order.
+1. Collision feeds the user subscribes to by URL (`POST /collision-feeds`), in subscription order.
    Entries that fail validation are dropped and listed under `rejected`.
+2. user.json's `collisions` and `github` entries ([USER-SOURCES.md](USER-SOURCES.md)).
 3. The user's own, saved with `PUT /collisions/:repo` into `catalogs/collisions.local.json`.
+4. `catalog/collisions.json`, bundled with the app (this repo's own). Curated wins: a user layer's
+   entry for a repository this file has is ignored and listed as a conflict in Settings.
+
+Layers 1 to 3 are additional sources: they apply only while Settings > Allow additional sources is
+on, and what they supply is badged "Your source · not reviewed".
 
 A collision for a repository that no subscribed catalog lists defines a port of its own. Those show
 on a **Your ports** shelf, which is how an arbitrary GitHub repository gets into the launcher.

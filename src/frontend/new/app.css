@@ -845,3 +845,5 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .sublabel { display: block; margin: 12px 0 6px; font-weight: 600; font-size: 12px; }
 .user-list { margin-top: 8px; font-size: 12px; line-height: 1.5; }
 .user-list b { display: block; margin-bottom: 2px; }
+/* a badged card is taller: keep every card in its row top-aligned */
+.grid > .card { align-self: start; }

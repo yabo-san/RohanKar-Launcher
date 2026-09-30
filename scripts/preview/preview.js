@@ -8,6 +8,8 @@
  *     tab (sessionStorage) so switching UIs keeps them
  *   - installs, launching and OS actions answer 501, as a browser tab does
  *     against a real backend
+ *   - while Allow additional sources is on, a response saved with it on
+ *     ("ON " keys, fixtures builds) answers instead of the default one
  * A pill in the corner says it's a preview and what data it shows.
  */
 (() => {
@@ -36,7 +38,8 @@
   }
 
   async function saved(k) {
-    const entry = (await loadManifest()).responses[k];
+    const { responses } = await loadManifest();
+    const entry = (state.settings.allowAdditionalSources && responses[`ON ${k}`]) || responses[k];
     if (!entry) return null;
     const res = await realFetch(DATA + entry.file);
     return new Response(await res.blob(), { status: entry.status, headers: { 'Content-Type': entry.type } });

@@ -318,7 +318,7 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   expect(Object.keys(pins)).toEqual(['archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip']);
   fs.writeFileSync(pinsFile, JSON.stringify({ 'archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip': 'f'.repeat(40) }));
   // Reinstall over it, as an update would (deleting needs the desktop app)
-  const reinstall = page.evaluate(() => installGame(state.detail.version));
+  const reinstall = page.evaluate(() => installGame(state.detail.version)); // eslint-disable-line no-undef
   await expect(modal.locator('.modal-title')).toHaveText('File changed');
   await expect(modal.locator('.modal-content')).toContainText('rk-e2e-user-demo.zip from User Demo is not the file you installed before');
   await modal.locator('.md-btn-primary', { hasText: 'Install anyway' }).click();
