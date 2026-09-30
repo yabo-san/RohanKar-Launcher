@@ -64,7 +64,7 @@ An array of entries, `{ "collisions": [...] }`, or an object keyed by repository
 
 | field | meaning |
 | --- | --- |
-| `repository` | Required. The GitHub repository, `owner/repo`. The join key; titles never match. |
+| `repository` | The GitHub repository, `owner/repo`. The join key; titles never match. Leave it out for an archive.org-only entry, whose binaries come from its `sources`: it then needs a `name` (its key) and at least one source, and the release fields (`assetPattern`, `releaseAssetFilter`, `keepReleaseFolder`, `binaryTarget`, `base`) don't apply. Curated only for now, with a `shelf` to make it a tile. |
 | `name`, `folderName` | The port's name and install folder when no catalog lists it. `folderName` also names the folder when one does. |
 | `assetPattern` | Regex (`(?i)` prefix for case-insensitive) that picks the release asset. Wins over the catalog's `releaseAssetFilter`. |
 | `base` | Which half lays down first: `"binary"` (default) or `"data"`. The other goes on top and wins on clashes. |

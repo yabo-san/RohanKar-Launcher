@@ -235,7 +235,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // (userSource) has its release binary checked or pinned per release tag.
   // Resolves { ok, jobs } or { ok: false, error, detail }.
   function startPort({ item, acceptHashChange = false }) {
-    if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository to install from.` };
+    // No repository: an archive.org-only entry, its sources carry the binaries too
+    if (!item.repository && !item.data?.sources?.length) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository or archive.org sources to install from.` };
     const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
     if (running) return { ok: true, jobs: [view(running)] };
     const job = {
@@ -283,7 +284,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   async function runPortJob(job, item) {
     const entry = item.entry || {};
     const data = item.data || {};
-    const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
+    const folderName = disk.sanitizeFolderName(entry.folderName || (item.repository ? item.repository.replace('/', '.') : item.title));
     const dest = path.join(installDir(), folderName);
     const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
     const downloads = new Set();
@@ -293,7 +294,9 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     fs.mkdirSync(dest, { recursive: true });
 
     // The binary: the latest release's Windows build, unpacked into binDest
+    // (none for an archive.org-only entry)
     async function binary() {
+      if (!item.repository) return true;
       update(job, { status: 'downloading', step: 'binary', percent: 0 });
       const release = await latestRelease(item.repository);
       const pick = ports.pickAsset(release.assets, { pattern: data.assetPattern, filter: entry.releaseAssetFilter });

@@ -6,7 +6,7 @@
  *
  *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...] [--zip item/file.zip ...]
  *
- * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
+ * For each repository (or, archive.org-only, name) in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
  * installs the port into a temp folder with the same install engine the app
  * uses, and lists what landed. --ia lists an archive.org item's files (those
@@ -59,7 +59,7 @@ async function listIa(spec, print) {
 // A collision as the catalog item catalogs.items() would build for it
 function itemFor(c) {
   return {
-    id: `quiver:live:${c.repository.toLowerCase()}`, title: c.name || c.repository, repository: c.repository,
+    id: `quiver:live:${(c.repository || c.name).toLowerCase()}`, title: c.name || c.repository, repository: c.repository || null,
     entry: { folderName: c.folderName || '', ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}) },
     data: itemData(c), // as the app's port shelves hand it to the install
   };
@@ -156,10 +156,11 @@ async function run(opts, print = (l) => console.log(l)) {
   for (const spec of opts.zips || []) failed += await listZip(spec, print);
   try {
     for (const repo of opts.repos) {
-      const c = catalog.find(x => x.repository.toLowerCase() === repo.toLowerCase());
+      // owner/repo, or the name of an archive.org-only entry
+      const c = catalog.find(x => (x.repository || x.name || '').toLowerCase() === repo.toLowerCase());
       print(`\n== ${repo}`);
       if (!c) { print('not in catalog/collisions.json'); failed++; continue; }
-      await releases(c.repository, print);
+      if (c.repository) await releases(c.repository, print);
       const item = itemFor(c);
       const started = installs.startPort({ item });
       if (!started.ok) { print(`can't start: ${started.detail}`); failed++; continue; }

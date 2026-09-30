@@ -28,6 +28,8 @@ const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim
 
 // The entry's identity within its catalog: repository when it has one, else name
 const entryKey = (e) => repoKey(e.repository) || (e.name ? `name:${e.name}` : null);
+// A key as the API names an entry: owner/repo, or name:<name> for an archive.org-only one
+const keyOf = (k) => (typeof k === 'string' && k.startsWith('name:') ? k : repoKey(k));
 
 function parseCatalog(text) {
   const data = JSON.parse(text);
@@ -36,8 +38,9 @@ function parseCatalog(text) {
   return apps.filter(e => e && typeof e === 'object' && entryKey(e));
 }
 
-// collisions.json: an array of entries with `repository`, { collisions: [...] },
-// or an object keyed by repository (a feed's other keys aside)
+// collisions.json: an array of entries with `repository` (or, archive.org-only,
+// a `name`), { collisions: [...] }, or an object keyed by repository (a feed's
+// other keys aside). Keyed by entryKey
 const FEED_KEYS = ['schemaVersion', 'uploaders'];
 function parseCollisions(text) {
   const data = JSON.parse(text);
@@ -46,7 +49,7 @@ function parseCollisions(text) {
     : Object.entries(data || {}).filter(([k]) => !k.startsWith('_') && !FEED_KEYS.includes(k)).map(([repository, v]) => ({ repository, ...v }));
   const out = new Map();
   for (const c of list) {
-    const key = repoKey(c?.repository);
+    const key = c && typeof c === 'object' ? entryKey(c) : null;
     if (key) out.set(key, c);
   }
   return out;
@@ -220,30 +223,33 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     fs.writeFileSync(collisionsFile, JSON.stringify(list, null, 2) + '\n');
     collisions = null;
   }
-  function saveCurated(entry) {
+  // was: the key it's saved under, when a save renames an archive.org-only entry
+  function saveCurated(entry, was = null) {
     if (!admin || !collisionsFile) return { ok: false, forbidden: true, errors: ['Admin mode is off'] };
     const errors = validateCollision(entry);
     if (errors.length) return { ok: false, errors };
-    const clean = { ...entry, repository: entry.repository.trim() };
-    const key = repoKey(clean.repository);
+    const { repository, ...rest } = entry;
+    const clean = repository ? { ...entry, repository: repository.trim() } : rest;
+    const key = keyOf(was) || entryKey(clean);
     const list = curatedList();
-    const at = list.findIndex(c => repoKey(c.repository) === key);
+    if (entryKey(clean) !== key && list.some(c => entryKey(c) === entryKey(clean))) return { ok: false, errors: [`${clean.name} is already in the curated list`] };
+    const at = list.findIndex(c => entryKey(c) === key);
     if (at < 0) list.push(clean); else list[at] = clean;
     writeCurated(list);
     return { ok: true, created: at < 0, entry: clean };
   }
   function deleteCurated(repository) {
     if (!admin || !collisionsFile) return { ok: false, forbidden: true };
-    const key = repoKey(repository);
+    const key = keyOf(repository);
     const list = curatedList();
-    const after = list.filter(c => repoKey(c.repository) !== key);
+    const after = list.filter(c => entryKey(c) !== key);
     if (after.length === list.length) return { ok: false };
     writeCurated(after);
     return { ok: true };
   }
 
   const collision = (repository) => {
-    const key = repoKey(repository);
+    const key = keyOf(repository);
     const curated = bundledCollisions().get(key);
     if (curated) return { origin: 'bundled', entry: curated };
     if (!additional()) return null;
@@ -285,12 +291,12 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   function curatedTiles() {
     const listed = listedRepos();
     return [...bundledCollisions().values()].filter(c => typeof c.shelf === 'string' && c.shelf.trim() && c.name
-      && !listed.has(repoKey(c.repository)) && (admin || !c.hidden));
+      && !listed.has(entryKey(c)) && (admin || !c.hidden));
   }
   const curatedShelves = () => [...new Map(curatedTiles().map(c => { const sh = curatedShelf(c.shelf.trim()); return [sh.id, sh]; })).values()];
   function curatedEntries(id) {
     return curatedTiles().filter(c => curatedShelf(c.shelf.trim()).id === id).map(c => ({
-      name: c.name, repository: c.repository, folderName: c.folderName || '',
+      name: c.name, ...(c.repository ? { repository: c.repository } : {}), folderName: c.folderName || '',
       ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}), ...(Array.isArray(c.tags) ? { tags: c.tags } : {}),
       ...(c.description ? { description: c.description } : {}),
     }));
@@ -382,7 +388,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     const layers = userLayers();
     const joins = new Map([...layers.map, ...bundledCollisions()]);
     return subs.flatMap(sub => entries(sub.id).map(e => {
-      const k = repoKey(e.repository);
+      const k = entryKey(e);
       const data = joins.get(k) || null;
       // A hidden curated collision gates its port, wherever it's listed, to admin mode
       const hidden = !!(data?.hidden && bundledCollisions().has(k));

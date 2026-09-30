@@ -1188,11 +1188,13 @@ function portProgress(p) {
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
+  // An archive.org-only entry has no repository: its sources carry the binaries
+  const bin = p.repository ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br>` : '<b>Binary:</b> archive.org, with the data<br>';
   const data = p.data.status === 'available'
-    ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="ok">archive.org (${esc(p.data.uploader || p.data.iaIdentifier)})</span>, ${esc(p.data.files.join(', ') || 'item contents')}, sha1-checked after staging`
+    ? `${bin}<b>Data:</b> <span class="ok">archive.org (${esc(p.data.uploader || p.data.iaIdentifier)})</span>, ${esc(p.data.files.join(', ') || 'item contents')}, sha1-checked after staging`
     : p.data.status === 'missing'
-      ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="warn">needs ${esc(p.data.files.join(', '))}, not in the catalog</span>`
-      : `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> none needed, as far as the catalog knows`;
+      ? `${bin}<b>Data:</b> <span class="warn">needs ${esc(p.data.files.join(', '))}, not in the catalog</span>`
+      : `${bin}<b>Data:</b> none needed, as far as the catalog knows`;
   const icon = p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="">` : '';
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
@@ -1203,16 +1205,16 @@ function portDetail(d) {
       <div class="actions">
         <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
         ${portActions(p)}
-        <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
-        <button class="btn" data-action="edit-collision" data-repo="${esc(p.repository)}">Game data…</button>
+        ${p.repository ? `<button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
+        <button class="btn" data-action="edit-collision" data-repo="${esc(p.repository)}">Game data…</button>` : ''}
       </div>
       ${portProgress(p)}
       ${exePicker(d)}
       <div class="srcline">${data}</div>
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
-        <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
-        <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
+        ${p.repository ? `<dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>` : ''}
+        <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.') || p.name)}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
         <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'catalog/collisions.json')}</dd>

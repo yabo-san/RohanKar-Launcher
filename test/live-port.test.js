@@ -20,6 +20,8 @@ test('live-port: a collision becomes the catalog item the install engine takes',
     data: { iaIdentifier: null, contentUrl: null, assetPattern: '(?i)win', dataFiles: [], sources: [], base: 'binary', binaryTarget: '', exe: 'game.exe' },
   });
   assert.equal(itemFor({ repository: 'a/b' }).title, 'a/b');
+  const ia = itemFor({ name: 'Raze', exe: 'raze.exe', sources: [{ ia: 'raze-package', path: 'x.zip', extract: true }] });
+  assert.deepEqual([ia.id, ia.title, ia.repository, ia.data.sources[0].ia], ['quiver:live:raze', 'Raze', null, 'raze-package']);
 });
 
 test('live-port: an N64 ROM reports its byte order, and a z64 its title and revision', () => {

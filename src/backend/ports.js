@@ -161,7 +161,12 @@ const safeRel = (p) => typeof p === 'string' && !/^([a-z]:|[\\/])/i.test(p) && !
 function validateCollision(c) {
   const errs = [];
   if (!c || typeof c !== 'object' || Array.isArray(c)) return ['entry must be an object'];
-  if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
+  // No repository: an archive.org-only entry, its binaries among its sources
+  const hasSources = Array.isArray(c.sources) && c.sources.length > 0;
+  if (c.repository == null || c.repository === '') {
+    if (!hasSources || !c.name) errs.push('repository must be owner/repo (or leave it out and give a name and sources)');
+    for (const k of ['assetPattern', 'releaseAssetFilter', 'keepReleaseFolder', 'binaryTarget', 'base']) if (c[k] != null) errs.push(`${k} needs a repository`);
+  } else if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
   for (const k of ['name', 'folderName', 'releaseAssetFilter', 'shelf']) if (c[k] != null && typeof c[k] !== 'string') errs.push(`${k} must be a string`);
   if (c.hidden != null && typeof c.hidden !== 'boolean') errs.push('hidden must be true or false');
   if (c.assetPattern != null) {
