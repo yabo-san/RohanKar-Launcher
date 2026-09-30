@@ -18,6 +18,7 @@ const quiverImport = require('./quiver-import');
 const { createManualApp } = require('./manual');
 const { sourcesFromSettings } = require('./sources');
 const feedFile = require('./feed');
+const { withNewer } = require('./updates');
 
 const API_VERSION = 'v1';
 const HOST = '127.0.0.1';
@@ -99,7 +100,8 @@ function createApi(backend) {
 
   route('GET', '/items', async ({ query }) => {
     try {
-      return { body: await items.list(query) };
+      const body = await items.list(query);
+      return { body: { ...body, items: body.items.map(withNewer) } };
     } catch (e) {
       throw new HttpError(502, 'sources_failed', e.message, { errors: e.errors || [] });
     }
@@ -119,7 +121,7 @@ function createApi(backend) {
     return { status: 204 };
   });
   route('GET', '/featured', async () => ({ body: { picks: await backend.getFeatured() } }));
-  route('GET', '/items/:id', async ({ params }) => ({ body: await findItem(params.id) }));
+  route('GET', '/items/:id', async ({ params }) => ({ body: withNewer(await findItem(params.id)) }));
 
   route('GET', '/items/:id/files', async ({ params }) => {
     const r = await archive.fileList(params.id);

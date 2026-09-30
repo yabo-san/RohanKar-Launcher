@@ -49,6 +49,11 @@ test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (
 
   const zoo = await call('GET', '/items/rk-e2e-zoo-tycoon-pstriple');
   assert.equal(zoo.body.id, 'rk-e2e-zoo-tycoon');
+  // each version names the newest later upload of its title
+  const newer = Object.fromEntries(zoo.body.versions.map(v => [v.id, v.newer]));
+  assert.deepEqual(newer, { 'rk-e2e-zoo-tycoon': 'rk-e2e-zoo-tycoon-pstriple', 'rk-e2e-zoo-tycoon-pstriple': null });
+  const listed = all.body.items.find(i => i.id === 'rk-e2e-zoo-tycoon');
+  assert.equal(listed.versions.find(v => v.id === 'rk-e2e-zoo-tycoon').newer, 'rk-e2e-zoo-tycoon-pstriple');
   assert.equal((await call('GET', '/items/nope')).status, 404);
 
   const files = await call('GET', '/items/rk-e2e-halo-ce/files');
