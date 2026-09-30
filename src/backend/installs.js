@@ -13,6 +13,7 @@ const { getFollow, getText } = require('./net');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
+const { applyBps, BpsError } = require('./bps');
 
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
 const GITHUB_API = 'https://api.github.com';
@@ -301,11 +302,23 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
             if (df.optional) continue;
             return fail(`${df.name} isn't in ${src.file}`);
           }
-          if (df.patch) return fail(`${df.name} needs a patch (${df.patch}), which isn't supported yet`);
           const target = ports.inside(dest, df.targetSubpath, df.name);
           if (!target) return fail(`${df.name} would land outside the install folder`);
           fs.mkdirSync(path.dirname(target), { recursive: true });
-          fs.copyFileSync(found, target);
+          if (df.patch) {
+            const p = await patchFile(String(df.patch), staging, src.identifier);
+            if (job.status === 'cancelled') return false;
+            if (!p.ok) return fail(`${df.name}'s patch ${df.patch}: ${p.error}`);
+            update(job, { status: 'verifying' });
+            try {
+              fs.writeFileSync(target, applyBps(fs.readFileSync(found), fs.readFileSync(p.filePath)));
+            } catch (e) {
+              if (!(e instanceof BpsError)) throw e;
+              return fail(`${df.name} couldn't be patched with ${path.basename(p.filePath)}: ${e.message}`);
+            }
+          } else {
+            fs.copyFileSync(found, target);
+          }
           if (df.sha1) {
             const sum = await ports.sha1File(target);
             if (sum !== String(df.sha1).toLowerCase()) {
@@ -318,6 +331,32 @@ function createInstalls({ settings, library, archive, gamesDir, emit = () => {},
         if (staging) fs.rmSync(staging, { recursive: true, force: true });
       }
       return true;
+    }
+
+    // A dataFiles[].patch: a URL, else a path in the unpacked data download,
+    // the install folder (a release can ship its patch) or, failing both, the
+    // same archive.org item. { ok, filePath } or { ok: false, error }
+    async function patchFile(ref, staging, identifier) {
+      const get = async (url, fileName) => {
+        update(job, { status: 'downloading', step: 'data', percent: 0, file: path.basename(fileName) });
+        const got = await download({ key: job.id, identifier, url, fileName, onProgress: progress });
+        if (got.ok) downloads.add(got.filePath);
+        return got;
+      };
+      if (/^https?:\/\//i.test(ref)) {
+        const ia = ports.archiveFile(ref);
+        if (ia) return get(archive.downloadUrl(ia.identifier, ia.file), ia.file);
+        let name;
+        try { name = decodeURIComponent(path.posix.basename(new URL(ref).pathname)); } catch { name = ''; }
+        return get(ref, name || 'patch.bps');
+      }
+      for (const root of [staging, dest].filter(Boolean)) {
+        const exact = ports.inside(root, ref);
+        if (exact && exact !== path.resolve(root) && fs.existsSync(exact) && fs.statSync(exact).isFile()) return { ok: true, filePath: exact };
+        const found = ports.findFile(root, path.basename(ref));
+        if (found) return { ok: true, filePath: found };
+      }
+      return get(archive.downloadUrl(identifier, ref.replace(/^\/+/, '')), ref);
     }
 
     // sources: files, folders (dir/*) or whole archives straight from archive.org

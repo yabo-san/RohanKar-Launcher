@@ -1,6 +1,6 @@
 'use strict';
 /**
- * RohanKar Launcher — src/electron/main.js
+ * y4bo — src/electron/main.js
  * A thin host. Starts the backend (src/backend/main.js) as a utility process,
  * waits for it to report its port and token, then opens the window on
  * src/frontend/ with both. The OS side stays here: window controls,
@@ -19,6 +19,22 @@ const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
 const { parseCli } = require('../backend/cli');
+const { resolveUserData } = require('./user-data');
+
+// Identity across the rename to y4bo (package.json can't hold comments):
+// build.appId stays "com.rohankar.launcher". It is internal (Windows
+// AppUserModelID, not shown), and electron-builder's NSIS target derives the
+// install's GUID from it (UUID v5 of appId), which keys the uninstall entry and
+// the InstallLocation the installer upgrades in place. A new appId would make
+// the y4bo installer a second app installed beside the old one, so auto-update
+// would leave RohanKar Launcher behind. build.nsis.guid pins that GUID
+// (2bb8c09d-2711-598b-90f1-e9685ecdb3dc) so a later appId change can't break it.
+// The data folder: see user-data.js. Set before anything reads userData.
+const userData = resolveUserData({ current: app.getPath('userData'), appData: app.getPath('appData'), name: app.name });
+if (userData.reason === 'legacy') {
+  app.setPath('userData', userData.dir);
+  console.log(`[userData] keeping the existing data folder ${userData.dir}`);
+}
 
 const USER_DATA   = app.getPath('userData');
 const HEROES_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes');
@@ -240,7 +256,7 @@ async function setupAutoUpdater() {
     const fetchNotes = () => new Promise((resolve) => {
       https.get(releaseUrl, {
         headers: {
-          'User-Agent':  'RohanKar-Launcher',
+          'User-Agent':  'y4bo-launcher',
           'Accept':      'application/vnd.github+json',
         },
       }, (res) => {

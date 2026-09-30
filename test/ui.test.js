@@ -15,8 +15,9 @@ const tmp = (t) => {
 test('mise run ui: arguments and defaults', () => {
   assert.deepEqual(parseArgs([], {}).port, 5180);
   assert.equal(parseArgs([], {}).host, '0.0.0.0', 'reachable through a forwarded port');
-  assert.equal(parseArgs([], {}).live, false, 'fixtures unless asked');
-  const o = parseArgs(['--live', '--port', '6000', '--host', '127.0.0.1', '--out', 'x'], { UI_PORT: '7000' });
+  assert.equal(parseArgs([], {}).live, true, 'the real data unless asked');
+  assert.equal(parseArgs(['--offline'], {}).live, false);
+  const o = parseArgs(['--offline', '--live', '--port', '6000', '--host', '127.0.0.1', '--out', 'x'], { UI_PORT: '7000' });
   assert.deepEqual([o.live, o.port, o.host, o.out], [true, 6000, '127.0.0.1', path.resolve('x')]);
   assert.equal(parseArgs([], { UI_PORT: '7000', UI_HOST: '::1' }).port, 7000);
 });
@@ -53,4 +54,41 @@ test('start: builds from the fixtures (no network) and serves a working preview'
   assert.ok(rows.filter(r => r.install_dir).length >= 2, 'installed games in the made-up library');
   assert.ok(rows.some(r => r.identifier.startsWith('quiver:')), 'a port added');
   assert.ok(rows.some(r => r.is_favorite === 1), 'a favourite');
+});
+
+test('start: real data that fails to load falls back to the fixtures; offline failures still fail', async (t) => {
+  const out = tmp(t);
+  const calls = [];
+  const buildSite = async ({ fixtures }) => {
+    calls.push(fixtures);
+    if (!fixtures) throw new Error('the wall is empty: every source failed');
+    return { data: 'fixtures', items: 3, ports: 1 };
+  };
+  const lines = [];
+  const s = await start({ live: true, port: 0, host: '127.0.0.1', out }, (l) => lines.push(l), { buildSite });
+  t.after(s.close);
+  assert.deepEqual(calls, [false, true]);
+  assert.match(lines.join(''), /couldn't load the real data \(the wall is empty: every source failed\); showing the offline fixtures/);
+  assert.match(lines.join(''), /fixtures data: 3 wall items, 1 ports/);
+  await assert.rejects(start({ live: false, port: 0, host: '127.0.0.1', out }, () => {}, { buildSite: async () => { throw new Error('boom'); } }), /boom/);
+});
+
+test('mise run sandbox: the real backend with all its data in one folder, --reset empties it', async (t) => {
+  const sandbox = require('../scripts/sandbox');
+  assert.equal(sandbox.parseArgs([]).dir, path.join(__dirname, '..', 'sandbox'));
+  assert.deepEqual(sandbox.parseArgs(['--reset', '--dir', 'x']), { reset: true, dir: path.resolve('x') });
+
+  const dir = path.join(tmp(t), 'sb');
+  fs.mkdirSync(dir);
+  fs.writeFileSync(path.join(dir, 'old.txt'), 'left over');
+  const lines = [];
+  const s = await sandbox.start({ reset: true, dir }, { LAUNCHER_PORT: '0', FRONTEND_PORT: '0', LAUNCHER_TOKEN: 'sb' }, (l) => lines.push(l));
+  t.after(s.stop);
+  assert.ok(!fs.existsSync(path.join(dir, 'old.txt')), '--reset emptied it');
+  assert.match(lines.join(''), new RegExp(`sandbox   ${dir.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')} \\(emptied\\)`));
+  const api = /backend\s+(\S+)/.exec(lines.join(''))[1];
+  const res = await fetch(`${api}/settings`, { headers: { authorization: 'Bearer sb' } });
+  assert.equal(res.status, 200);
+  assert.ok(fs.existsSync(path.join(dir, 'games')), 'installs go under the sandbox');
+  assert.ok(fs.readdirSync(dir).some(f => f.startsWith('library')), 'so does the library');
 });

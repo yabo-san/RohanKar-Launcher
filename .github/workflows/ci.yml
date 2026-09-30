@@ -195,7 +195,7 @@ jobs:
       # window renders, Settings shows the shipped sources, a stub download lands
       - name: Smoke test the built app
         env:
-          E2E_APP: ${{ github.workspace }}\dist\win-unpacked\RohanKar Launcher.exe
+          E2E_APP: ${{ github.workspace }}\dist\win-unpacked\y4bo.exe
         run: npx playwright test
 
       - name: Upload smoke test report

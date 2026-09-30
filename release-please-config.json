@@ -4,7 +4,7 @@
   "packages": {
     ".": {
       "release-type": "node",
-      "package-name": "rohankar-launcher",
+      "package-name": "y4bo-launcher",
       "include-component-in-tag": false,
       "draft": true,
       "force-tag-creation": true,
