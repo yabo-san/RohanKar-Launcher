@@ -155,6 +155,12 @@ const api = (() => {
       return r.ok ? r.body : { found: [], error: r.body?.detail };
     },
 
+    // A Quiver folder (apps.json + Apps/): the plan, or with apply the import
+    importQuiver: async ({ dir, apply = false }) => {
+      const r = await call('POST', '/library/import/quiver', { dir, apply });
+      return r.ok ? { ok: true, ...r.body } : failure(r);
+    },
+
     // Library rows for items that aren't installed (catalog ports)
     addToLibrary:      ({ id, source }) => call('POST', '/library', { id, source }),
     removeFromLibrary: async ({ id }) => {

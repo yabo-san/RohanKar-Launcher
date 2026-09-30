@@ -14,6 +14,7 @@
  *   the Left/Right keys, and a drag doesn't open a card.
  * - New leads with the featured picks (a wall game and a port), then a
  *   compact list of the latest uploads, newest first.
+ * - Settings imports a Quiver library (apps.json + Apps/) without downloading.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org and the Quiver lists are served by fixture-server.js.
@@ -240,6 +241,37 @@ test('Game data: add a GitHub repo, browse an archive.org item, pick a file and 
   await page.locator('[data-src="0"][data-key="target"]').fill('../escape');
   await page.locator('#btn-save-collision').click();
   await expect(page.locator('.editor .notice')).toContainText('sources[0].target must be a relative folder');
+});
+
+test('Settings imports a Quiver library: preview, import, then the library and Your ports show it', async () => {
+  const root = path.join(stack.dataDir, 'quiver');
+  const put = (rel, text = 'MZ') => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), text); };
+  put('apps.json', JSON.stringify({ apps: [
+    { name: 'Perfect Dark', folderName: 'PerfectDark', repository: 'perfect-dark-pc-port/perfect_dark' },
+    { name: 'Obscure Port', folderName: 'ObscurePort', repository: 'someone/obscure-port' },
+    { name: 'Homebrew Thing', folderName: 'Homebrew', tags: ['manual'] },
+  ] }));
+  put('Apps/Homebrew/thing.exe');
+  await page.evaluate((dir) => { api.chooseFolder = async () => dir; }, root);
+
+  await page.locator('#btn-settings').click();
+  const field = page.locator('#quiver-import');
+  await field.locator('[data-action="quiver-import-choose"]').click();
+  await expect(field.locator('.import-list li')).toHaveCount(3);
+  await expect(field.locator('.import-list li', { hasText: 'Perfect Dark' })).toContainText('already here');
+  await expect(field.locator('.import-list li', { hasText: 'Homebrew Thing' })).toContainText('your folder · installed');
+  await field.locator('[data-action="quiver-import-apply"]').click();
+  await expect(field.locator('.import-done')).toContainText('1 adopted, 1 added, 1 new on Your ports, 1 already here');
+  await field.locator('[data-action="quiver-import-cancel"]').click();
+
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'Your ports' })).toBeVisible();
+  await page.locator('[data-view="library"]').click();
+  const card = page.locator('.game-card', { hasText: 'Homebrew Thing' });
+  await expect(card).toContainText('Your folder');
+  await card.click();
+  await expect(page.locator('#detail .by')).toHaveText('Your folder');
+  await expect(page.locator('#detail #btn-play')).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {
