@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "archive": [
+    { "identifier": "rk-e2e-user-demo", "title": "User Demo" },
+    { "identifier": "rk-e2e-halo-ce" }
+  ],
+  "github": [
+    { "repository": "someone/user-tool", "name": "User Tool" },
+    { "repository": "not a repo" }
+  ]
+}

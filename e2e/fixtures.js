@@ -13,6 +13,7 @@
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /feed.json is fixtures/feed.json: a port and an uploader someone curates
  *     that isn't on the wall
+ *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
  *     bundled copies are used
  * Shared by archive-stub.js (inside Electron) and fixture-server.js (over HTTP).
@@ -66,6 +67,9 @@ function answer(url, base = '') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');
+  if (kind === 'metadata' && id === 'rk-e2e-user-demo') {
+    return reply(200, JSON.stringify({ metadata: { title: 'User Demo', uploader: 'someone@example.com', date: '2024' }, files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
+  }
   if (kind === 'metadata' && id === 'rk-e2e-romset') return reply(200, JSON.stringify({ files: ROMSET }), 'application/json');
   if (kind === 'metadata') return reply(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
   if (kind === 'download' && file === `${id}.zip`) return reply(200, TINY_ZIP, 'application/zip');
