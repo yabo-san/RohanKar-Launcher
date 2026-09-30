@@ -13,6 +13,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { getText } = require('./net');
 const { validateCollision } = require('./ports');
+const { parseUploaders } = require('./feed');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 
@@ -30,12 +31,13 @@ function parseCatalog(text) {
 }
 
 // collisions.json: an array of entries with `repository`, { collisions: [...] },
-// or an object keyed by repository
+// or an object keyed by repository (a feed's other keys aside)
+const FEED_KEYS = ['schemaVersion', 'uploaders'];
 function parseCollisions(text) {
   const data = JSON.parse(text);
   const list = Array.isArray(data) ? data
     : Array.isArray(data?.collisions) ? data.collisions
-    : Object.entries(data || {}).filter(([k]) => !k.startsWith('_')).map(([repository, v]) => ({ repository, ...v }));
+    : Object.entries(data || {}).filter(([k]) => !k.startsWith('_') && !FEED_KEYS.includes(k)).map(([repository, v]) => ({ repository, ...v }));
   const out = new Map();
   for (const c of list) {
     const key = repoKey(c?.repository);
@@ -86,7 +88,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   const feedCache = (id) => readJson(file(id, 'collisions'), null);
   const describeFeed = (f) => {
     const c = feedCache(f.id);
-    return { ...f, entries: c?.entries.length ?? 0, rejected: c?.rejected ?? [], fetchedAt: c?.fetchedAt ?? null, error: c?.error ?? null };
+    return { ...f, entries: c?.entries.length ?? 0, rejected: c?.rejected ?? [], uploaders: c?.uploaders ?? [], fetchedAt: c?.fetchedAt ?? null, error: c?.error ?? null };
   };
   const feeds = () => feedList().map(describeFeed);
 
@@ -99,9 +101,11 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
     const prev = feedCache(id);
     let entries = null;
     let rejected = [];
+    let uploaders = [];
     let error = null;
     if (r.status === 200) {
       try {
+        uploaders = parseUploaders(JSON.parse(r.body)?.uploaders);
         const all = [...parseCollisions(r.body).values()];
         entries = all.filter(c => !validateCollision(c).length);
         rejected = all.filter(c => validateCollision(c).length).map(c => ({ repository: c.repository, errors: validateCollision(c) }));
@@ -110,8 +114,8 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
       error = r.status ? `HTTP ${r.status}` : (r.error || 'network error');
     }
     writeJson(file(id, 'collisions'), entries
-      ? { fetchedAt: Date.now(), entries, rejected, error: null }
-      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], rejected: prev?.rejected ?? [], error });
+      ? { fetchedAt: Date.now(), entries, rejected, uploaders, error: null }
+      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], rejected: prev?.rejected ?? [], uploaders: prev?.uploaders ?? [], error });
     return describeFeed(f);
   }
   async function subscribeFeed({ url, name }) {

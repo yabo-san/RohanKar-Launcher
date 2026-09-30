@@ -429,7 +429,9 @@ test('collisions: yours (save, read, export, delete), feeds you subscribe to, an
   assert.deepEqual(saved.body, { ...entry, repository: 'me/port' });
   assert.deepEqual((await call('GET', `/collisions/${enc('Me/Port')}`)).body, { origin: 'local', entry: saved.body });
   assert.deepEqual((await call('GET', '/collisions')).body.local, [saved.body]);
-  assert.deepEqual((await call('GET', '/collisions/export')).body, { schemaVersion: 1, collisions: [saved.body] });
+  const exported = (await call('GET', '/collisions/export')).body;
+  assert.deepEqual([exported.schemaVersion, exported.collisions], [1, [saved.body]]);
+  assert.ok(exported.uploaders.length > 0, 'your feed carries the uploaders you have on');
   const bad = await call('PUT', `/collisions/${enc('me/port')}`, { sources: [{ ia: 'x', path: '../up' }] });
   assert.deepEqual([bad.status, bad.body.error], [400, 'bad_collision']);
   assert.match(bad.body.detail, /sources\[0\]\.path/);
@@ -463,4 +465,53 @@ test('collisions: yours (save, read, export, delete), feeds you subscribe to, an
 
   assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 204);
   assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 404);
+});
+
+test('feeds: uploaders from a feed wait to be trusted; your feed exports and imports both halves', async (t) => {
+  const feedBody = {
+    schemaVersion: 1,
+    collisions: [{ repository: 'feed/port', name: 'Feed Port', sources: [{ ia: 'feed-item', path: 'rom.z64' }] }],
+    uploaders: [{ uploader: 'friend@example.com', label: 'Friend' }, { uploader: 'has space' }],
+  };
+  const { call, fake } = await testApi(t, { state: {
+    routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
+  } });
+  const mine = async () => (await call('GET', '/sources')).body.sources;
+  const before = await mine();
+
+  const sub = await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json`, name: 'Friends' });
+  assert.deepEqual(sub.body.uploaders, [{ uploader: 'friend@example.com', label: 'Friend' }]);
+  const listed = (await call('GET', '/collision-feeds')).body.feeds[0].uploaders;
+  assert.deepEqual(listed, [{ uploader: 'friend@example.com', label: 'Friend', trusted: false }]);
+  assert.deepEqual(await mine(), before, 'subscribing adds no uploader');
+
+  const trust = await call('POST', '/sources/trust', { uploader: 'friend@example.com', label: 'Friend' });
+  assert.equal(trust.status, 200);
+  assert.deepEqual((await mine()).at(-1), { uploader: 'friend@example.com', label: 'Friend', enabled: true });
+  assert.equal((await call('GET', '/collision-feeds')).body.feeds[0].uploaders[0].trusted, true);
+  assert.equal((await call('POST', '/sources/trust', { uploader: 'no good' })).status, 400);
+  await call('POST', '/sources/trust', { uploader: 'FRIEND@example.com' });
+  assert.equal((await mine()).length, before.length + 1, 'trusting twice is a no-op');
+
+  // Import a file: its ports become yours, its uploaders join your list
+  const file = JSON.stringify({ collisions: [
+    { repository: 'shared/port', name: 'Shared', sources: [{ ia: 'shared-item', path: 'x.z64' }] },
+    { repository: 'shared/broken', sources: [{ ia: 'bad id', path: 'x' }] },
+  ], uploaders: [{ uploaderEmail: 'curator@example.com', handle: 'curator' }] });
+  const imp = await call('POST', '/feed/import', { text: file });
+  assert.equal(imp.status, 200);
+  assert.deepEqual([imp.body.collisions, imp.body.rejected.map(r => r.repository), imp.body.uploaders], [['shared/port'], ['shared/broken'], ['curator@example.com']]);
+  assert.equal((await call('GET', `/collisions/${encodeURIComponent('shared/port')}`)).body.origin, 'local');
+  assert.ok((await mine()).some(x => x.uploader === 'curator@example.com' && x.label === 'curator'));
+  const again = await call('POST', '/feed/import', { text: file });
+  assert.deepEqual(again.body.uploaders, [], 'importing again adds nothing new');
+
+  assert.equal((await call('POST', '/feed/import', { text: 'not json' })).body.error, 'bad_feed');
+  assert.equal((await call('POST', '/feed/import', { text: '{}' })).body.error, 'bad_feed');
+  assert.equal((await call('POST', '/feed/import', {})).status, 400);
+
+  const out = (await call('GET', '/collisions/export')).body;
+  assert.deepEqual(out.collisions.map(c => c.repository), ['shared/port']);
+  assert.ok(out.uploaders.some(u => u.uploader === 'friend@example.com'));
+  assert.ok(out.uploaders.some(u => u.uploader === 'curator@example.com'));
 });
