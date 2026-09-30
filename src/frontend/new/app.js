@@ -702,7 +702,7 @@ function openDetail(kind, id) {
   } else {
     const p = state.ports?.items.find(x => x.id === id);
     if (!p) return;
-    state.detail = { kind, port: p };
+    state.detail = { kind, port: p, exes: null };
   }
   $('#detail').classList.remove('hidden');
   renderDetail();
@@ -728,6 +728,13 @@ function renderDetail() {
   }
 }
 
+const EXE_HEADINGS = { steam: 'Pick the executable for Steam', default: 'Pick the executable to launch by default', play: 'Pick the executable' };
+function exePicker(d) {
+  if (!d.exes) return '';
+  return `<div class="h3">${EXE_HEADINGS[d.exes.purpose]}</div>
+    <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>`;
+}
+
 function gameDetail(d) {
   const g = d.game, v = d.version;
   const title = getTitle(v);
@@ -746,8 +753,7 @@ function gameDetail(d) {
   } else {
     actions = `<button class="btn primary" id="btn-download" data-action="install">Install</button>`;
   }
-  const exes = d.exes ? `<div class="h3">${d.exes.purpose === 'steam' ? 'Pick the executable for Steam' : 'Pick the executable'}</div>
-    <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>` : '';
+  const exes = exePicker(d);
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
       <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
@@ -812,6 +818,7 @@ function portDetail(d) {
         <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
       </div>
       ${portProgress(p)}
+      ${exePicker(d)}
       <div class="srcline">${data}</div>
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
@@ -906,6 +913,137 @@ async function togglePort(id) {
   render();
 }
 
+// ─── right-click menu (ports), after Quiver's ────────────────────────────────
+
+// Entries are [label, key], [label, [...entries]] for a submenu, or '-'
+function portMenu(p) {
+  const lib = state.library[p.id];
+  const about = [
+    ['Details', 'details'],
+    ['Repository on GitHub', 'repo'],
+    ...(p.data.iaIdentifier ? [['Game data on archive.org', 'data']] : []),
+  ];
+  const library = [inPortLibrary(p) ? 'Remove from Library' : 'Add to Library', 'toggle-library'];
+  if (state.downloads.has(p.id)) return [['Cancel Download', 'cancel'], '-', library, ['About', about]];
+  if (lib?.install_dir) {
+    return [
+      ['Launch', 'launch'],
+      ['Open Folder', 'open-folder'],
+      ['Launch Options', [['Choose Executable…', 'choose-exe'], ['Add to Steam…', 'steam']]],
+      library,
+      ['About', about],
+      '-',
+      ['Delete', 'delete', 'danger'],
+    ];
+  }
+  return [['Download', 'install'], ['Locate Existing Install…', 'locate'], library, ['About', about]];
+}
+
+function menuHtml(entries) {
+  return entries.map(e => e === '-' ? '<div class="sep"></div>'
+    : Array.isArray(e[1])
+      ? `<div class="has-sub"><button class="mi" data-sub>${esc(e[0])}<span class="chev">›</span></button><div class="ctxmenu sub">${menuHtml(e[1])}</div></div>`
+      : `<button class="mi ${e[2] || ''}" data-menu="${esc(e[1])}">${esc(e[0])}</button>`).join('');
+}
+
+let menuPort = null;
+function openMenu(p, x, y) {
+  menuPort = p;
+  let el = $('#ctxmenu');
+  if (!el) { el = document.createElement('div'); el.id = 'ctxmenu'; el.className = 'ctxmenu'; el.setAttribute('role', 'menu'); document.body.append(el); }
+  el.innerHTML = menuHtml(portMenu(p));
+  el.classList.remove('hidden', 'flip');
+  // Keep it on screen; submenus open to the left near the right edge
+  const r = el.getBoundingClientRect();
+  el.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  el.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
+  if (x + r.width * 2 > innerWidth) el.classList.add('flip');
+  el.querySelector('.mi')?.focus();
+}
+function closeMenu() { $('#ctxmenu')?.classList.add('hidden'); menuPort = null; }
+
+async function runMenu(btn) {
+  const p = menuPort;
+  const key = btn.dataset.menu;
+  closeMenu();
+  if (!p) return;
+  const v = portTarget(p);
+  switch (key) {
+    case 'install': return installPort(p);
+    case 'cancel': {
+      const dl = state.downloads.get(p.id);
+      if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId });
+      return;
+    }
+    case 'locate': return locateInstall(p);
+    case 'launch': return launchPort(p);
+    case 'open-folder': return api.openGameLocation({ identifier: p.id });
+    case 'choose-exe': return pickExe(p, 'default');
+    case 'steam': return pickExe(p, 'steam');
+    case 'toggle-library': return togglePort(p.id);
+    case 'details': return openDetail('port', p.id);
+    case 'repo': return api.openExternal(`https://github.com/${p.repository}`);
+    case 'data': return api.openExternal(`https://archive.org/details/${p.data.iaIdentifier}`);
+    case 'delete': {
+      if (!confirm(`Delete ${p.name}? Its install folder goes to the Recycle Bin.`)) return;
+      const r = await api.deleteGame({ identifier: v.identifier, trash: true });
+      if (!r.ok) return toast(`Couldn't delete: ${r.error}`);
+      toast(`Deleted ${p.name}.`);
+      await reloadLibrary();
+      return render();
+    }
+  }
+}
+
+// An install already on disk (a manual download, or from another launcher)
+async function locateInstall(p) {
+  const dir = await api.chooseFolder();
+  if (!dir) return;
+  const r = await api.setInstallDir({ identifier: p.id, installDir: dir });
+  if (!r.ok) return toast(`Couldn't use that folder: ${r.error}`);
+  await reloadLibrary();
+  toast(r.row?.exe_path ? `${p.name} is set up from ${dir}.` : `${p.name} is set up. Pick its executable under Launch Options.`, 6000);
+  render();
+}
+
+async function launchPort(p) {
+  const lib = state.library[p.id];
+  if (lib?.exe_path) return launch(portTarget(p), lib.exe_path);
+  const exes = await api.findExes({ identifier: p.id });
+  if (!exes.length) return toast('No executable found in the install folder.');
+  if (exes.length === 1) return launch(portTarget(p), exes[0]);
+  return pickExe(p, 'play', exes);
+}
+
+// Shows the executable list in the port's detail panel
+async function pickExe(p, purpose, list = null) {
+  const exes = list || await api.findExes({ identifier: p.id });
+  if (!exes.length) return toast('No executable found in the install folder.');
+  openDetail('port', p.id);
+  state.detail.exes = { purpose, list: exes };
+  renderDetail();
+}
+
+async function setDefaultExe(v, exePath) {
+  await api.setExePath({ identifier: v.identifier, exePath });
+  await reloadLibrary();
+  toast(`${getTitle(v)} now launches ${exePath.split(/[\\/]/).pop()}.`);
+}
+
+document.addEventListener('contextmenu', (e) => {
+  const card = e.target.closest('.port-card');
+  const p = card && state.ports?.items.find(i => i.id === card.dataset.id);
+  if (!p) return closeMenu();
+  e.preventDefault();
+  // The keyboard menu key reports 0,0; anchor to the card instead
+  const r = card.getBoundingClientRect();
+  openMenu(p, e.clientX || r.left + r.width / 2, e.clientY || r.top + r.height / 2);
+});
+document.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctxmenu')) closeMenu(); });
+window.addEventListener('blur', closeMenu);
+window.addEventListener('resize', closeMenu);
+document.addEventListener('scroll', closeMenu, true);
+
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
   if (!sources.length) return toast('Add at least one uploader.');
@@ -918,10 +1056,13 @@ async function saveSettingsForm() {
   if (changed) { ambientDone = false; loadWall({ refresh: true }); }
 }
 
+// A port acts through its library row, keyed by the catalog item id
+const portTarget = (p) => ({ identifier: p.id, title: p.name });
+const detailTarget = () => state.detail?.version || (state.detail?.port && portTarget(state.detail.port));
+
 async function onAction(action, el) {
   const d = state.detail;
-  // A port acts through its library row, keyed by the catalog item id
-  const v = d?.version || (d?.port && { identifier: d.port.id, title: d.port.name });
+  const v = detailTarget();
   switch (action) {
     case 'install': return d?.port ? installPort(d.port) : installGame(v);
     case 'cancel': {
@@ -979,10 +1120,15 @@ document.addEventListener('click', (e) => {
   }
   if (t.dataset.exe && state.detail?.exes) {
     const { purpose } = state.detail.exes;
+    const v = detailTarget();
     state.detail.exes = null;
     renderDetail();
-    return purpose === 'steam' ? addToSteam(state.detail.version, t.dataset.exe) : launch(state.detail.version, t.dataset.exe);
+    if (purpose === 'steam') return addToSteam(v, t.dataset.exe);
+    if (purpose === 'default') return setDefaultExe(v, t.dataset.exe);
+    return launch(v, t.dataset.exe);
   }
+  if (t.dataset.menu !== undefined) return runMenu(t);
+  if (t.dataset.sub !== undefined) return;
   if (t.dataset.wallUploader !== undefined) { state.wallFilter.uploader = t.dataset.wallUploader || null; return render(); }
   if (t.dataset.shelfTag !== undefined) { state.shelfFilter = { tag: t.dataset.shelfTag || null, dataOnly: false }; return render(); }
   if (t.dataset.shelfData) { state.shelfFilter = { tag: null, dataOnly: !state.shelfFilter.dataOnly }; return render(); }
@@ -1004,6 +1150,7 @@ $('#q').addEventListener('input', (e) => {
   searchTimer = setTimeout(() => { state.query = e.target.value.trim(); render(); }, 120);
 });
 document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && menuPort) return closeMenu();
   if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
   if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('#q').focus(); }

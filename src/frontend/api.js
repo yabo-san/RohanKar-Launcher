@@ -131,6 +131,10 @@ const api = (() => {
     setFavorite: ({ identifier, isFavorite }) => call('PATCH', `/library/${enc(identifier)}`, { favorite: !!isFavorite }),
     setNotes:    ({ identifier, notes }) => call('PATCH', `/library/${enc(identifier)}`, { notes }),
     setExePath:  ({ identifier, exePath }) => call('PATCH', `/library/${enc(identifier)}`, { exePath }),
+    setInstallDir: async ({ identifier, installDir }) => {
+      const r = await call('PATCH', `/library/${enc(identifier)}`, { installDir });
+      return r.ok ? { ok: true, row: r.body } : failure(r);
+    },
     // Out of the library; with trash, the install folder goes to the Recycle Bin
     deleteGame: async ({ identifier, trash }) => {
       const r = await call('DELETE', `/library/${enc(identifier)}`, undefined, trash ? { files: 'trash' } : {});
