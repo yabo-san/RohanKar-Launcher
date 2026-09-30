@@ -58,7 +58,7 @@ A recipe is a collision with `needs` in place of pinned `sources`:
 ```json
 {
   "repository": "perfect-dark-pc-port/perfect_dark",
-  "assetPattern": "(?i)^pd-x86_64-windows\\.zip$",
+  "assetPattern": "(?i)x86_64-windows",
   "exe": "pd.x86_64.exe",
   "needs": [
     {
