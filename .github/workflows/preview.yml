@@ -72,7 +72,7 @@ jobs:
       # the catalogs on main. Fails rather than publish an empty wall.
       - name: Build the preview
         env:
-          PREVIEW_LABEL: ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || 'main' }}
+          PREVIEW_LABEL: "${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || 'main' }}"
           PREVIEW_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
         run: node scripts/preview/build.js --out preview-site
 
