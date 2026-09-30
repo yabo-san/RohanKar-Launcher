@@ -98,9 +98,15 @@ A `mise run ui` task that serves `src/renderer/` from a static server with a stu
 shelves and cards render in a browser through the devcontainer's forwarded port. No installs in
 that mode.
 
-### Step 6: Quiver parity
+### Step 6: Supersede Quiver
 
-What Quiver has that steps 1 to 5 do not cover, in priority order. One PR each, after step 5.
+This fork supersedes Quiver: users switch to it, and it does not integrate with Quiver. Quiver's
+community catalogs stay a data source for the port shelves (Step 1); nothing else of Quiver's is
+read at runtime. The only library integrations are this fork's Playnite export (Step 7) and Drop
+OSS, which is handled outside this repo.
+
+What Quiver has that steps 1 to 5 do not cover, so nobody loses anything by switching. One PR each;
+6.4 first (it is the switch path), then 6.1, 6.2, 6.3.
 
 1. **Manually managed apps.** An entry with no repository and no archive item: the user names it,
    drops files into its folder, the library launches it. Adopt-existing (step 3) handles installs
@@ -111,12 +117,13 @@ What Quiver has that steps 1 to 5 do not cover, in priority order. One PR each, 
    executable instead of `%APPDATA%`, so a folder is the whole install and can be moved. Quiver's
    default; ours should be a Settings choice with a migration.
 4. **Import a Quiver library.** Read a Quiver `apps.json` plus its `Apps/` folder and adopt
-   everything it lists, so a Quiver user can switch without reinstalling.
+   everything it lists, so a Quiver user can switch without reinstalling. A one-way import, not a
+   sync: nothing is written back to Quiver.
 5. **Mod management** (Thunderstore, GameBanana) as Quiver does it. Last; large; only if asked for.
 6. **Announcements.** A remote `announcement.json` shown once per message id. Small; do it with 1.
 
 Not needed: Linux and Android builds (Electron can, nobody asked), code signing (a purchase, not a
-PR).
+PR), and any integration with Quiver itself beyond reading its catalogs and the one-way import.
 
 ### Step 7: Playnite export, trivial by design
 
