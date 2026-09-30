@@ -1507,7 +1507,6 @@ async function sourcesChanged() {
   const box = $('#setting-sources');
   if (box) box.value = formatSources(state.sources);
   await loadCollisionFeeds();
-  ambientDone = false;
   loadWall({ refresh: true });
 }
 
