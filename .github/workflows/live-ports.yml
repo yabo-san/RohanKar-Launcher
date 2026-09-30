@@ -1,0 +1,39 @@
+name: Live ports
+
+# A real port install against the real GitHub and archive.org
+# (scripts/live-port.js), which the fixture tests can only imitate. Not a
+# required check: an upstream release or an archive.org outage can turn it red
+# without anything in this repo being wrong.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'catalog/collisions.json'
+      - 'scripts/live-port.js'
+      - 'src/backend/installs.js'
+      - 'src/backend/ports.js'
+      - '.github/workflows/live-ports.yml'
+  workflow_dispatch:
+    inputs:
+      repos:
+        description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - name: Install the ports for real
+        env:
+          REPOS: ${{ inputs.repos }}
+        run: node scripts/live-port.js $REPOS
