@@ -1197,7 +1197,7 @@ function portDetail(d) {
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${esc(p.project)} · Source: ${p.shelf.startsWith('curated-') ? 'y4bo' : 'Quiver'} / ${esc(p.shelfName)}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}${p.shelf.startsWith('curated-') ? `y4bo's curated list / ${esc(p.shelfName)}` : `Source: Quiver / ${esc(p.shelfName)}`}</div></div></div>
     <div class="d-body">
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
       <div class="actions">
@@ -1212,10 +1212,10 @@ function portDetail(d) {
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
         <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
-        <dt>Folder</dt><dd>${esc(p.folderName)}</dd>
+        <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
-        <dt>Catalog</dt><dd>${esc(p.catalogUrl)}</dd>
+        <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'catalog/collisions.json')}</dd>
       </dl>
     </div>`;
 }
@@ -1408,7 +1408,7 @@ function sourceCard(x, i) {
     <div class="inline"><input type="text" data-src="${i}" data-key="ia" value="${esc(x.ia)}" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
       <button class="btn" data-action="ed-browse" data-i="${i}">Browse</button>
       <button class="btn" data-action="ed-remove-source" data-i="${i}" aria-label="Remove this source">&#10005;</button></div>
-    ${state.admin ? `<div class="inline"><input type="search" id="ed-search-${i}" data-search="${i}" value="${esc(ed.search?.i === i ? ed.search.q : '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
+    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.search?.i === i ? ed.search.q : '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
       <button class="btn" data-action="ed-search" data-i="${i}">Search</button></div>${ed.search?.i === i ? searchHtml() : ''}` : ''}
     <div class="two"><div><label>Take</label><input type="text" data-src="${i}" data-key="path" value="${esc(x.path)}" placeholder="file, folder/* or *" spellcheck="false"></div>
       <div><label>Into folder</label><input type="text" data-src="${i}" data-key="target" value="${esc(x.target)}" placeholder="the install folder" spellcheck="false"></div></div>
