@@ -4,12 +4,17 @@
  * array) that the user subscribes to by URL. Each subscription is fetched on
  * demand, cached under catalogs/, and diffed against the copy the user last
  * reviewed. The collision catalog joins entries to archive.org data on
- * `repository` (lowercase owner/repo), never on title.
+ * `repository` (lowercase owner/repo), never on title. The user's own
+ * collisions (collisions.local.json) win over the bundled ones, and those for
+ * repositories no subscribed catalog lists make up a "Your ports" shelf.
  */
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const { getText } = require('./net');
+const { validateCollision } = require('./ports');
+
+const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 
 const catalogId = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 12);
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
@@ -24,11 +29,12 @@ function parseCatalog(text) {
   return apps.filter(e => e && typeof e === 'object' && entryKey(e));
 }
 
-// collisions.json: an array of entries with `repository`, or an object keyed by it
+// collisions.json: an array of entries with `repository`, { collisions: [...] },
+// or an object keyed by repository
 function parseCollisions(text) {
   const data = JSON.parse(text);
-  const list = Array.isArray(data)
-    ? data
+  const list = Array.isArray(data) ? data
+    : Array.isArray(data?.collisions) ? data.collisions
     : Object.entries(data || {}).filter(([k]) => !k.startsWith('_')).map(([repository, v]) => ({ repository, ...v }));
   const out = new Map();
   for (const c of list) {
@@ -61,7 +67,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   };
 
   let collisions = null;
-  function collisionMap() {
+  function bundledCollisions() {
     if (!collisions) {
       try { collisions = collisionsFile ? parseCollisions(fs.readFileSync(collisionsFile, 'utf8')) : new Map(); }
       catch (e) { log(`[catalogs] collisions unreadable (${e.message})`); collisions = new Map(); }
@@ -69,10 +75,116 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
     return collisions;
   }
 
+  // ─── The user's own collisions ────────────────────────────────────────────
+  const localFile = path.join(dir, 'collisions.local.json');
+  const localList = () => { const l = readJson(localFile, []); return Array.isArray(l) ? l : []; };
+  const localMap = () => new Map(localList().filter(c => repoKey(c?.repository)).map(c => [repoKey(c.repository), c]));
+
+  // ─── Collision feeds: other people's collisions, subscribed by URL ────────
+  const feedList = () => (Array.isArray(settings.load().collisionFeeds) ? settings.load().collisionFeeds : []);
+  const findFeed = (id) => feedList().find(f => f.id === id) || null;
+  const feedCache = (id) => readJson(file(id, 'collisions'), null);
+  const describeFeed = (f) => {
+    const c = feedCache(f.id);
+    return { ...f, entries: c?.entries.length ?? 0, rejected: c?.rejected ?? [], fetchedAt: c?.fetchedAt ?? null, error: c?.error ?? null };
+  };
+  const feeds = () => feedList().map(describeFeed);
+
+  // Fetches and caches a feed, keeping only entries that validate. A failed
+  // fetch keeps the last good copy.
+  async function refreshFeed(id) {
+    const f = findFeed(id);
+    if (!f) return null;
+    const r = await getText(f.url, { kind: 'collisions', log: netLog });
+    const prev = feedCache(id);
+    let entries = null;
+    let rejected = [];
+    let error = null;
+    if (r.status === 200) {
+      try {
+        const all = [...parseCollisions(r.body).values()];
+        entries = all.filter(c => !validateCollision(c).length);
+        rejected = all.filter(c => validateCollision(c).length).map(c => ({ repository: c.repository, errors: validateCollision(c) }));
+      } catch (e) { error = e.message; }
+    } else {
+      error = r.status ? `HTTP ${r.status}` : (r.error || 'network error');
+    }
+    writeJson(file(id, 'collisions'), entries
+      ? { fetchedAt: Date.now(), entries, rejected, error: null }
+      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], rejected: prev?.rejected ?? [], error });
+    return describeFeed(f);
+  }
+  async function subscribeFeed({ url, name }) {
+    let parsed;
+    try { parsed = new URL(url); } catch { parsed = null; }
+    if (!parsed || !/^https?:$/.test(parsed.protocol)) return { ok: false, error: 'bad_url', detail: 'url must be an http(s) URL' };
+    const id = catalogId(parsed.toString());
+    const created = !findFeed(id);
+    if (created) {
+      const label = name || decodeURIComponent(parsed.pathname.split('/').pop() || parsed.host).replace(/\.json$/i, '');
+      settings.save({ collisionFeeds: [...feedList(), { id, url: parsed.toString(), name: label }] });
+    }
+    return { ok: true, created, feed: created ? await refreshFeed(id) : describeFeed(findFeed(id)) };
+  }
+  function unsubscribeFeed(id) {
+    if (!findFeed(id)) return false;
+    settings.save({ collisionFeeds: feedList().filter(f => f.id !== id) });
+    fs.rmSync(file(id, 'collisions'), { force: true });
+    return true;
+  }
+  const feedMap = (f) => new Map((feedCache(f.id)?.entries || []).map(c => [repoKey(c.repository), c]));
+
+  // Bundled, then each feed in order, then the user's own on top
+  const collisionMap = () => new Map([...bundledCollisions(), ...feedList().flatMap(f => [...feedMap(f)]), ...localMap()]);
+
+  // Saves one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
+  function saveCollision(entry) {
+    const errors = validateCollision(entry);
+    if (errors.length) return { ok: false, errors };
+    const clean = { ...entry, repository: entry.repository.trim() };
+    const key = repoKey(clean.repository);
+    writeJson(localFile, [...localList().filter(c => repoKey(c?.repository) !== key), clean]);
+    return { ok: true, entry: clean };
+  }
+  function deleteCollision(repository) {
+    const key = repoKey(repository);
+    const before = localList();
+    const after = before.filter(c => repoKey(c?.repository) !== key);
+    if (after.length === before.length) return false;
+    writeJson(localFile, after);
+    return true;
+  }
+  const collision = (repository) => {
+    const key = repoKey(repository);
+    const local = localMap().get(key);
+    if (local) return { origin: 'local', entry: local };
+    for (const f of feedList().slice().reverse()) {
+      const e = feedMap(f).get(key);
+      if (e) return { origin: 'feed', feed: { id: f.id, name: f.name, url: f.url }, entry: e };
+    }
+    const bundled = bundledCollisions().get(key);
+    return bundled ? { origin: 'bundled', entry: bundled } : null;
+  };
+
   const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : []);
-  const find = (id) => subscriptions().find(c => c.id === id) || null;
+
+  // User collisions for repositories no subscribed catalog lists, as catalog entries
+  function localEntries() {
+    const listed = new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
+    return localList().filter(c => repoKey(c?.repository) && !listed.has(repoKey(c.repository))).map(c => ({
+      name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
+      ...(c.project ? { project: c.project } : {}), ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
+      ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
+      ...(Array.isArray(c.filesToAdd) ? { filesToAdd: c.filesToAdd } : {}),
+    }));
+  }
+
+  // Subscriptions, plus "Your ports" while it has anything on it
+  const shelves = () => [...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
+  const find = (id) => shelves().find(c => c.id === id) || null;
 
   function describe(sub) {
+    if (sub.local) return { ...sub, entries: localEntries().length, fetchedAt: null, error: null };
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
@@ -82,13 +194,14 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
     };
   }
 
-  const list = () => subscriptions().map(describe);
+  const list = () => shelves().map(describe);
   const get  = (id) => { const s = find(id); return s ? describe(s) : null; };
 
   // Fetches and caches a subscription. A failed fetch keeps the last good copy.
   async function refresh(id) {
     const sub = find(id);
     if (!sub) return null;
+    if (sub.local) return describe(sub);
     const r = await getText(sub.url, { kind: 'catalog', log: netLog });
     const prev = readJson(file(id, 'cache'), null);
     let entries = null;
@@ -122,28 +235,31 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
   }
 
   function unsubscribe(id) {
-    if (!find(id)) return false;
+    if (!find(id) || id === LOCAL.id) return false;
     settings.save({ catalogs: subscriptions().filter(c => c.id !== id) });
     for (const kind of ['cache', 'seen']) fs.rmSync(file(id, kind), { force: true });
     return true;
   }
 
-  const entries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
+  const cachedEntries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
+  const entries = (id) => (id === LOCAL.id ? localEntries() : cachedEntries(id));
 
   function review(id) {
     if (!find(id)) return null;
+    if (id === LOCAL.id) return { new: [], changed: [], removed: [] };
     return diffEntries(readJson(file(id, 'seen'), []), entries(id));
   }
 
   function markSeen(id) {
     if (!find(id)) return false;
+    if (id === LOCAL.id) return true;
     writeJson(file(id, 'seen'), entries(id));
     return true;
   }
 
   // Normalized items for every subscribed catalog
   function items() {
-    const subs = subscriptions();
+    const subs = shelves();
     if (!subs.length) return [];
     const joins = collisionMap();
     return subs.flatMap(sub => entries(sub.id).map(e => {
@@ -157,13 +273,17 @@ function createCatalogs({ dir, settings, collisionsFile = null, netLog = () => {
         icon:        e.appIconUrl || null,
         tags:        Array.isArray(e.tags) ? e.tags : [],
         description: e.description || null,
-        data:        data && { iaIdentifier: data.iaIdentifier || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null, dataFiles: data.dataFiles || [] },
+        data:        data && {
+          iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
+          dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
+        },
         entry:       e,
       };
     }));
   }
 
-  return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items };
+  return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
+    collision, saveCollision, deleteCollision, localCollisions: localList, feeds, subscribeFeed, refreshFeed, unsubscribeFeed };
 }
 
 module.exports = { createCatalogs, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };

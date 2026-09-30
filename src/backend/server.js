@@ -13,6 +13,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
+const ports = require('./ports');
 const { sourcesFromSettings } = require('./sources');
 
 const API_VERSION = 'v1';
@@ -115,7 +116,9 @@ function createApi(backend) {
   route('GET', '/items/:id/files', async ({ params }) => {
     const r = await archive.fileList(params.id);
     if (!r.ok) throw new HttpError(502, 'file_list_failed', r.error);
-    return { body: { files: r.files, installable: installableFiles(r.files) } };
+    const folders = [...new Set(r.files.flatMap(f => String(f.name || '').split('/').slice(0, -1)
+      .map((_, i, parts) => parts.slice(0, i + 1).join('/'))))].sort();
+    return { body: { files: r.files, folders, installable: installableFiles(r.files) } };
   });
 
   route('GET', '/items/:id/reviews', async ({ params }) => ({ body: { reviews: await archive.reviews(params.id) } }));
@@ -160,6 +163,63 @@ function createApi(backend) {
   });
   route('GET', '/catalogs/:id/review', ({ params }) => { catalog(params.id); return { body: catalogs.review(params.id) }; });
   route('POST', '/catalogs/:id/seen', ({ params }) => { catalog(params.id); catalogs.markSeen(params.id); return { status: 204 }; });
+
+  // ─── Collisions: the user's own port + archive.org data bindings ────────
+  // docs/COLLISIONS.md. :repo is owner/repo, URL-encoded (owner%2Frepo).
+
+  route('GET', '/collisions', () => ({ body: { local: catalogs.localCollisions() } }));
+  // Yours as a feed file (the same shape as catalog/collisions.json) to share
+  route('GET', '/collisions/export', () => ({ body: { schemaVersion: 1, collisions: catalogs.localCollisions() } }));
+
+  route('GET', '/collisions/:repo', ({ params }) => {
+    const c = catalogs.collision(params.repo);
+    if (!c) throw new HttpError(404, 'not_found', `No collision for ${params.repo}`);
+    return { body: c };
+  });
+  route('PUT', '/collisions/:repo', ({ params, body }) => {
+    const entry = { ...requireObject(body), repository: params.repo };
+    const r = catalogs.saveCollision(entry);
+    if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
+    return { body: r.entry };
+  });
+  route('DELETE', '/collisions/:repo', ({ params }) => {
+    if (!catalogs.deleteCollision(params.repo)) throw new HttpError(404, 'not_found', `No collision of yours for ${params.repo}`);
+    return { status: 204 };
+  });
+  // Collision feeds: other people's, subscribed by URL, merged under yours
+  const feed = (id) => {
+    const f = catalogs.feeds().find(x => x.id === id);
+    if (!f) throw new HttpError(404, 'not_found', `No collision feed ${id}`);
+    return f;
+  };
+  route('GET', '/collision-feeds', () => ({ body: { feeds: catalogs.feeds() } }));
+  route('POST', '/collision-feeds', async ({ body }) => {
+    const { url, name } = requireObject(body);
+    const r = await catalogs.subscribeFeed({ url: requireString(url, 'url'), name });
+    if (!r.ok) throw new HttpError(400, r.error, r.detail);
+    return { status: r.created ? 201 : 200, body: r.feed };
+  });
+  route('POST', '/collision-feeds/:id/refresh', async ({ params }) => { feed(params.id); return { body: await catalogs.refreshFeed(params.id) }; });
+  route('DELETE', '/collision-feeds/:id', ({ params }) => { feed(params.id); catalogs.unsubscribeFeed(params.id); return { status: 204 }; });
+
+  // What a list of sources would place, file by file, before saving it
+  route('POST', '/collisions/preview', async ({ body }) => {
+    const { sources } = requireObject(body);
+    if (!Array.isArray(sources)) throw new HttpError(400, 'bad_request', 'sources must be an array');
+    const listed = new Map();
+    const out = [];
+    for (const s of sources) {
+      const ia = s?.ia;
+      if (typeof ia !== 'string' || !ia) { out.push({ source: s, error: 'ia is required' }); continue; }
+      if (!listed.has(ia)) listed.set(ia, await archive.fileList(ia));
+      const list = listed.get(ia);
+      if (!list.ok) { out.push({ source: s, error: `Couldn't list ${ia} (${list.error})` }); continue; }
+      const x = ports.expandSource(s, list.files);
+      out.push(x.error ? { source: s, error: x.error }
+        : { source: s, files: x.files.map(f => ({ ...f, to: path.posix.join(s.target || '', f.rel) })), bytes: x.files.reduce((n, f) => n + f.size, 0) });
+    }
+    return { body: { sources: out } };
+  });
 
   // ─── Library ──────────────────────────────────────────────────────────────
 

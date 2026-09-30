@@ -403,3 +403,55 @@ test('GET /items/:id/hero?from= picks one source; the bundled hero ships with th
   assert.equal((await call2('GET', '/items/rk-e2e-the-sims/hero', undefined, { raw: true })).status, 200, 'the chain ends at the bundled hero');
   assert.equal((await call2('GET', '/items/..%2Fx/hero?from=bundled', undefined, { raw: true })).status, 404);
 });
+
+test('collisions: yours (save, read, export, delete), feeds you subscribe to, and a preview of what sources place', async (t) => {
+  const feedBody = { collisions: [
+    { repository: 'feed/port', name: 'Feed Port', sources: [{ ia: 'feed-item', path: 'rom.z64' }] },
+    { repository: 'feed/broken', sources: [{ ia: 'bad id', path: 'x' }] },
+  ] };
+  const { call, fake } = await testApi(t, { state: {
+    routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
+    files: { 'my-data': [{ name: 'roms/a.z64', size: '3', sha1: 'a'.repeat(40) }, { name: 'roms/b/c.z64', size: '5' }, { name: 'Game.zip', size: '9' }] },
+  } });
+  const enc = encodeURIComponent;
+
+  const entry = { name: 'My Port', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'my-data', path: 'Game.zip', extract: true }] };
+  const saved = await call('PUT', `/collisions/${enc('me/port')}`, entry);
+  assert.deepEqual(saved.body, { ...entry, repository: 'me/port' });
+  assert.deepEqual((await call('GET', `/collisions/${enc('Me/Port')}`)).body, { origin: 'local', entry: saved.body });
+  assert.deepEqual((await call('GET', '/collisions')).body.local, [saved.body]);
+  assert.deepEqual((await call('GET', '/collisions/export')).body, { schemaVersion: 1, collisions: [saved.body] });
+  const bad = await call('PUT', `/collisions/${enc('me/port')}`, { sources: [{ ia: 'x', path: '../up' }] });
+  assert.deepEqual([bad.status, bad.body.error], [400, 'bad_collision']);
+  assert.match(bad.body.detail, /sources\[0\]\.path/);
+  const shelf = (await call('GET', '/catalogs')).body.catalogs.find(c => c.id === 'local');
+  assert.equal(shelf.entries, 1);
+  assert.equal((await call('GET', '/catalogs/local/items')).body.items[0].id, 'quiver:local:me/port');
+
+  // A feed: valid entries join, invalid ones are listed as rejected, yours still win
+  const sub = await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json`, name: 'Friends' });
+  assert.equal(sub.status, 201);
+  assert.deepEqual([sub.body.name, sub.body.entries, sub.body.rejected.map(r => r.repository)], ['Friends', 1, ['feed/broken']]);
+  assert.equal((await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json` })).status, 200);
+  assert.equal((await call('POST', '/collision-feeds', { url: 'ftp://x' })).body.error, 'bad_url');
+  const fromFeed = (await call('GET', `/collisions/${enc('feed/port')}`)).body;
+  assert.deepEqual([fromFeed.origin, fromFeed.feed.name], ['feed', 'Friends']);
+  assert.equal((await call('POST', `/collision-feeds/${sub.body.id}/refresh`)).body.entries, 1);
+  assert.equal((await call('GET', '/collision-feeds')).body.feeds.length, 1);
+  assert.equal((await call('DELETE', `/collision-feeds/${sub.body.id}`)).status, 204);
+  assert.equal((await call('DELETE', `/collision-feeds/${sub.body.id}`)).status, 404);
+  assert.equal((await call('GET', `/collisions/${enc('feed/port')}`)).status, 404);
+
+  // Preview: which archive.org files each source places, and where
+  const preview = (await call('POST', '/collisions/preview', { sources: [
+    { ia: 'my-data', path: 'roms/*', target: 'data' }, { ia: 'my-data', path: 'nope' }, { path: 'x' },
+  ] })).body.sources;
+  assert.deepEqual(preview[0].files.map(f => f.to), ['data/a.z64', 'data/b/c.z64']);
+  assert.equal(preview[0].bytes, 8);
+  assert.equal(preview[1].error, "nope isn't in my-data");
+  assert.equal(preview[2].error, 'ia is required');
+  assert.deepEqual((await call('GET', '/items/my-data/files')).body.folders, ['roms', 'roms/b']);
+
+  assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 204);
+  assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 404);
+});

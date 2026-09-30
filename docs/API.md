@@ -135,11 +135,11 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-zoo-tycoon-pstriple
 
 ### `GET /items/:id/files`
 
-The archive.org file list, and the files an install can use (zip/7z/rar, or a lone .exe).
+The archive.org file list, its folders, and the files an install can use (zip/7z/rar, or a lone .exe).
 
 ```sh
 curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/files
-# {"files":[{"name":"rk-e2e-halo-ce.zip","size":"148"}],"installable":[{"name":"rk-e2e-halo-ce.zip","size":"148"}]}
+# {"files":[{"name":"rk-e2e-halo-ce.zip","size":"148"}],"folders":[],"installable":[{"name":"rk-e2e-halo-ce.zip","size":"148"}]}
 ```
 
 ### `GET /items/:id/reviews`
@@ -222,6 +222,28 @@ Marks the current copy as reviewed (`204`).
 
 ```sh
 curl -X POST http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/seen
+```
+
+### Collisions
+
+The user's own collisions and the collision feeds they subscribe to. The schema is in
+[COLLISIONS.md](COLLISIONS.md). `:repo` is `owner/repo` URL-encoded (`owner%2Frepo`).
+
+| route | does |
+| --- | --- |
+| `GET /collisions` | `{ local: [...] }`, the user's own |
+| `GET /collisions/export` | `{ schemaVersion: 1, collisions: [...] }`, the user's own as a feed file |
+| `GET /collisions/:repo` | The collision in effect: `{ origin: "local" \| "feed" \| "bundled", entry, feed? }`, `404` if none |
+| `PUT /collisions/:repo` | Saves one (replacing the user's own for that repo); `400 bad_collision` lists every problem |
+| `DELETE /collisions/:repo` | Removes the user's own (`204`), `404` if there wasn't one |
+| `POST /collisions/preview` | `{ sources }` → per source, the archive.org files it places (`to`) and `bytes`, or `error` |
+| `GET /collision-feeds` | Subscribed feeds with `entries`, `rejected`, `fetchedAt`, `error` |
+| `POST /collision-feeds` | `{ url, name? }` subscribes and fetches; `201` new, `200` already subscribed |
+| `POST /collision-feeds/:id/refresh`, `DELETE /collision-feeds/:id` | Refetch; unsubscribe |
+
+```sh
+curl -X PUT -d '{"base":"data","sources":[{"ia":"game-rip","path":"Game.zip","extract":true}]}' \
+  http://127.0.0.1:7777/v1/collisions/owner%2Fport
 ```
 
 ### `GET /library`

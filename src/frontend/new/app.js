@@ -180,7 +180,7 @@ function portFromItem(it, cat) {
     catalogUrl:         cat.url,
     data: it.data
       ? { status: 'available', iaIdentifier: it.data.iaIdentifier, contentUrl: it.data.contentUrl, uploader: null,
-        files: (it.data.dataFiles || []).map(f => f?.name ?? f) }
+        files: [...(it.data.dataFiles || []).map(f => f?.name ?? f), ...(it.data.sources || []).map(x => x.path)] }
       : { status: 'none', files: [] },
   };
 }
