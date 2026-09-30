@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.11](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.10...v1.6.0-fork.11) (2026-09-30)
+
+
+### Features
+
+* collisions as a feed you and users can write ([794cb33](https://github.com/yabo-san/RohanKar-Launcher/commit/794cb33b6563ae92cdcd8f77d092b90247230056))
+* collisions as a feed: sources, base/binaryTarget, your own, subscribed feeds ([173b887](https://github.com/yabo-san/RohanKar-Launcher/commit/173b887943cc125f2cd4eb98383c05ac2625bf38))
+
 ## [1.6.0-fork.10](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.9...v1.6.0-fork.10) (2026-09-30)
 
 
