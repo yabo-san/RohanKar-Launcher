@@ -41,4 +41,6 @@ jobs:
           REPOS: ${{ inputs.repos }}
           # The TOSEC N64 set, for collisions that take a ROM from it, and Dusklight's data item
           IA: ${{ inputs.ia || 'N64TOSEC:(?i)perfect.dark twilight-princess-ddsk' }}
-        run: node scripts/live-port.js $REPOS $(for i in $IA; do printf -- '--ia %s ' "$i"; done)
+          # What Perfect Dark's TOSEC zip holds (its ROM's name says its byte order)
+          ZIP: 'N64TOSEC/Perfect Dark (USA) (Rev A).zip'
+        run: node scripts/live-port.js $REPOS $(for i in $IA; do printf -- '--ia %s ' "$i"; done) --zip "$ZIP"

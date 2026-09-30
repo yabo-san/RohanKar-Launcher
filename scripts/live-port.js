@@ -4,7 +4,7 @@
  * the fixtures can only imitate (Perfect Dark first). Not part of the test
  * suite: CI runs it as the non-blocking "live ports" job.
  *
- *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...]
+ *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...] [--zip item/file.zip ...]
  *
  * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
@@ -28,13 +28,15 @@ const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
 
 function parseArgs(argv) {
   const ia = [];
+  const zips = [];
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--ia') ia.push(argv[++i]);
+    else if (argv[i] === '--zip') zips.push(argv[++i]);
     else rest.push(argv[i]);
   }
   const repos = rest.filter(a => !a.startsWith('--'));
-  return { repos: repos.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia };
+  return { repos: repos.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia, zips };
 }
 
 // "item" or "item:regex" → the item's files whose path matches, to pick a data source from
@@ -84,6 +86,18 @@ async function releases(repository, print) {
   }
 }
 
+// "item/file.zip" → what the zip holds, from archive.org's own zip listing
+async function listZip(spec, print) {
+  const at = spec.indexOf('/');
+  const url = `https://archive.org/download/${encodeURIComponent(spec.slice(0, at))}/${encodeURIComponent(spec.slice(at + 1))}/`;
+  const r = await getText(url, { kind: 'archive' });
+  print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
+  if (r.status !== 200) return 1;
+  const rows = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+  for (const row of rows.slice(0, 50)) print(`  ${row}`);
+  return 0;
+}
+
 async function run(opts, print = (l) => console.log(l)) {
   const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'catalog', 'collisions.json'), 'utf8'));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'live-port-'));
@@ -93,6 +107,7 @@ async function run(opts, print = (l) => console.log(l)) {
   const installs = createInstalls({ settings, library, archive: createArchive({ log: () => {} }), gamesDir: dir, log: print });
   let failed = 0;
   for (const spec of opts.ia || []) failed += await listIa(spec, print);
+  for (const spec of opts.zips || []) failed += await listZip(spec, print);
   try {
     for (const repo of opts.repos) {
       const c = catalog.find(x => x.repository.toLowerCase() === repo.toLowerCase());
