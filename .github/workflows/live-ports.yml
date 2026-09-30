@@ -21,6 +21,9 @@ on:
       ia:
         description: 'archive.org items to list, as item or item:regex, space separated'
         required: false
+      zip:
+        description: 'An archive.org archive to list the contents of, as item/file.zip'
+        required: false
 
 permissions:
   contents: read
@@ -42,5 +45,5 @@ jobs:
           # The TOSEC N64 set, for collisions that take a ROM from it, and Dusklight's data item
           IA: ${{ inputs.ia || 'N64TOSEC:(?i)perfect.dark twilight-princess-ddsk' }}
           # What Perfect Dark's TOSEC zip holds (its ROM's name says its byte order)
-          ZIP: 'N64TOSEC/Perfect Dark (USA) (Rev A).zip'
+          ZIP: ${{ inputs.zip || 'N64TOSEC/Perfect Dark (USA) (Rev A).zip' }}
         run: node scripts/live-port.js $REPOS $(for i in $IA; do printf -- '--ia %s ' "$i"; done) --zip "$ZIP"

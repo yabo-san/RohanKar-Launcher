@@ -106,7 +106,8 @@ async function listZip(spec, print) {
   print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
   if (r.status !== 200) return 1;
   const rows = [...r.body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)].map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
-  for (const row of rows.slice(0, 50)) print(`  ${row}`);
+  for (const row of rows.slice(0, 400)) print(`  ${row}`);
+  if (rows.length > 400) print(`  … ${rows.length - 400} more`);
   return 0;
 }
 
