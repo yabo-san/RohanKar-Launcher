@@ -22,6 +22,9 @@ const GAME_COLUMNS = {
   source:        'TEXT',
   export_id:     'TEXT',     // stable Playnite id for manual entries (a UUID)
   last_played_at: 'INTEGER',
+  title:         'TEXT',     // name of an entry no item describes (manual, imported)
+  tags:          'TEXT',     // JSON array of strings
+  version:       'TEXT',     // installed release tag, when known
 };
 
 function migrate(db, log) {
@@ -82,8 +85,9 @@ function importLegacyJson(db, legacyPath, log) {
   }
 }
 
-// Plain objects: node:sqlite rows have a null prototype
-const plain = (row) => (row ? { ...row } : null);
+// Plain objects: node:sqlite rows have a null prototype; tags come back as an array
+const parseTags = (t) => { try { const a = JSON.parse(t); return Array.isArray(a) ? a : null; } catch { return null; } };
+const plain = (row) => (row ? { ...row, ...(typeof row.tags === 'string' ? { tags: parseTags(row.tags) } : {}) } : null);
 
 function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onChange = () => {}, log = console.log }) {
   let db = null;
@@ -158,11 +162,12 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   // ids Playnite knows it by and when it was last played
   function recordInstall(identifier, installDir, exePath) {
     if (!db) return { ok: false };
-    const prev = db.prepare('SELECT export_id, last_played_at FROM games WHERE identifier = ?').get(identifier);
+    const prev = db.prepare('SELECT export_id, last_played_at, title, tags FROM games WHERE identifier = ?').get(identifier);
     db.prepare(`
-      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `).run(identifier, installDir, exePath || null, Date.now(), prev?.export_id ?? null, prev?.last_played_at ?? null);
+      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at, title, tags)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(identifier, installDir, exePath || null, Date.now(), prev?.export_id ?? null, prev?.last_played_at ?? null,
+      prev?.title ?? null, prev?.tags ?? null);
     changed(identifier);
     return { ok: true };
   }
@@ -172,6 +177,19 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     if (!db) return { ok: false };
     ensureRow(identifier);
     db.prepare('UPDATE games SET install_dir = ?, exe_path = ? WHERE identifier = ?').run(installDir, exePath || null, identifier);
+    changed(identifier);
+    return { ok: true };
+  }
+
+  // Fields an import carries over: title, tags (an array), version. Leaves
+  // out what isn't given; creates the row
+  function setDetails(identifier, { title, tags, version } = {}) {
+    if (!db) return { ok: false };
+    ensureRow(identifier);
+    const set = (col, v) => db.prepare(`UPDATE games SET ${col} = ? WHERE identifier = ?`).run(v, identifier);
+    if (title !== undefined) set('title', title || null);
+    if (tags !== undefined) set('tags', Array.isArray(tags) && tags.length ? JSON.stringify(tags) : null);
+    if (version !== undefined) set('version', version || null);
     changed(identifier);
     return { ok: true };
   }
@@ -279,7 +297,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
 
   return {
     get available() { return !!db; },
-    all, get, add, setCategory, setFavorite, setNotes, setExePath, recordInstall, adoptInstall, remove,
+    all, get, add, setCategory, setFavorite, setNotes, setDetails, setExePath, recordInstall, adoptInstall, remove,
     clearInstall, markPlayed, exportId,
     clearMissingInstalls,
     collections, createCollection, renameCollection, setCollectionColor, deleteCollection,

@@ -21,6 +21,7 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
+  quiverImport: null,   // { plan, busy, result } while importing a Quiver library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   wallFilter: { uploader: null, sort: 'newest' },
@@ -178,7 +179,8 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     catalogUrl:         cat.url,
-    data: it.data
+    // A collision with no data (a repo added on its own) has nothing to fetch
+    data: it.data && (it.data.iaIdentifier || it.data.contentUrl || it.data.dataFiles?.length || it.data.sources?.length)
       ? { status: 'available', iaIdentifier: it.data.iaIdentifier, contentUrl: it.data.contentUrl, uploader: null,
         files: [...(it.data.dataFiles || []).map(f => f?.name ?? f), ...(it.data.sources || []).map(x => x.path)] }
       : { status: 'none', files: [] },
@@ -242,7 +244,7 @@ function renderNav() {
     `<button class="navitem" data-view="shelf" data-arg="${esc(s.id)}"><span class="dot"></span>${esc(s.name)}<span class="n">${s.count || (s.error ? '!' : '')}</span></button>`
   ).join('') || '<div class="navitem" style="cursor:default;color:var(--text3)"><span class="dot"></span>Loading…</div>';
   $('#n-wall').textContent = state.games.length || '';
-  const libCount = Object.values(state.library).filter(l => l.install_dir).length + state.portLibrary.length;
+  const libCount = Object.values(state.library).filter(l => l.install_dir || l.identifier.startsWith('quiver:')).length;
   $('#n-library').textContent = libCount || '';
   $('#n-updates').textContent = reviewCount() || '';
   markActive();
@@ -501,10 +503,17 @@ function viewShelf(id) {
     ${list.length ? pagedGrid(list, portCard, 'grid ports') : '<p class="empty">No ports match.</p>'}</section>`;
 }
 
+// A library row no loaded item describes (a manual app, an upload no longer
+// on the wall), as a game the cards and detail can show
+const rowGame = (l) => ({
+  identifier: l.identifier, title: l.title || l.identifier,
+  _sourceLabel: l.source === 'manual' ? 'Your folder' : 'archive.org', _manual: l.source === 'manual',
+});
+
 function viewLibrary() {
-  const installed = Object.values(state.library).filter(l => l.install_dir);
-  const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier))
-    || { identifier: l.identifier, title: l.identifier, _sourceLabel: 'archive.org' });
+  // Installed ports are on the Ports shelf below
+  const installed = Object.values(state.library).filter(l => l.install_dir && !l.identifier.startsWith('quiver:'));
+  const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || rowGame(l));
   const uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
   const ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
   if (!uniq.length && !ports.length) {
@@ -625,11 +634,60 @@ function viewSettings() {
       <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : ''}`).join(' · ') : 'Loading…'}
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
+    <div class="field" id="quiver-import"><label>Quiver library</label>
+      <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
+      <div class="import-body">${quiverImportHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
       <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
     <div class="field"><div class="hint" id="app-version"></div></div>
   </div>`;
+}
+
+const IMPORT_KIND = { port: 'catalog port', new: 'new on Your ports', manual: 'your folder' };
+
+function quiverImportHtml() {
+  const q = state.quiverImport;
+  if (!q?.plan) return `<button class="btn" data-action="quiver-import-choose"${q?.busy ? ' disabled' : ''}>Import from Quiver…</button>`;
+  const { plan, result } = q;
+  if (result) {
+    const said = [[result.adopted, 'adopted'], [result.added, 'added'], [result.ports, 'new on Your ports'], [result.unchanged, 'already here']]
+      .filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join(', ');
+    return `<div class="hint import-done">Imported from ${esc(plan.root)}: ${esc(said || 'nothing to change')}.</div>
+      <button class="btn" data-action="quiver-import-cancel">Done</button>`;
+  }
+  const todo = plan.apps.filter(a => !a.alreadyInstalled && !(a.inLibrary && !a.installed));
+  const rows = plan.apps.map(a => `<li><b>${esc(a.name)}</b>
+    <span>${esc(IMPORT_KIND[a.kind])} · ${a.alreadyInstalled || (a.inLibrary && !a.installed) ? 'already here' : a.installed ? `installed${a.version ? ` ${esc(a.version)}` : ''}` : 'not installed'}</span></li>`).join('');
+  const skipped = plan.skipped.map(x => `<li><b>${esc(x.name)}</b><span>skipped: ${esc(x.reason)}</span></li>`).join('');
+  return `<div class="hint">${plan.apps.length} apps in ${esc(plan.root)}</div>
+    <ul class="import-list">${rows}${skipped}</ul>
+    <div class="inline">
+      <button class="btn primary" data-action="quiver-import-apply"${q.busy || !todo.length ? ' disabled' : ''}>${todo.length ? `Import ${todo.length}` : 'Nothing new'}</button>
+      <button class="btn" data-action="quiver-import-cancel">Cancel</button></div>`;
+}
+
+// render() keeps the settings form as typed, so this redraws only the field
+function renderQuiverImport() {
+  const el = $('#quiver-import .import-body');
+  if (el) el.innerHTML = quiverImportHtml();
+}
+
+async function quiverImport(apply) {
+  const q = state.quiverImport || {};
+  const dir = apply ? q.plan.root : await api.chooseFolder();
+  if (!dir) return;
+  state.quiverImport = { ...q, busy: true };
+  renderQuiverImport();
+  const r = await api.importQuiver({ dir, apply });
+  if (!r.ok) {
+    state.quiverImport = apply ? { ...q, busy: false } : null;
+    renderQuiverImport();
+    return toast(`Couldn't import: ${r.error}`);
+  }
+  state.quiverImport = { plan: r, result: r.result || null, busy: false };
+  if (apply) await loadPorts();
+  renderQuiverImport();
 }
 
 function viewSearch(q) {
@@ -696,7 +754,8 @@ function renderAmbient() {
 
 function openDetail(kind, id) {
   if (kind === 'game') {
-    const g = state.games.find(x => x.identifier === id) || state.versions.find(x => x.identifier === id);
+    const g = state.games.find(x => x.identifier === id) || state.versions.find(x => x.identifier === id)
+      || (state.library[id] ? rowGame(state.library[id]) : null);
     if (!g) return;
     state.detail = { kind, game: g, version: installedVersion(g) || g, exes: null };
   } else {
@@ -758,7 +817,7 @@ function gameDetail(d) {
   return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
       <div class="cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(title)}</h2><div class="by">archive.org · ${esc(v._sourceLabel || '')}${v.addeddate ? ` · ${fmtDate(v.addeddate)}` : ''}</div></div></div>
+      <div class="titles"><h2>${esc(title)}</h2><div class="by">${v._manual ? 'Your folder' : `archive.org · ${esc(v._sourceLabel || '')}`}${v.addeddate ? ` · ${fmtDate(v.addeddate)}` : ''}</div></div></div>
     <div class="d-body">
       <div class="actions">${actions}</div>
       ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
@@ -1091,6 +1150,9 @@ async function onAction(action, el) {
       await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
       return loadPorts();
     case 'save-settings': return saveSettingsForm();
+    case 'quiver-import-choose': return quiverImport(false);
+    case 'quiver-import-apply': return quiverImport(true);
+    case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
     case 'legacy-ui':

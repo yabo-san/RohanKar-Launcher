@@ -32,6 +32,7 @@ test('games: add, favourite, notes, category, exe path, install, remove', (t) =>
   assert.deepEqual({ ...lib.get('b'), added_at: 0 }, {
     identifier: 'b', install_dir: null, exe_path: '/g/b.exe', category: 'rpg', playtime_secs: 0,
     added_at: 0, is_favorite: 1, notes: 'good', source: null, export_id: null, last_played_at: null,
+    title: null, tags: null, version: null,
   });
   lib.setNotes('b', '');
   lib.setExePath('b', '');
@@ -153,4 +154,16 @@ test('sqlite: transaction rolls back on error; node:sqlite when native is skippe
   assert.equal(transaction(db, () => { db.exec('INSERT INTO t VALUES (1)'); return 'ok'; }), 'ok');
   assert.equal(db.prepare('SELECT COUNT(*) AS n FROM t').get().n, 1);
   db.close();
+});
+
+test('details: title, tags and version; a reinstall keeps title and tags', (t) => {
+  const { lib } = open(t, () => ({}));
+  lib.setDetails('m', { title: 'Mine', tags: ['a', 'b'], version: 'v1' });
+  assert.deepEqual([lib.get('m').title, lib.get('m').tags, lib.get('m').version], ['Mine', ['a', 'b'], 'v1']);
+  lib.recordInstall('m', '/games/m', '/games/m/m.exe');
+  assert.deepEqual([lib.get('m').title, lib.get('m').tags, lib.get('m').version], ['Mine', ['a', 'b'], null]);
+  lib.setDetails('m', { tags: [], title: '' });
+  assert.deepEqual([lib.get('m').title, lib.get('m').tags], [null, null]);
+  lib.setDetails('m');
+  assert.equal(lib.get('m').install_dir, '/games/m');
 });
