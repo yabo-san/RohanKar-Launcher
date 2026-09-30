@@ -27,8 +27,9 @@ How the frontend finds it:
   the Recycle Bin, the window, the browser, Steam, the updater) over that process's message
   port; see `src/backend/parent.js`. Quitting the app stops the backend.
 - The desktop app opens `src/frontend/new/index.html` (the new UI) unless settings say
-  `"ui": "legacy"`, then `src/frontend/index.html` (the classic one). Both take the same
-  connection details.
+  `"ui": "legacy"`, then `src/frontend/index.html` (the classic one), or `"ui": "cider"`, then
+  `src/frontend/cider/index.html` (the Cider-based spike). `RK_UI` overrides the setting. All
+  take the same connection details.
 - In a plain browser, pass both in the page URL:
   `src/frontend/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
   server (the e2e tests use `e2e/fixture-server.js`).

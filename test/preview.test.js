@@ -19,7 +19,7 @@ test('the Quiver lists are read from the new UI', () => {
   assert.ok(lists.some(l => l.shelf === 'Nintendo' && l.file === 'Nintendo.json'));
 });
 
-test('a fixtures build saves what the UIs load and wires preview.js into both pages', async (t) => {
+test('a fixtures build saves what the UIs load and wires preview.js into every page', async (t) => {
   const out = path.join(tmpDir(t, 'rk-preview-test-'), 'site');
   const info = await build({ out, fixtures: true });
   assert.equal(info.data, 'fixtures');
@@ -35,6 +35,7 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
   assert.ok(Object.keys(responses).some(k => /^GET \/items\/[^/]+\/cover$/.test(k)));
 
   assert.match(fs.readFileSync(path.join(out, 'new', 'index.html'), 'utf8'), /<script src="\.\.\/preview\.js"><\/script>\s*<script src="\.\.\/api\.js">/);
+  assert.match(fs.readFileSync(path.join(out, 'cider', 'index.html'), 'utf8'), /<script src="\.\.\/preview\.js"><\/script>\s*<script src="\.\.\/api\.js">/);
   assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /<script src="preview\.js"><\/script>\s*<script src="api\.js">/);
   assert.ok(fs.existsSync(path.join(out, 'preview.js')));
 });

@@ -1,6 +1,6 @@
 'use strict';
 /**
- * The web preview: both UIs as static files, for GitHub Pages.
+ * The web preview: the UIs as static files, for GitHub Pages.
  *
  *   node scripts/preview/build.js [--out preview-site] [--fixtures]
  *
@@ -8,7 +8,7 @@
  * new UI subscribes to on a first run, and saves every GET the UIs make at
  * start (items, covers, catalogs, library, settings...) under
  * <out>/preview-data/, with manifest.json mapping each request to its file.
- * src/frontend is copied next to it, and both pages load preview.js before
+ * src/frontend is copied next to it, and every page loads preview.js before
  * api.js: it answers the API from those files, so no backend is needed.
  *
  * By default the backend reads the live sources (archive.org, the Quiver
@@ -147,9 +147,9 @@ async function build(opts) {
     };
     fs.writeFileSync(path.join(dataOut, 'manifest.json'), JSON.stringify({ info, responses: manifest }));
 
-    // preview.js before api.js in both pages
+    // preview.js before api.js in every page
     fs.copyFileSync(path.join(__dirname, 'preview.js'), path.join(opts.out, 'preview.js'));
-    for (const [page, src] of [['index.html', 'preview.js'], ['new/index.html', '../preview.js']]) {
+    for (const [page, src] of [['index.html', 'preview.js'], ['new/index.html', '../preview.js'], ['cider/index.html', '../preview.js']]) {
       const file = path.join(opts.out, page);
       const html = fs.readFileSync(file, 'utf8');
       const tag = /^(\s*)<script src="(\.\.\/)?api\.js"><\/script>/m;

@@ -5,10 +5,10 @@ const globals = require('globals');
 // Baseline: rules the existing code fails are switched off per file group so
 // CI starts green. Remove an override once the code it covers is fixed.
 module.exports = [
-  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/', 'preview-site/'] },
+  { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/', 'preview-site/', 'src/frontend/cider/lib/'] },
   js.configs.recommended,
   {
-    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'scripts/preview/build.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
+    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'scripts/preview/build.js', 'scripts/cider/**/*.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {
@@ -42,6 +42,19 @@ module.exports = [
     files: ['src/frontend/new/app.js'],
     languageOptions: {
       globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly' },
+    },
+  },
+  {
+    // The Cider-based page: plain scripts sharing globals in load order
+    // (lib/*, ../api.js, ../sources.js, launcher.js, components.js, vueapp.js);
+    // the page's own names are declared with /* global */ where they are used
+    files: ['src/frontend/cider/app/*.js'],
+    languageOptions: {
+      sourceType: 'script',
+      globals: {
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        Vue: 'readonly', VueHorizontal: 'readonly',
+      },
     },
   },
   {
