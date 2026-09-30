@@ -847,3 +847,11 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .user-list b { display: block; margin-bottom: 2px; }
 /* a badged card is taller: keep every card in its row top-aligned */
 .grid > .card { align-self: start; }
+
+/* Admin mode: the curated collisions as a table */
+.admin-head, .admin-row { display: grid; grid-template-columns: 1.3fr 1.2fr .8fr 2fr auto; gap: 10px; align-items: center; }
+.admin-row { padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.admin-row .meta { color: var(--text3); overflow-wrap: anywhere; }
+.admin-row.is-hidden { opacity: .6; }
+.admin-row .row-actions { display: flex; gap: 6px; }
+@media (max-width: 760px) { .admin-head { display: none; } .admin-row { grid-template-columns: 1fr; } }

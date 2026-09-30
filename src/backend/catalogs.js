@@ -319,7 +319,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   async function refresh(id) {
     const sub = find(id);
     if (!sub) return null;
-    if (sub.local) return describe(sub);
+    if (sub.local || sub.curated) return describe(sub);
     const r = await getText(sub.url, { kind: 'catalog', log: netLog });
     const prev = readJson(file(id, 'cache'), null);
     let entries = null;

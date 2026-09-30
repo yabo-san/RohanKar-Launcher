@@ -66,7 +66,10 @@ function itemFor(c) {
 function tree(dir, depth = 0, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${fs.statSync(p).size} bytes)`}`);
+    const size = e.isDirectory() ? 0 : fs.statSync(p).size;
+    // sha1 for the small files, so a staged ROM can be checked against a known dump
+    const sum = !e.isDirectory() && size < 128 * 1024 * 1024 ? `, sha1 ${require('crypto').createHash('sha1').update(fs.readFileSync(p)).digest('hex')}` : '';
+    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${size} bytes${sum})`}`);
     if (e.isDirectory() && depth < 2) tree(p, depth + 1, out);
   }
   return out;

@@ -62,6 +62,8 @@ test('admin: a tile saved into the curated file shows on its shelf; edits keep t
 
   const shelf = (await call('GET', '/catalogs')).body.catalogs.find(c => c.curated);
   assert.deepEqual([shelf.id, shelf.name, shelf.entries], ['curated-y4bo-ports', 'y4bo ports', 1]);
+  assert.equal((await call('POST', `/catalogs/${shelf.id}/refresh`)).body.entries, 1, 'refreshing it fetches nothing');
+  assert.equal((await call('GET', `/catalogs/${shelf.id}/items`)).body.items.length, 1);
   const [item] = backend.catalogs.items().filter(i => i.shelf === 'y4bo ports');
   assert.equal(item.title, 'Perfect Dark');
   assert.equal(item.userSource, false, 'curated, so no "Your source" badge');

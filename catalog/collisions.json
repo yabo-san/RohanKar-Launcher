@@ -34,17 +34,16 @@
   {
     "name": "Perfect Dark",
     "repository": "perfect-dark-pc-port/perfect_dark",
-    "iaIdentifier": "perfect-dark-pc-port_202510",
-    "contentUrl": "https://archive.org/download/perfect-dark-pc-port_202510/Perfect%20Dark%20PC%20Port.zip",
-    "ingest": "place-file",
     "assetPattern": "(?i)x86_64-windows",
     "folderName": "perfect-dark-pc-port.perfect_dark",
     "exe": "pd.x86_64.exe",
-    "dataFiles": [
+    "sources": [
       {
-        "name": "pd.ntsc-final.z64",
-        "targetSubpath": "data",
-        "sha1": "af8788ac4d1a57260eae9c53ffe851fcf2a3319b"
+        "ia": "N64TOSEC",
+        "path": "Perfect Dark (USA) (Rev A).zip",
+        "target": "data",
+        "extract": true,
+        "as": "pd.ntsc-final.z64"
       }
     ]
   },
