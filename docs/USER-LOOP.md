@@ -55,7 +55,7 @@
 
 ## Why this shape
 
-RohanKar today ingests one uploader account and shows it. That is a query, not a feed: nobody
+The launcher today ingests one uploader account and shows it. That is a query, not a feed: nobody
 curates it, nothing versions it, and if the account dies the wall goes blank.
 
 Quiver's answer is that the feed is a JSON file in a Git repo that clients subscribe to, and adding

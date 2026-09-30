@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0-fork.12](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.11...v1.6.0-fork.12) (2026-09-30)
+
+
+### Features
+
+* game data editor for collisions, plus your own GitHub repos ([ae9c8d9](https://github.com/yabo-san/RohanKar-Launcher/commit/ae9c8d9cccbf6cf0b39dfe9e9c1a26d58b4795b7))
+* game data editor, your own GitHub repos, collision feeds in Settings ([c47675a](https://github.com/yabo-san/RohanKar-Launcher/commit/c47675a0282679e8056370623b823b274c9a1308))
+* import a Quiver library without reinstalling ([c1784df](https://github.com/yabo-san/RohanKar-Launcher/commit/c1784df1d81fe6ee5e5e2768555aef4a9a838e24))
+* import a Quiver library without reinstalling ([2f2a1e3](https://github.com/yabo-san/RohanKar-Launcher/commit/2f2a1e38831d27c9ee458101adaa179f27217d59))
+
 ## [1.6.0-fork.11](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.10...v1.6.0-fork.11) (2026-09-30)
 
 

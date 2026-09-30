@@ -1,5 +1,5 @@
 {
-  "name": "RohanKar Launcher",
+  "name": "y4bo",
   "build": { "dockerfile": "Dockerfile" },
   "remoteUser": "vscode",
   "postCreateCommand": "scripts/setup"
