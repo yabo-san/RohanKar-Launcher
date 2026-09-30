@@ -169,6 +169,30 @@ test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', asyn
   await page.keyboard.press('Escape');
 });
 
+test('Right-click menu on a port card: installed actions, Launch Options submenu, Escape closes', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
+  const card = page.locator('.port-card', { hasText: 'Perfect Dark' });
+  await card.click({ button: 'right' });
+  const menu = page.locator('#ctxmenu');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options›', 'Remove from Library', 'About›', 'Delete']);
+  await menu.locator('.has-sub', { hasText: 'Launch Options' }).hover();
+  await expect(menu.locator('[data-menu="choose-exe"]')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+
+  // Not installed: Download and Locate Existing Install
+  await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
+  await page.locator('.port-card', { hasText: 'Mario Kart 64' }).click({ button: 'right' });
+  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi').first()).toHaveText('Download');
+  await expect(menu.locator('[data-menu="locate"]')).toBeVisible();
+  await menu.locator('.has-sub', { hasText: 'About' }).hover();
+  await menu.locator('[data-menu="details"]').click();
+  await expect(menu).toBeHidden();
+  await expect(page.locator('#detail')).toContainText('Mario Kart 64');
+  await page.keyboard.press('Escape');
+});
+
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {
   const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).ui;
 
