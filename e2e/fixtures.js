@@ -6,7 +6,8 @@
  *   - Quiver's lists (…/quiver-community-app-catalog/…/<file>, or /quiver/<file>) come
  *     from fixtures/quiver/; a list with no fixture is a 404
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
- *     lists one Windows zip holding pd.exe, and its archive.org data item holds
+ *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
+ *     three exes), and its archive.org data item holds
  *     PD_ROM, which fixtures/collisions.json expects by sha1
  *   - /metadata/rk-e2e-romset is a ROM set with folders, for the game data editor
  *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
@@ -25,7 +26,11 @@ const SEARCH   = require('./fixtures/search.json');
 const TINY_ZIP = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
 const { makeZip } = require('../test/backend/helpers');
 const PD_ROM   = 'PERFECT DARK FIXTURE ROM\n';
-const PD_BUILD = makeZip({ 'pd.exe': 'MZ', 'data/.keep': '' });
+// Laid out like the real release: one folder, three exes, a data folder
+const PD_BUILD = makeZip({
+  'pd-x86_64-windows/pd.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.pal.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.jpn.x86_64.exe': 'MZ',
+  'pd-x86_64-windows/SDL2.dll': 'DLL', 'pd-x86_64-windows/data/put_your_rom_here.txt': 'fixture',
+});
 const PD_DATA  = makeZip({ 'Perfect Dark/pd.ntsc-final.z64': PD_ROM, 'Perfect Dark/readme.txt': 'fixture' });
 
 // URL → { status, type, body }; base is where this server answers, for the

@@ -186,8 +186,9 @@ test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', asyn
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  // The ROM lands in data/ beside the exe the collision names, not beside the release folder
   expect(fs.readFileSync(path.join(dir, 'data', 'pd.ntsc-final.z64'), 'utf8')).toBe(PD_ROM);
-  expect(fs.existsSync(path.join(dir, 'pd.exe'))).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'pd.x86_64.exe'))).toBe(true);
   await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
