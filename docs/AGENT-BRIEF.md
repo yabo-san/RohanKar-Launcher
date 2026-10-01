@@ -10,6 +10,14 @@ Add from, with the collision catalog joining the two so a port that needs game d
 to end with the data verified by hash. The current web UI will be replaced later; build the model
 and sources so the UI is only a renderer.
 
+This fork supersedes both Quiver and upstream RohanKar Launcher (`Kilted-Kraken/-RohanKar-Launcher`).
+Users of either switch to it and lose nothing: a Quiver user imports their library (Step 6.4), an
+upstream RohanKar user installs over their copy and keeps their data folder, library and installed
+games (the y4bo rename keeps the old `%APPDATA%` folder in use). Neither is integrated with: nothing
+is written back to them, and no feature waits on them. Upstream's commits still arrive through the
+weekly upstream-sync PR and are taken only where they help; upstream is a source of fixes, not a
+roadmap.
+
 ## Architecture rule
 
 All sources (archive.org uploaders, Quiver catalogs, the collision catalog) feed one normalized
@@ -124,9 +132,10 @@ after it. The full rules are in [USER-SOURCES.md](USER-SOURCES.md).
 - Logic in the backend (`src/backend/`, the core), the renderer only renders. Tests with fixture
   user.json files: valid, invalid, conflicting with curated.
 
-### Step 6: Supersede Quiver
+### Step 6: Supersede Quiver and upstream RohanKar
 
-This fork supersedes Quiver: users switch to it, and it does not integrate with Quiver. Quiver's
+This fork supersedes Quiver and upstream RohanKar (see Goal): users switch to it, and it does not
+integrate with either. Quiver's
 community catalogs stay a data source for the port shelves (Step 1); nothing else of Quiver's is
 read at runtime. The only library integrations are this fork's Playnite export (Step 7) and Drop
 OSS, which is handled outside this repo.
