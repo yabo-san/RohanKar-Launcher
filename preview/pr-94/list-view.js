@@ -163,8 +163,8 @@ const ListView = (() => {
   // label may be a function of (item, ctx); kinds lists the item kinds it
   // applies to ('game', 'port'); children makes it a submenu of actions. The
   // menus draw one section per group, in MENU_GROUPS order, with a divider
-  // between sections; an empty group draws nothing. 'admin' is kept for
-  // actions added later (Make collision), empty for now.
+  // between sections; an empty group draws nothing. 'admin' holds the
+  // actions only admin mode shows (Make a Tile).
   const MENU_GROUPS = ['pin', 'collection', 'play', 'manage', 'goto', 'admin', 'remove'];
 
   function createActions() {
