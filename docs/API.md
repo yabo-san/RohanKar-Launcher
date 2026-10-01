@@ -95,6 +95,8 @@ curl http://127.0.0.1:7777/v1/health
 # {"ok":true,"api":"v1","version":"1.6.0"}
 ```
 
+In admin mode it also has `"admin": true`.
+
 ### `GET /featured`
 
 The hand-picked games and ports that lead the New page, in display order, from
@@ -263,6 +265,20 @@ The user's own collisions and the collision feeds they subscribe to. The schema 
 curl -X PUT -d '{"base":"data","sources":[{"ia":"game-rip","path":"Game.zip","extract":true}]}' \
   http://127.0.0.1:7777/v1/collisions/owner%2Fport
 ```
+
+### Admin mode
+
+Only when the backend runs with `--admin` (or `LAUNCHER_ADMIN=1`; `mise run admin`). Otherwise every
+route here is `403 not_admin`, and `GET /health` has no `admin` field. See [ADMIN.md](ADMIN.md).
+
+| route | does |
+| --- | --- |
+| `GET /admin/collisions` | `{ file, collisions }`: the curated list, and the file it lives in |
+| `PUT /admin/collisions/:repo` | Writes one into the curated file (`201` new, `200` replaced in place); `400 bad_collision` lists every problem |
+| `DELETE /admin/collisions/:repo` | Removes one (`204`), `404` if it isn't there |
+| `GET /admin/releases/:repo?pattern=` | `{ latest, picked, releases: [{ tag, name, prerelease, published, assets: [{ name, size, pattern }] }] }`: `picked` is what `pattern` takes from the latest release, and each asset's `pattern` keeps taking it in later ones |
+| `GET /admin/ia-search?q=` | `{ items: [{ identifier, title, uploader, size }] }` from archive.org's search |
+
 
 ### `GET /library`
 
