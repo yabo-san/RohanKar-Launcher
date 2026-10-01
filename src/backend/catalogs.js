@@ -17,6 +17,11 @@ const { parseUploaders } = require('./feed');
 const { githubAsCollision, additionalAllowed } = require('./user-sources');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
+// A curated collision with a `shelf` is a game tile of its own on that shelf
+// (unless a subscribed shelf lists the repo): the tiles the owner adds in admin mode
+const CURATED_PREFIX = 'curated-';
+const curatedShelf = (name) => ({ id: CURATED_PREFIX + (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ports'), url: null, name, shelf: name, curated: true });
+const isVirtual = (id) => id === LOCAL.id || String(id).startsWith(CURATED_PREFIX);
 
 const catalogId = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 12);
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
@@ -60,10 +65,22 @@ function diffEntries(seen, current) {
   return out;
 }
 
+// What an install needs from a collision, as items() hands it on
+function itemData(data) {
+  return {
+    iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
+    dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
+    ...(data.exe ? { exe: data.exe } : {}), ...(data.keepReleaseFolder ? { keepReleaseFolder: true } : {}),
+  };
+}
+
 const NO_USER = { entries: () => ({ collisions: [], archive: [], github: [] }) };
 
 // userSources: createUserSources(), for user.json
-function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO_USER, netLog = () => {}, log = () => {} }) {
+// admin: the owner's console, where the curated collisions (collisionsFile,
+// catalog/collisions.json in a source checkout) are edited in place and
+// entries marked hidden still show
+function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO_USER, admin = false, netLog = () => {}, log = () => {} }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = (id, kind) => path.join(dir, `${id}.${kind}.json`);
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
@@ -196,6 +213,35 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     writeJson(localFile, after);
     return true;
   }
+  // ─── Admin mode: the curated collisions, edited in place ──────────────────
+  // Written back as the file's own array, in its order, for a PR
+  const curatedList = () => [...bundledCollisions().values()];
+  function writeCurated(list) {
+    fs.writeFileSync(collisionsFile, JSON.stringify(list, null, 2) + '\n');
+    collisions = null;
+  }
+  function saveCurated(entry) {
+    if (!admin || !collisionsFile) return { ok: false, forbidden: true, errors: ['Admin mode is off'] };
+    const errors = validateCollision(entry);
+    if (errors.length) return { ok: false, errors };
+    const clean = { ...entry, repository: entry.repository.trim() };
+    const key = repoKey(clean.repository);
+    const list = curatedList();
+    const at = list.findIndex(c => repoKey(c.repository) === key);
+    if (at < 0) list.push(clean); else list[at] = clean;
+    writeCurated(list);
+    return { ok: true, created: at < 0, entry: clean };
+  }
+  function deleteCurated(repository) {
+    if (!admin || !collisionsFile) return { ok: false, forbidden: true };
+    const key = repoKey(repository);
+    const list = curatedList();
+    const after = list.filter(c => repoKey(c.repository) !== key);
+    if (after.length === list.length) return { ok: false };
+    writeCurated(after);
+    return { ok: true };
+  }
+
   const collision = (repository) => {
     const key = repoKey(repository);
     const curated = bundledCollisions().get(key);
@@ -234,12 +280,29 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     }));
   }
 
-  // Subscriptions, plus "Your ports" while it has anything on it
-  const shelves = () => [...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
+  // Curated collisions with a shelf, for repositories no subscribed shelf
+  // lists, as catalog entries. Hidden ones only show in admin mode.
+  function curatedTiles() {
+    const listed = listedRepos();
+    return [...bundledCollisions().values()].filter(c => typeof c.shelf === 'string' && c.shelf.trim() && c.name
+      && !listed.has(repoKey(c.repository)) && (admin || !c.hidden));
+  }
+  const curatedShelves = () => [...new Map(curatedTiles().map(c => { const sh = curatedShelf(c.shelf.trim()); return [sh.id, sh]; })).values()];
+  function curatedEntries(id) {
+    return curatedTiles().filter(c => curatedShelf(c.shelf.trim()).id === id).map(c => ({
+      name: c.name, repository: c.repository, folderName: c.folderName || '',
+      ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}), ...(Array.isArray(c.tags) ? { tags: c.tags } : {}),
+      ...(c.description ? { description: c.description } : {}),
+    }));
+  }
+
+  // Subscriptions, the curated tiles' shelves, and "Your ports" while it has anything on it
+  const shelves = () => [...subscriptions(), ...curatedShelves(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
   function describe(sub) {
     if (sub.local) return { ...sub, entries: localEntries().length, fetchedAt: null, error: null };
+    if (sub.curated) return { ...sub, entries: curatedEntries(sub.id).length, fetchedAt: null, error: null };
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
@@ -256,7 +319,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   async function refresh(id) {
     const sub = find(id);
     if (!sub) return null;
-    if (sub.local) return describe(sub);
+    if (sub.local || sub.curated) return describe(sub);
     const r = await getText(sub.url, { kind: 'catalog', log: netLog });
     const prev = readJson(file(id, 'cache'), null);
     let entries = null;
@@ -290,24 +353,24 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   }
 
   function unsubscribe(id) {
-    if (!find(id) || id === LOCAL.id) return false;
+    if (!find(id) || isVirtual(id)) return false;
     settings.save({ catalogs: subscriptions().filter(c => c.id !== id) });
     for (const kind of ['cache', 'seen']) fs.rmSync(file(id, kind), { force: true });
     return true;
   }
 
   const cachedEntries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
-  const entries = (id) => (id === LOCAL.id ? localEntries() : cachedEntries(id));
+  const entries = (id) => (id === LOCAL.id ? localEntries() : String(id).startsWith(CURATED_PREFIX) ? curatedEntries(id) : cachedEntries(id));
 
   function review(id) {
     if (!find(id)) return null;
-    if (id === LOCAL.id) return { new: [], changed: [], removed: [] };
+    if (isVirtual(id)) return { new: [], changed: [], removed: [] };
     return diffEntries(readJson(file(id, 'seen'), []), entries(id));
   }
 
   function markSeen(id) {
     if (!find(id)) return false;
-    if (id === LOCAL.id) return true;
+    if (isVirtual(id)) return true;
     writeJson(file(id, 'seen'), entries(id));
     return true;
   }
@@ -321,7 +384,11 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     return subs.flatMap(sub => entries(sub.id).map(e => {
       const k = repoKey(e.repository);
       const data = joins.get(k) || null;
+      // A hidden curated collision gates its port, wherever it's listed, to admin mode
+      const hidden = !!(data?.hidden && bundledCollisions().has(k));
+      if (hidden && !admin) return null;
       return {
+        ...(hidden ? { hidden: true } : {}),
         // not reviewed by us: a "Your ports" entry, or data bound by an additional source
         userSource:  !!sub.local || (!!data && !bundledCollisions().has(k)),
         id:          `quiver:${sub.id}:${entryKey(e)}`,
@@ -332,18 +399,16 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
         icon:        e.appIconUrl || null,
         tags:        Array.isArray(e.tags) ? e.tags : [],
         description: e.description || null,
-        data:        data && {
-          iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
-          dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
-        },
+        data:        data && itemData(data),
         entry:       e,
       };
-    }));
+    })).filter(Boolean);
   }
 
   return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
     collision, saveCollision, deleteCollision, localCollisions: localList, feeds, subscribeFeed, refreshFeed, unsubscribeFeed,
+    curatedList, saveCurated, deleteCurated, admin,
     userConflicts, additionalAllowed: additional, isCurated: (repository) => bundledCollisions().has(repoKey(repository)) };
 }
 
-module.exports = { createCatalogs, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };
+module.exports = { createCatalogs, itemData, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };

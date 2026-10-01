@@ -31,6 +31,10 @@ run = "node scripts/ui.js"
 description = "The real backend and UI with real installs, everything under ./sandbox/; --reset empties it"
 run = "node scripts/sandbox.js"
 
+[tasks.admin]
+description = "The sandbox as the owner's console: add and edit curated collisions (catalog/collisions.json) in place, for a PR"
+run = "node scripts/sandbox.js --admin"
+
 [tasks.test]
 description = "Unit and API tests with the 80% coverage gate"
 run = "npm run test:coverage"

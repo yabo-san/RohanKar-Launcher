@@ -258,6 +258,25 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return release;
   }
 
+  // The recent releases of a repository, for the admin console's release
+  // picker: each asset with the pattern that would keep picking it
+  async function releases(repository, { pattern = null } = {}) {
+    const r = await getText(`${githubApi}/repos/${repository}/releases?per_page=10`, {
+      kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
+    });
+    if (r.status !== 200) return { ok: false, error: `Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})` };
+    const list = JSON.parse(r.body);
+    const latest = ports.pickRelease(list);
+    const picked = latest ? ports.pickAsset(latest.assets, { pattern }).asset?.name || null : null;
+    return {
+      ok: true, latest: latest?.tag_name || null, picked,
+      releases: list.filter(x => !x.draft).map(x => ({
+        tag: x.tag_name, name: x.name || x.tag_name, prerelease: !!x.prerelease, published: x.published_at || null,
+        assets: (x.assets || []).map(a => ({ name: a.name, size: a.size || 0, pattern: ports.assetPatternFor(a.name) })),
+      })),
+    };
+  }
+
   // base "binary" (the default): the release lays down first and the data goes
   // into it. base "data": the data lays down first and the release unpacks
   // into binaryTarget on top of it. See docs/COLLISIONS.md.
@@ -291,8 +310,15 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       update(job, { status: 'extracting', percent: 100 });
       fs.mkdirSync(binDest, { recursive: true });
       if (ports.ARCHIVE_EXT.test(bin.filePath)) {
-        const x = await extractTo(bin.filePath, binDest);
-        if (!x.ok) return fail(x.error);
+        // Unpacked beside the download first: a release that is one folder
+        // (pd-x86_64-windows/) lays down that folder's contents, so the data
+        // stages next to the exe, unless the entry says keepReleaseFolder
+        const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
+        fs.rmSync(staging, { recursive: true, force: true });
+        const x = await extractTo(bin.filePath, staging);
+        if (!x.ok) { fs.rmSync(staging, { recursive: true, force: true }); return fail(x.error); }
+        fs.cpSync(data.keepReleaseFolder ? staging : ports.releaseRoot(staging), binDest, { recursive: true, force: true });
+        fs.rmSync(staging, { recursive: true, force: true });
       } else {
         fs.copyFileSync(bin.filePath, path.join(binDest, path.basename(bin.filePath)));
       }
@@ -329,7 +355,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
             || (path.basename(got.filePath).toLowerCase() === String(df.name).toLowerCase() ? got.filePath : null);
           if (!found) {
             if (df.optional) continue;
-            return fail(`${df.name} isn't in ${src.file}`);
+            const has = staging ? ports.largestFiles(staging, 5) : [];
+            return fail(`${df.name} isn't in ${src.file}${has.length ? ` (it holds ${has.join(', ')})` : ''}`);
           }
           const target = ports.inside(dest, df.targetSubpath, df.name);
           if (!target) return fail(`${df.name} would land outside the install folder`);
@@ -422,13 +449,29 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
               return fail(`${f.name} doesn't match ${x.single && s.sha1 ? 'the catalog' : 'archive.org'} (sha1 ${sum}, expected ${want})`);
             }
           }
-          if (s.extract && ports.ARCHIVE_EXT.test(f.name)) {
+          if (s.extract && ports.ARCHIVE_EXT.test(f.name) && s.as) {
+            // A ROM zip: its one file (the biggest, past any readme) lands as `as`
+            update(job, { status: 'extracting', percent: 100 });
+            const staging = path.join(root, `.unpack-${job.id}`);
+            try {
+              const xr = await extractTo(got.filePath, staging);
+              if (!xr.ok) return fail(xr.error);
+              const [biggest] = ports.largestFiles(staging, 1);
+              if (!biggest) return fail(`${f.name} is empty`);
+              fs.mkdirSync(path.dirname(to), { recursive: true });
+              fs.copyFileSync(path.join(staging, biggest), to);
+              if (/\.z64$/i.test(to)) ports.toZ64(to); // TOSEC's .n64 is byteswapped
+            } finally {
+              fs.rmSync(staging, { recursive: true, force: true });
+            }
+          } else if (s.extract && ports.ARCHIVE_EXT.test(f.name)) {
             update(job, { status: 'extracting', percent: 100 });
             const xr = await extractTo(got.filePath, root);
             if (!xr.ok) return fail(xr.error);
           } else {
             fs.mkdirSync(path.dirname(to), { recursive: true });
             fs.copyFileSync(got.filePath, to);
+            if (/\.z64$/i.test(to)) ports.toZ64(to);
           }
         }
       }
@@ -441,8 +484,10 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     // Record it against the catalog item, keeping its library row
     if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
     disk.unblockDirectory(dest, { platform, log });
+    // The collision's exe when it names one (Perfect Dark ships one per region)
+    const named = data.exe && ports.inside(dest, data.exe);
     const exes = disk.findExes(dest);
-    const exePath = exes.length === 1 ? exes[0] : null;
+    const exePath = named && fs.existsSync(named) ? named : exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     update(job, { status: 'done', step: null, installDir: dest, exePath });
   }
@@ -478,7 +523,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { found };
   }
 
-  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
+  return { download, cancelDownload, extract, extractTo, start, startPort, releases, get, list, wait, cancel, scan };
 }
 
 module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API };

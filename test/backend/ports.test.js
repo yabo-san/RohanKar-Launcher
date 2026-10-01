@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs     = require('fs');
 const path   = require('path');
+const os     = require('os');
 const crypto = require('crypto');
 const ports  = require('../../src/backend/ports');
 const { createInstalls } = require('../../src/backend/installs');
@@ -53,10 +54,10 @@ test('archiveFile, findFile, inside', (t) => {
 });
 
 // A fake GitHub on the fake archive's server: releases for o/pd, and its assets
-async function setup(t, { rom = 'ROMDATA', dataZip, assets, deleteAfterInstall = false } = {}) {
+async function setup(t, { rom = 'ROMDATA', dataZip, assets, bin: binZip, deleteAfterInstall = false } = {}) {
   const state = { routes: {}, zips: {} };
   const fake = await fakeArchive(t, state);
-  const bin = makeZip({ 'pd.exe': 'MZ', 'data/.keep': '' });
+  const bin = binZip || makeZip({ 'pd.exe': 'MZ', 'data/.keep': '' });
   state.routes['/repos/o/pd/releases'] = (req, res) => {
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify([
@@ -109,6 +110,40 @@ test('a port installs: release build, filesToAdd, data staged and sha1-checked, 
   for (const s of ['downloading:binary', 'extracting:binary', 'downloading:data', 'extracting:data', 'verifying:data', 'done:null']) {
     assert.ok(steps.includes(s), `${s} in ${steps.join(' ')}`);
   }
+});
+
+// The real release zip wraps everything in one folder and ships three exes
+const PD_REAL = () => makeZip({
+  'pd-x86_64-windows/pd.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.pal.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.jpn.x86_64.exe': 'MZ',
+  'pd-x86_64-windows/SDL2.dll': 'DLL', 'pd-x86_64-windows/data/put_your_rom_here.txt': 'here',
+});
+
+test('a release wrapped in one folder is unwrapped, so the data lands beside the exe; exe picks among several', async (t) => {
+  const { dir, installs, item } = await setup(t, { bin: PD_REAL() });
+  const run = async (it) => { const r = installs.startPort({ item: it }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+
+  const job = await run({ ...item, data: { ...item.data, exe: 'pd.x86_64.exe' } });
+  assert.deepEqual([job.status, job.error, job.exePath], ['done', null, path.join(dest, 'pd.x86_64.exe')]);
+  assert.equal(fs.readFileSync(path.join(dest, 'data', 'pd.ntsc-final.z64'), 'utf8'), 'ROMDATA');
+  assert.ok(fs.existsSync(path.join(dest, 'data', 'put_your_rom_here.txt')));
+  assert.ok(!fs.existsSync(path.join(dest, 'pd-x86_64-windows')), 'no wrapper folder left');
+  assert.deepEqual(fs.readdirSync(dest).filter(n => n.startsWith('.unpack-')), [], 'staging is cleaned up');
+
+  // Without exe there are three to pick from, so none is set; a missing exe falls back the same way
+  const none = await run({ ...item, id: 'quiver:c1:o/none' });
+  assert.deepEqual([none.status, none.exePath], ['done', null]);
+  const wrong = await run({ ...item, id: 'quiver:c1:o/wrong', data: { ...item.data, exe: 'nope.exe' } });
+  assert.deepEqual([wrong.status, wrong.exePath], ['done', null]);
+});
+
+test('keepReleaseFolder keeps the wrapper folder as the release shipped it', async (t) => {
+  const { dir, installs, item } = await setup(t, { bin: PD_REAL() });
+  const r = installs.startPort({ item: { ...item, data: { ...item.data, keepReleaseFolder: true, exe: 'pd-x86_64-windows/pd.x86_64.exe' } } });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.exePath], ['done', path.join(dest, 'pd-x86_64-windows', 'pd.x86_64.exe')]);
 });
 
 test('a data file that fails its sha1 fails the install, naming the file, and is removed', async (t) => {
@@ -169,7 +204,7 @@ test('missing data, optional data, no Windows build, no repository', async (t) =
   const { installs, item, state, fake } = await setup(t, { dataZip: makeZip({ 'other.bin': 'x' }), deleteAfterInstall: true });
   const run = async (it) => { const r = installs.startPort({ item: it }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
 
-  assert.equal((await run(item)).error, "pd.ntsc-final.z64 isn't in Perfect Dark PC Port.zip");
+  assert.equal((await run(item)).error, "pd.ntsc-final.z64 isn't in Perfect Dark PC Port.zip (it holds other.bin)");
   const optional = { ...item, id: 'quiver:c1:o/pd2', data: { ...item.data, dataFiles: [{ ...item.data.dataFiles[0], optional: true }] } };
   assert.equal((await run(optional)).status, 'done');
   state.zips['pd_ia/Perfect Dark PC Port.zip'] = makeZip({ 'pd.ntsc-final.z64': 'ROMDATA' });
@@ -232,6 +267,11 @@ test('validateCollision: a port of its own needs a name; sha1 only on one file',
     'assetPattern: Invalid regular expression: /(/: Unterminated group', 'binaryTarget must be a relative folder', 'sources[0].extract must be true or false',
   ]);
   assert.deepEqual(ports.validateCollision([]), ['entry must be an object']);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', name: 'B', exe: 'pd.x86_64.exe', keepReleaseFolder: true }), []);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', name: 'B', exe: '../pd.exe', keepReleaseFolder: 'yes' }), [
+    'exe must be a relative path to an .exe', 'keepReleaseFolder must be true or false',
+  ]);
+  assert.deepEqual(ports.validateCollision({ repository: 'a/b', name: 'B', exe: 'readme.txt' }), ['exe must be a relative path to an .exe']);
 });
 
 test('base "data": the archive.org zip unpacks first, the release unpacks over it into binaryTarget', async (t) => {
@@ -279,4 +319,45 @@ test('base "binary": one file and a folder placed beside the release, checked ag
   const outside = await run({ ...item, id: 'quiver:c1:o/out', data: { binaryTarget: '../x' } });
   assert.match(outside.error, /binaryTarget would land outside/);
   assert.ok(fake.base);
+});
+
+test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as` to what the port expects', async (t) => {
+  const { dir, installs, item, state } = await setup(t, { bin: PD_REAL() });
+  // TOSEC's dump is a byteswapped .n64, as the real one is; the port reads a big-endian .z64
+  const z64 = Buffer.from('80371240' + Buffer.from('PERFECT DARK TOSEC').toString('hex'), 'hex');
+  const romZip = makeZip({ 'Perfect Dark (USA) (Rev A).n64': Buffer.from(z64).swap16(), 'readme.txt': 'hi' });
+  state.files['N64TOSEC'] = [{ name: 'Perfect Dark (USA) (Rev A).zip', source: 'original', size: String(romZip.length), sha1: sha1(romZip) }];
+  state.routes['/download/N64TOSEC/Perfect%20Dark%20(USA)%20(Rev%20A).zip'] = (req, res) => { res.writeHead(200); res.end(romZip); };
+  const source = { ia: 'N64TOSEC', path: 'Perfect Dark (USA) (Rev A).zip', target: 'data', extract: true, as: 'pd.ntsc-final.z64' };
+  assert.deepEqual(ports.validateCollision({ repository: 'o/pd', sources: [source] }), []);
+  const r = installs.startPort({ item: { ...item, data: { assetPattern: '(?i)x86_64-windows', exe: 'pd.x86_64.exe', sources: [source] } } });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.error, job.exePath], ['done', null, path.join(dest, 'pd.x86_64.exe')]);
+  assert.deepEqual(fs.readFileSync(path.join(dest, 'data', 'pd.ntsc-final.z64')), z64);
+  assert.deepEqual(fs.readdirSync(path.join(dest, 'data')).sort(), ['pd.ntsc-final.z64', 'put_your_rom_here.txt'], 'no readme, no staging left');
+
+  assert.deepEqual(ports.validateCollision({ repository: 'o/pd', sources: [{ ia: 'i', path: 'x/*', as: 'a.z64' }, { ia: 'i', path: 'x.zip', as: 'data/a.z64' }] }), [
+    'sources[0].as only applies to a single file', 'sources[1].as must be a file name',
+  ]);
+  assert.equal(ports.expandSource({ ia: 'i', path: 'roms/bk.z64', as: 'baserom.z64' }, IA_FILES).files[0].rel, 'baserom.z64');
+});
+
+test('an N64 ROM in any byte order becomes a .z64; other files are left as they are', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-z64-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const z64 = Buffer.from('8037124000000000a1b2c3d4', 'hex');
+  const write = (name, buf) => { const p = path.join(dir, name); fs.writeFileSync(p, buf); return p; };
+  const cases = [['a.z64', Buffer.from(z64), 'z64'], ['b.v64', Buffer.from(z64).swap16(), 'v64'], ['c.n64', Buffer.from(z64).swap32(), 'n64']];
+  for (const [name, buf, order] of cases) {
+    const p = write(name, buf);
+    assert.equal(ports.n64Order(buf), order);
+    assert.equal(ports.toZ64(p), order);
+    assert.deepEqual(fs.readFileSync(p), z64, name);
+  }
+  const text = write('readme.z64', 'not a rom');
+  assert.equal(ports.toZ64(text), null);
+  assert.equal(fs.readFileSync(text, 'utf8'), 'not a rom');
+  assert.equal(ports.n64Order(Buffer.alloc(2)), null);
 });

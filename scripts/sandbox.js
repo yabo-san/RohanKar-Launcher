@@ -3,13 +3,15 @@
  * `mise run sandbox`: the real launcher in a browser, with real installs, in a
  * throwaway folder.
  *
- *   node scripts/sandbox.js [--reset] [--dir sandbox]
+ *   node scripts/sandbox.js [--reset] [--dir sandbox] [--admin]
  *
  * The standalone backend and src/frontend, as `mise run dev` runs them, but
  * everything lives under ./sandbox/: library.db, settings, downloads and
  * installed games. Nothing touches %APPDATA% or the desktop app's library.
  * Installs download and unpack for real; launching and opening folders need
- * the desktop app and answer 501. --reset empties the folder first.
+ * the desktop app and answer 501. --reset empties the folder first. --admin
+ * is the owner's console (`mise run admin`): the curated collisions in
+ * catalog/collisions.json are edited in place, for a PR (docs/ADMIN.md).
  */
 const fs   = require('fs');
 const path = require('path');
@@ -18,10 +20,11 @@ const dev  = require('./dev');
 const ROOT = path.join(__dirname, '..');
 
 function parseArgs(argv) {
-  const out = { reset: false, dir: path.join(ROOT, 'sandbox') };
+  const out = { reset: false, admin: false, dir: path.join(ROOT, 'sandbox') };
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--reset') out.reset = true;
     else if (argv[i] === '--dir') out.dir = path.resolve(argv[++i]);
+    else if (argv[i] === '--admin') out.admin = true;
   }
   return out;
 }
@@ -30,7 +33,8 @@ async function start(opts, env = process.env, print = (l) => process.stdout.writ
   if (opts.reset) fs.rmSync(opts.dir, { recursive: true, force: true });
   fs.mkdirSync(opts.dir, { recursive: true });
   print(`sandbox   ${opts.dir}${opts.reset ? ' (emptied)' : ''}\n`);
-  return dev.start('dev', { ...env, LAUNCHER_DATA_DIR: opts.dir }, { print });
+  if (opts.admin) print('admin     on: edits go to catalog/collisions.json (docs/ADMIN.md)\n');
+  return dev.start('dev', { ...env, LAUNCHER_DATA_DIR: opts.dir }, { print, extraArgs: opts.admin ? ['--admin'] : [] });
 }
 
 if (require.main === module) {

@@ -65,6 +65,7 @@ function createBackend({
   featuredUrl = FEATURED_URL,
   announcementUrl = ANNOUNCEMENT_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
+  admin = false,
   playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
@@ -150,7 +151,7 @@ function createBackend({
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
   const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi });
-  const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, userSources, netLog: netlog.log, log });
+  const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, collisionsFile, userSources, admin, netLog: netlog.log, log });
   const items    = createItems({ archive, settings, catalogs, library, getOverrides, userSources, getDefaultSources, emit, log });
 
   // ─── Actions that combine a module with the OS ────────────────────────────
@@ -293,7 +294,7 @@ function createBackend({
   }
 
   return {
-    dataDir, appDir, appVersion, events, emit, os,
+    dataDir, appDir, appVersion, events, emit, os, admin, collisionsFile,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources, getFeatured,
