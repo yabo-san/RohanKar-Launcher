@@ -25,6 +25,9 @@ test('items: shipped sources grouped by title, overrides applied, library joined
   assert.equal(sims.originalTitle, 'The Sims');
   assert.deepEqual(sims.override, { title: 'The Sims: Complete' });
 
+  // Platform from the archive.org subjects (every fixture says "pc")
+  assert.equal(zoo.platform, 'PC');
+  assert.deepEqual(zoo.versions.map(v => v.platform), ['PC', 'PC']);
   assert.equal((await backend.items.get('rk-e2e-zoo-tycoon-pstriple')).id, 'rk-e2e-zoo-tycoon');
   assert.equal(await backend.items.get('nope'), null);
   assert.equal(backend.items.loadedVersions().length, 7);
@@ -86,4 +89,16 @@ test('items: catalog entries sit on their shelf next to the wall', async (t) => 
   assert.equal((await backend.items.list({ source: catalog.id })).items.length, 1);
   backend.library.add(shelf[0].id, catalog.url);
   assert.equal((await backend.items.get(shelf[0].id)).library.source, catalog.url);
+});
+
+test('items: platform from the subjects, PC when they name none', async (t) => {
+  const { backend, fake } = await testBackend(t);
+  const subjects = { 'rk-e2e-zoo-tycoon': ['PlayStation 2', 'tycoon'], 'rk-e2e-halo-ce': 'xbox;shooter', 'rk-e2e-age-of-empires-2': null };
+  fake.search = Object.fromEntries(Object.entries(fake.search).map(([who, docs]) =>
+    [who, docs.map(d => (d.identifier in subjects ? { ...d, subject: subjects[d.identifier] } : d))]));
+  const { items } = await backend.items.list();
+  const platform = (id) => items.find(i => i.id === id).platform;
+  assert.equal(platform('rk-e2e-zoo-tycoon'), 'PlayStation');
+  assert.equal(platform('rk-e2e-halo-ce'), 'Xbox');
+  assert.equal(platform('rk-e2e-age-of-empires-2'), 'PC');
 });
