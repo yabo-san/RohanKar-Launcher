@@ -32,6 +32,8 @@ const state = {
   editor: null,         // the collision being edited (viewCollision)
   collisionFeeds: null, // subscribed collision feeds, for Settings
   userSources: null,    // GET /user-sources: user.json's state, invalid entries, conflicts
+  admin: false,         // the owner's console (mise run admin): curated collisions edited in place
+  curated: null,        // GET /admin/collisions, for the Collisions database page
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -158,6 +160,8 @@ function versionFromItem(v) {
     addeddate:    v.addeddate,
     downloads:    v.downloads,
     subject:      v.subject,
+    platform:     v.platform || null,
+    size:         v.size ?? null,
     _uploader:    v.source?.uploader,
     _sourceLabel: v.source?.label || v.source?.uploader,
     _override:    v.override || undefined,
@@ -226,6 +230,7 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
+    hidden:             !!it.hidden,
     catalogUrl:         cat.url,
     // A collision with no data (a repo added on its own) has nothing to fetch
     data: it.data && (it.data.iaIdentifier || it.data.contentUrl || it.data.dataFiles?.length || it.data.sources?.length)
@@ -272,7 +277,7 @@ async function reloadLibrary() {
   renderNav();
 }
 
-const isInstalled = (g) => (g._versions || [g]).some(v => state.library[v.identifier]?.install_dir);
+const isInstalled = (g) => ListView.isInstalled(g, { library: state.library });
 const installedVersion = (g) => (g._versions || [g]).find(v => state.library[v.identifier]?.install_dir);
 const inPortLibrary = (p) => state.portLibrary.some(r => r.id === p.id);
 const reviewCount = () => state.review.reduce((n, r) => n + r.added.length + r.changed.length + r.removed.length, 0);
@@ -354,6 +359,7 @@ function goHistory(dir) {
 }
 function show(name, arg) {
   if (name === 'collision') startEditor(arg);
+  if (name === 'admin') loadCurated();
   state.view = { name, arg };
   state.query = '';
   $('#q').value = '';
@@ -370,7 +376,7 @@ function show(name, arg) {
 // ─── cards ───────────────────────────────────────────────────────────────────
 
 // The installed version of a title that has a newer upload (the backend's `newer`)
-const outdated = (g) => (g._versions || [g]).find(x => x._newer && state.library[x.identifier]?.install_dir) || null;
+const outdated = (g) => ListView.outdated(g, { library: state.library });
 
 function gameCard(g) {
   const title = getTitle(g);
@@ -403,7 +409,7 @@ function portCard(p) {
       <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${p.userSource ? USER_BADGE : ''}
+    ${p.userSource ? USER_BADGE : ''}${p.hidden ? '<span class="pill">Hidden</span>' : ''}
   </button>`;
 }
 
@@ -567,19 +573,18 @@ function viewHome() {
   return html;
 }
 
-// ─── library pages (after Cider's library-albums page) ──────────────────────
-// A sticky header over the grid: a search box, then Sort by, Sort order, View
-// as (cover art or list) and Scroll (infinite or paged). The choices are kept
-// per page. Sorting and search follow Cider's searchLibraryAlbums: numbers
-// compare as numbers, everything else case-insensitively, and the search
-// ignores punctuation.
+// ─── library pages (after Cider's library-albums and songs pages) ──────────
+// The page title at the top left and, on the same row at the right, the
+// page's controls: filter and sort dropdowns, a cover art / list switch,
+// reload and a search box. The choices are kept per page. Sorting, search,
+// columns and row actions are ListView's (../list-view.js); this only draws.
 
 const PAGE_SIZE = 60;
 const PREFS_KEY = 'y4bo.libraryPrefs';
 const PREF_DEFAULTS = {
-  wall:    { sort: 'dateAdded', order: 'desc', viewAs: 'covers', scroll: 'infinite', uploader: '' },
-  shelf:   { sort: 'data', order: 'desc', viewAs: 'covers', scroll: 'infinite', tag: '', data: '' },
-  library: { sort: 'name', order: 'asc', viewAs: 'covers', scroll: 'infinite' },
+  wall:    { sort: 'dateAdded', order: 'desc', viewAs: 'covers', scroll: 'infinite', uploader: '', hiddenCols: [] },
+  shelf:   { sort: 'data', order: 'desc', viewAs: 'covers', scroll: 'infinite', tag: '', data: '', hiddenCols: [] },
+  library: { sort: 'name', order: 'asc', viewAs: 'covers', scroll: 'infinite', hiddenCols: [] },
 };
 const libPrefs = (() => {
   let saved = {};
@@ -588,53 +593,124 @@ const libPrefs = (() => {
 })();
 function setPref(page, key, value) {
   libPrefs[page][key] = value;
-  if (key !== 'viewAs') state.libPage = 1;
+  if (key !== 'viewAs' && key !== 'hiddenCols') state.libPage = 1;
   try { localStorage.setItem(PREFS_KEY, JSON.stringify(libPrefs)); } catch { /* storage off */ }
 }
 
-const GAME_SORTS = {
-  name:      ['Title', g => getTitle(g)],
-  dateAdded: ['Date added', g => g.addeddate],
-  uploader:  ['Uploader', g => g._sourceLabel],
-  downloads: ['Downloads', g => g.downloads || 0],
-  year:      ['Year', g => (g.date || g.addeddate || '').slice(0, 4)],
-};
-const PORT_SORTS = {
-  data:  ['Game data', p => (p.data.status === 'available' ? 1 : 0)],
-  name:  ['Name', p => p.name],
-  repo:  ['Repository', p => p.repository],
-  shelf: ['Shelf', p => p.shelfName],
-};
+const { GAME_SORTS, PORT_SORTS, ciderSearch } = ListView;
+const listCtx = (kind) => ({ kind, library: state.library, downloads: state.downloads });
 
-function ciderSort(list, value, order) {
-  const key = (x) => { const v = value(x); return v == null ? '' : String(v); };
-  const cmp = (a, b) => (/^\d+$/.test(a) && /^\d+$/.test(b) ? a - b : a.toLowerCase().localeCompare(b.toLowerCase()));
-  return list.map(x => [key(x), x]).sort(([a], [b]) => (order === 'asc' ? cmp(a, b) : cmp(b, a))).map(([, x]) => x);
-}
-const searchKey = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N} ]/gu, '');
-function ciderSearch(list, q, fields) {
-  const t = searchKey(q);
-  return t ? list.filter(x => fields(x).some(f => searchKey(f).includes(t))) : list;
+// ─── dropdowns (Cider 2's) ──────────────────────────────────────────────────
+// A pill: a leading icon, the chosen option and a chevron. Its menu is one
+// shared panel (#ddmenu), dark and translucent, bold items, the chosen one in
+// accent red with a check. Arrow keys, Home and End move; Enter or Space
+// picks; Escape or Tab closes. A multi dropdown (the column picker) toggles
+// its items and stays open.
+const dropdowns = {};   // id → { label, icon, options: [[value, text, note]], value | isOn, multi, onPick }
+function dropdown(id, def) {
+  dropdowns[id] = def;
+  const cur = def.options.find(([v]) => String(v) === String(def.value));
+  const text = cur ? cur[1] : def.label;
+  return `<button type="button" class="dd-trigger${def.iconOnly ? ' icon-only' : ''}" data-dd="${esc(id)}" ${def.attrs || ''}
+    aria-haspopup="listbox" aria-expanded="false" aria-label="${esc(def.iconOnly ? def.label : `${def.label}: ${text}`)}" title="${esc(def.label)}">
+    ${def.icon ? `<i class="ico dd-ico" data-ico="${def.icon}"></i>` : ''}${def.iconOnly ? '' : `<span class="dd-label">${esc(text)}</span>`}<i class="ico dd-chev" data-ico="chevdown"></i></button>`;
 }
 
-function mdSelect(page, pref, label, options) {
-  const cur = libPrefs[page][pref];
-  return `<select class="md-select" data-page="${page}" data-pref="${pref}" aria-label="${esc(label)}"><optgroup label="${esc(label)}">
-    ${options.map(([v, text]) => `<option value="${esc(v)}"${String(cur) === String(v) ? ' selected' : ''}>${esc(text)}</option>`).join('')}</optgroup></select>`;
+// A dropdown bound to a page preference
+function prefDropdown(page, pref, label, icon, options) {
+  return dropdown(`${page}-${pref}`, {
+    label, icon, options, value: libPrefs[page][pref], attrs: `data-page="${page}" data-pref="${pref}"`,
+    onPick: (v) => { setPref(page, pref, v); render(); },
+  });
 }
 
-// The search box goes in the page title row (render adds it); the rest sit
-// in a plain row under the title, on the page itself
+let ddOpen = null;
+function openDropdown(id, focus = null) {
+  const def = dropdowns[id];
+  const trigger = document.querySelector(`[data-dd="${CSS.escape(id)}"]`);
+  if (!def || !trigger) return;
+  closeMenu();
+  let el = $('#ddmenu');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ddmenu';
+    el.className = 'ddmenu';
+    el.setAttribute('role', 'listbox');
+    document.body.append(el);
+  }
+  const on = (v) => (def.multi ? def.isOn(v) : String(v) === String(def.value));
+  el.setAttribute('aria-label', def.label);
+  el.setAttribute('aria-multiselectable', String(!!def.multi));
+  el.innerHTML = (def.heading ? `<div class="dd-h">${esc(def.heading)}</div>` : '') + def.options.map(([v, text, note]) =>
+    `<div class="dd-opt${on(v) ? ' on' : ''}" role="option" tabindex="-1" data-value="${esc(v)}" aria-selected="${on(v)}">
+      <i class="ico dd-check" data-ico="check"></i><span class="dd-text">${esc(text)}</span>${note ? `<small>${esc(note)}</small>` : ''}</div>`).join('');
+  el.classList.remove('hidden');
+  el.style.minWidth = `${Math.max(180, trigger.offsetWidth)}px`;
+  const r = trigger.getBoundingClientRect(), m = el.getBoundingClientRect();
+  const left = def.alignRight ? r.right - m.width : r.left;
+  el.style.left = `${Math.max(8, Math.min(left, innerWidth - m.width - 8))}px`;
+  el.style.top = `${r.bottom + m.height + 6 > innerHeight ? Math.max(8, r.top - m.height - 6) : r.bottom + 6}px`;
+  document.querySelectorAll('.dd-trigger[aria-expanded="true"]').forEach(t => t.setAttribute('aria-expanded', 'false'));
+  trigger.setAttribute('aria-expanded', 'true');
+  ddOpen = id;
+  const opts = [...el.querySelectorAll('.dd-opt')];
+  (opts[focus ?? opts.findIndex(o => o.classList.contains('on'))] || opts[0])?.focus();
+}
+function closeDropdown(refocus = false) {
+  if (!ddOpen) return;
+  const id = ddOpen;
+  ddOpen = null;
+  $('#ddmenu')?.classList.add('hidden');
+  const t = document.querySelector(`[data-dd="${CSS.escape(id)}"]`);
+  t?.setAttribute('aria-expanded', 'false');
+  if (refocus) t?.focus();
+}
+function pickDropdown(opt) {
+  const id = ddOpen, def = dropdowns[id];
+  if (!def) return;
+  const at = [...opt.parentNode.querySelectorAll('.dd-opt')].indexOf(opt);
+  if (!def.multi) closeDropdown();
+  def.onPick(opt.dataset.value);
+  if (def.multi) openDropdown(id, at);
+  else document.querySelector(`[data-dd="${CSS.escape(id)}"]`)?.focus();
+}
+function dropdownKey(e) {
+  const opts = [...document.querySelectorAll('#ddmenu .dd-opt')];
+  const at = opts.indexOf(document.activeElement);
+  const move = (i) => { e.preventDefault(); opts[(i + opts.length) % opts.length]?.focus(); };
+  if (e.key === 'ArrowDown') return move(at + 1);
+  if (e.key === 'ArrowUp') return move(at < 0 ? opts.length - 1 : at - 1);
+  if (e.key === 'Home') return move(0);
+  if (e.key === 'End') return move(opts.length - 1);
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (opts[at]) pickDropdown(opts[at]); return; }
+  if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeDropdown(true); }
+  if (e.key === 'Tab') closeDropdown();
+}
+
+// View as cover art or a list: a two-button segmented switch, like the one
+// under the sidebar's search box
+function viewToggle(page) {
+  const cur = libPrefs[page].viewAs;
+  const b = (v, ico, label) => `<button type="button" class="${cur === v ? 'on' : ''}" data-page="${page}" data-view-as="${v}"
+    aria-label="${label}" title="${label}" aria-pressed="${cur === v}"><i class="ico" data-ico="${ico}"></i></button>`;
+  return `<div class="seg view-toggle" role="group" aria-label="View as">${b('covers', 'grid', 'Cover art')}${b('list', 'list', 'List')}</div>`;
+}
+
+// libraryHeader hands the controls to render(), which puts them in the page
+// title row with the search box and reload
 let pageHasSearch = false;
+let pageControls = null;
 function libraryHeader(page, sorts, { extra = '', total = 0 } = {}) {
   pageHasSearch = true;
-  return `<div class="album-header">
-    <div class="lib-controls">${extra}
-      ${mdSelect(page, 'sort', 'Sort by', Object.entries(sorts).map(([k, [text]]) => [k, text]))}
-      ${mdSelect(page, 'order', 'Sort order', [['asc', 'Ascending'], ['desc', 'Descending']])}
-      ${mdSelect(page, 'viewAs', 'View as', [['covers', 'Cover art'], ['list', 'List']])}
-      ${mdSelect(page, 'scroll', 'Scroll', [['infinite', 'Infinite'], ['paged', `Paged (${PAGE_SIZE} per page)`]])}
-    </div>${libPrefs[page].scroll === 'paged' ? pagination(total) : ''}</div>`;
+  pageControls = {
+    controls: `${extra}
+      ${prefDropdown(page, 'sort', 'Sort by', 'sort', Object.entries(sorts).map(([k, [text]]) => [k, text]))}
+      ${prefDropdown(page, 'order', 'Sort order', 'order', [['asc', 'Ascending'], ['desc', 'Descending']])}
+      ${prefDropdown(page, 'scroll', 'Scroll', 'scroll', [['infinite', 'Infinite'], ['paged', `Paged (${PAGE_SIZE} per page)`]])}
+      ${viewToggle(page)}`,
+    pagination: libPrefs[page].scroll === 'paged' ? pagination(total) : '',
+  };
+  return '';
 }
 
 // Cider's pagination: first, previous, five page numbers around the current
@@ -657,47 +733,75 @@ function pagination(total) {
   </div>`;
 }
 
-// The sorted, searched list as covers or a list, infinite or paged
-function libraryBody(page, list, { card, row, head, cls = 'grid' }) {
+// ─── list view (after Cider 2's song list) ─────────────────────────────────
+// A dense borderless table: a star for favourites and a play button on hover
+// in the left gutter, the columns (headers sort; a picker at the right end
+// hides them), and a ⋯ button that opens the row's menu. No covers.
+
+const LIST_COLUMNS = { game: ListView.GAME_COLUMNS, port: ListView.PORT_COLUMNS };
+
+function listHead(page, kind, cols, list, ctx) {
   const p = libPrefs[page];
-  const asList = p.viewAs === 'list';
-  const fn = asList ? row : card;
-  const wrap = asList ? 'songs-list' : cls;
-  const top = asList ? `<div class="list-head">${head}</div>` : '';
-  if (p.scroll !== 'paged') return top + pagedGrid(list, fn, wrap);
+  const choices = ListView.columnChoices(LIST_COLUMNS[kind], p.hiddenCols, list, ctx);
+  const picker = dropdown(`cols-${page}-${kind}`, {
+    label: 'Columns', heading: 'Columns', icon: 'columns', iconOnly: true, multi: true, alignRight: true,
+    attrs: `data-col-picker="${kind}"`,
+    options: choices.map(c => [c.id, c.label, c.empty ? 'no data' : '']),
+    isOn: (id) => !libPrefs[page].hiddenCols.includes(id),
+    onPick: (id) => { setPref(page, 'hiddenCols', ListView.toggleColumn(libPrefs[page].hiddenCols, id)); render(); },
+  });
+  const th = (c) => {
+    const sort = ListView.ariaSort(p, c);
+    return `<span class="lv-th${c.num ? ' num' : ''}${sort !== 'none' ? ' sorted' : ''}" role="columnheader" aria-sort="${sort}">
+      <button type="button" data-sort-col="${c.id}" data-page="${page}" data-kind="${kind}">${esc(c.label)}<i class="ico lv-arrow${sort === 'ascending' ? ' up' : ''}" data-ico="chevdown"></i></button></span>`;
+  };
+  return `<div class="lv-head" role="row"><span role="columnheader" aria-label="Favourite"></span><span role="columnheader" aria-label="Play"></span>
+    ${cols.map(th).join('')}<span class="lv-picker" role="columnheader" aria-label="Columns">${picker}</span></div>`;
+}
+
+function listRow(kind, x, cols, ctx) {
+  const port = kind === 'port';
+  const id = port ? x.id : x.identifier;
+  const title = port ? x.name : getTitle(x);
+  const installed = port ? !!state.library[x.id]?.install_dir : ListView.isInstalled(x, ctx);
+  const status = port ? ListView.portStatus(x, ctx) : ListView.gameStatus(x, ctx);
+  const n = x._versions?.length || 1;
+  const cell = (c) => {
+    if (c.id === 'name') {
+      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
+      return `<span class="lv-td lv-name" role="cell"><span class="lv-title">${esc(title)}</span>${badges}</span>`;
+    }
+    const text = c.text(x, ctx);
+    const cls = c.id === 'status' && status.kind ? ` st-${status.kind}` : '';
+    return `<span class="lv-td${c.num ? ' num' : ''}${cls}" role="cell"${text ? ` title="${esc(text)}"` : ''}>${esc(text)}</span>`;
+  };
+  return `<div class="list-row lv-row" role="row" tabindex="0" data-open="${kind}" data-id="${esc(id)}" aria-label="${esc(title)}">
+    <span class="lv-star" role="cell">${ListView.isFavorite(x, ctx) ? '<i class="ico" data-ico="star-fill" role="img" aria-label="Favourite"></i>' : ''}</span>
+    <span class="lv-play" role="cell"><button type="button" class="lv-go" data-row-go="${kind}" data-id="${esc(id)}" tabindex="-1"
+      aria-label="${installed ? 'Play' : 'Details for'} ${esc(title)}" title="${installed ? 'Play' : 'Details'}"><i class="ico" data-ico="play"></i></button></span>
+    ${cols.map(cell).join('')}
+    <span class="lv-end" role="cell"><button type="button" class="lr-more" data-row-menu="${kind}" data-id="${esc(id)}" tabindex="-1"
+      aria-label="More for ${esc(title)}" aria-haspopup="menu" title="More"><i class="ico" data-ico="more"></i></button></span>
+  </div>`;
+}
+
+// The sorted, searched list as covers or a list, infinite or paged
+function libraryBody(page, list, { card, kind, cls = 'grid' }) {
+  const p = libPrefs[page];
   const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
   const cur = Math.min(state.libPage, pages);
-  return `${top}<div class="${wrap}">${list.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE).map(fn).join('')}</div>
-    ${pages > 1 ? pagination(list.length) : ''}`;
+  const slice = p.scroll === 'paged' ? list.slice((cur - 1) * PAGE_SIZE, cur * PAGE_SIZE) : null;
+  const more = p.scroll === 'paged' && pages > 1 ? pagination(list.length) : '';
+  if (p.viewAs !== 'list') {
+    return slice ? `<div class="${cls}">${slice.map(card).join('')}</div>${more}` : pagedGrid(list, card, cls);
+  }
+  const ctx = listCtx(kind);
+  const cols = ListView.visibleColumns(LIST_COLUMNS[kind], p.hiddenCols, list, ctx);
+  const row = (x) => listRow(kind, x, cols, ctx);
+  const rows = slice ? `<div class="lv-rows" role="rowgroup">${slice.map(row).join('')}</div>` : pagedGrid(list, row, 'lv-rows');
+  return `<div class="lv" role="table" aria-label="${kind === 'port' ? 'Ports' : 'Games'}" style="--lv-cols: ${ListView.gridTemplate(cols)}">
+    ${listHead(page, kind, cols, list, ctx)}${rows}</div>${more}`;
 }
-
-// A row in list view, after Cider's library song list
-function gameRow(g) {
-  const title = getTitle(g);
-  const n = g._versions?.length || 1;
-  const badge = isInstalled(g) ? '<span class="pill">Installed</span>' : n > 1 ? `<span class="pill">${n} versions</span>` : '';
-  return `<button class="list-row" data-open="game" data-id="${esc(g.identifier)}">
-    <span class="lr-art" data-thumb="${esc(g.identifier)}" style="background:${tint(title)}"><span class="noart"></span></span>
-    <span class="lr-title"><b>${esc(title)}</b>${badge}</span>
-    <span class="lr-col">${esc(g._sourceLabel || '')}</span>
-    <span class="lr-col">${esc(fmtDate(g.addeddate))}</span>
-    <span class="lr-col num">${g.downloads ? fmtNum(g.downloads) : ''}</span>
-  </button>`;
-}
-const GAME_HEAD = '<span></span><span>Title</span><span>Uploader</span><span>Date added</span><span class="num">Downloads</span>';
-
-function portRow(p) {
-  const art = p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : '';
-  const badge = p.data.status === 'available' ? '<span class="pill ok">Data</span>' : '';
-  return `<button class="list-row port-card" data-open="port" data-id="${esc(p.id)}">
-    <span class="lr-art icon" style="background:${tint(p.repository)}">${art}</span>
-    <span class="lr-title"><b>${esc(p.name)}</b>${badge}${inPortLibrary(p) ? '<span class="pill">In library</span>' : ''}</span>
-    <span class="lr-col">${esc(p.project || '')}</span>
-    <span class="lr-col">${esc(p.repository)}</span>
-    <span class="lr-col">${esc(p.shelfName || '')}</span>
-  </button>`;
-}
-const PORT_HEAD = '<span></span><span>Name</span><span>Project</span><span>Repository</span><span>Shelf</span>';
 
 function viewWall(uploader) {
   const enabled = state.sources.filter(s => s.enabled !== false);
@@ -705,14 +809,14 @@ function viewWall(uploader) {
   const who = uploader || p.uploader || null;
   let list = state.games.filter(g => !who || (g._versions || [g]).some(v => v._uploader === who));
   list = ciderSearch(list, state.libSearch, g => [getTitle(g), g._sourceLabel, g.identifier, ...(g._versions || []).map(v => getTitle(v))]);
-  list = ciderSort(list, (GAME_SORTS[p.sort] || GAME_SORTS.dateAdded)[1], p.order);
-  const extra = uploader ? '' : mdSelect('wall', 'uploader', 'Uploader',
+  list = ListView.sortRows(list, p, [GAME_SORTS], 'dateAdded', listCtx('game'));
+  const extra = uploader ? '' : prefDropdown('wall', 'uploader', 'Uploader', 'person',
     [['', 'All uploaders'], ...enabled.map(s => [s.uploader, sourceName(s)])]);
   let html = libraryHeader('wall', GAME_SORTS, { extra, total: list.length }) + wallNotice(uploader);
   if (!list.length && state.wall.loading) return html + section('', skeletons(18));
   if (!list.length) return html + `<p class="empty">${state.libSearch ? 'Nothing matches that search.' : 'Nothing here yet.'}</p>`;
   const note = `${fmtNum(list.length)} titles${state.wall.loading ? ' · still loading uploaders…' : ''}`;
-  return html + `<div class="lib-count">${note}</div>` + libraryBody('wall', list, { card: gameCard, row: gameRow, head: GAME_HEAD });
+  return html + `<div class="lib-count">${note}</div>` + libraryBody('wall', list, { card: gameCard, kind: 'game' });
 }
 
 function viewShelf(id) {
@@ -723,10 +827,9 @@ function viewShelf(id) {
   const tags = shelf.preferredTags.length ? shelf.preferredTags : [...new Set(all.flatMap(i => i.tags))].slice(0, 12);
   let list = all.filter(i => (!p.tag || i.tags.includes(p.tag)) && (!p.data || i.data.status === 'available'));
   list = ciderSearch(list, state.libSearch, i => [i.name, i.project, i.repository, ...i.tags]);
-  const [, value] = PORT_SORTS[p.sort] || PORT_SORTS.data;
-  list = ciderSort(ciderSort(list, i => i.name, 'asc'), value, p.order);
-  const extra = mdSelect('shelf', 'data', 'Show', [['', 'All ports'], ['1', 'With game data']])
-    + mdSelect('shelf', 'tag', 'Tag', [['', 'Any tag'], ...tags.map(t => [t, t])]);
+  list = ListView.sortRows(list, p, [PORT_SORTS], 'data', listCtx('port'), i => i.name);
+  const extra = prefDropdown('shelf', 'data', 'Show', 'filter', [['', 'All ports'], ['1', 'With game data']])
+    + prefDropdown('shelf', 'tag', 'Tag', 'tag', [['', 'Any tag'], ...tags.map(t => [t, t])]);
   let html = libraryHeader('shelf', PORT_SORTS, { extra, total: list.length });
   if (shelf.error) {
     html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
@@ -734,7 +837,7 @@ function viewShelf(id) {
     html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   }
   html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}${shelf.withData ? ` · ${shelf.withData} with data from archive.org` : ''}</div>`;
-  return html + (list.length ? libraryBody('shelf', list, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
+  return html + (list.length ? libraryBody('shelf', list, { card: portCard, kind: 'port', cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
 // A library row no loaded item describes (a manual app, an upload no longer
@@ -786,12 +889,12 @@ function viewLibrary() {
   }
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
-  const [, value] = sorts[p.sort] || sorts.name;
-  uniq = ciderSort(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), value, p.order);
-  ports = ciderSort(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), value, p.order);
+  const nameOf = sorts.name[1];
+  uniq = ListView.sortRows(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), p, [sorts, GAME_SORTS], 'name', listCtx('game'), nameOf);
+  ports = ListView.sortRows(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), p, [sorts, PORT_SORTS], 'name', listCtx('port'), nameOf);
   let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
-  if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, row: gameRow, head: GAME_HEAD }), { count: uniq.length, cls: 'plain' });
-  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, row: portRow, head: PORT_HEAD, cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
+  if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, kind: 'game' }), { count: uniq.length, cls: 'plain' });
+  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, kind: 'port', cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
   return html;
 }
 
@@ -1003,12 +1106,13 @@ function viewSearch(q) {
 
 // The round reload button at the right of the page title (Cider's reload-btn)
 const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data' };
+const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data', admin: 'Collisions database' };
 
 function render() {
   const v = state.view;
   pagedGrid.pending = {};
   pageHasSearch = false;
+  pageControls = null;
   let html;
   if (state.query) html = viewSearch(state.query);
   else if (v.name === 'new') html = viewNew();
@@ -1019,12 +1123,13 @@ function render() {
   else if (v.name === 'updates') html = viewUpdates();
   else if (v.name === 'settings') html = viewSettings();
   else if (v.name === 'collision') html = viewCollision();
+  else if (v.name === 'admin') html = viewAdmin();
   else html = viewHome();
 
   const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
-    : v.name === 'collision' && !v.arg ? 'Add a GitHub repo'
+    : v.name === 'collision' && !v.arg ? (state.admin ? 'New game tile' : 'Add a GitHub repo')
     : HEADINGS[v.name] || 'Home';
 
   // Keep the settings form as typed while the wall is still streaming in
@@ -1034,8 +1139,13 @@ function render() {
   const reload = !state.query && RELOADS[v.name];
   const search = pageHasSearch ? `<input type="search" class="search-input" id="lib-search" spellcheck="false"
     placeholder="Search ${esc(heading)}" value="${esc(state.libSearch)}" aria-label="Search this page">` : '';
-  body.innerHTML = `<div class="page-head"><h1 class="page-title" id="heading">${esc(heading)}</h1><span class="grow"></span>
-    ${search}${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}</div>` + html;
+  // A library page's controls share the title row, as on Cider's songs page
+  const lib = pageControls;
+  body.innerHTML = `<div class="page-head${lib ? ' album-header slim' : ''}"><h1 class="page-title" id="heading">${esc(heading)}</h1><span class="grow"></span>
+    ${lib ? `<div class="lib-controls">${lib.controls}</div>` : ''}
+    ${reload ? `<button class="reload-btn" data-action="${reload}" aria-label="Reload" title="Reload"></button>` : ''}${search}${lib?.pagination || ''}</div>` + html;
+  // A background redraw (the wall streaming in) keeps an open dropdown's trigger marked
+  if (ddOpen) document.querySelector(`[data-dd="${CSS.escape(ddOpen)}"]`)?.setAttribute('aria-expanded', 'true');
   if (typing != null) { const el = $('#lib-search'); el?.focus(); el?.setSelectionRange(typing, typing); }
   observeCovers(body);
   syncRows();
@@ -1142,6 +1252,7 @@ function gameDetail(d) {
   } else {
     actions = `<button class="btn primary" id="btn-download" data-action="install">Install</button>`;
   }
+  if (state.admin && !v._manual) actions += `<button class="btn" data-action="admin-from-item" data-ia="${esc(v.identifier)}">Make a game tile…</button>`;
   const exes = exePicker(d);
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
@@ -1203,7 +1314,7 @@ function portDetail(d) {
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${esc(p.project)} · Source: Quiver / ${esc(p.shelfName)}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}${p.shelf.startsWith('curated-') ? `y4bo's curated list / ${esc(p.shelfName)}` : `Source: Quiver / ${esc(p.shelfName)}`}</div></div></div>
     <div class="d-body">
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
       <div class="actions">
@@ -1218,10 +1329,10 @@ function portDetail(d) {
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
         <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
-        <dt>Folder</dt><dd>${esc(p.folderName)}</dd>
+        <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
-        <dt>Catalog</dt><dd>${esc(p.catalogUrl)}</dd>
+        <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'catalog/collisions.json')}</dd>
       </dl>
     </div>`;
 }
@@ -1329,25 +1440,27 @@ async function togglePort(id) {
 // ─── Game data: the collision editor (docs/COLLISIONS.md) ───────────────────
 
 const ARCHIVE_RE = /\.(zip|7z|rar)$/i;
-const blankSource = () => ({ ia: '', path: '', target: '', extract: false, sha1: '', optional: false });
+const blankSource = () => ({ ia: '', path: '', target: '', as: '', extract: false, sha1: '', optional: false });
 
 // Loads the collision in effect for repo (or a blank one for a new repo) into the editor
 async function startEditor(repo) {
   const port = repo && state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
   const ed = state.editor = { repo: repo || '', isNew: !repo, loading: !!repo, origin: null, feed: null, extra: {},
     name: port?.name || '', folderName: port?.folderName || '', assetPattern: '', base: 'binary', binaryTarget: '',
+    // admin mode: the tile's shelf, the exe to launch, and whether users see it
+    shelf: repo ? '' : 'y4bo ports', exe: '', hidden: false, releases: null, search: null, queries: {},
     sources: repo ? [] : [blankSource()], browse: null, preview: null, errors: null };
   if (!repo) return;
   const c = await api.getCollision(repo);
   if (state.editor !== ed) return;
   ed.loading = false;
   if (c) {
-    const { repository, name, folderName, assetPattern, base, binaryTarget, sources, ...extra } = c.entry;
+    const { repository, name, folderName, assetPattern, base, binaryTarget, sources, shelf, exe, hidden, ...extra } = c.entry;
     Object.assign(ed, {
-      origin: c.origin, feed: c.feed || null, extra,
+      origin: c.origin, feed: c.feed || null, extra, shelf: shelf || '', exe: exe || '', hidden: !!hidden,
       name: name || ed.name, folderName: folderName || ed.folderName, assetPattern: assetPattern || '',
       base: base === 'data' ? 'data' : 'binary', binaryTarget: binaryTarget || '',
-      sources: (sources || []).map(x => ({ ...blankSource(), ...x, sha1: x.sha1 || '', target: x.target || '' })),
+      sources: (sources || []).map(x => ({ ...blankSource(), ...x, sha1: x.sha1 || '', target: x.target || '', as: x.as || '' })),
     });
   }
   if (!ed.sources.length) ed.sources.push(blankSource());
@@ -1361,12 +1474,15 @@ function viewCollision() {
   const from = ed.origin === 'local' ? 'Yours.' : ed.origin === 'feed' ? `From the ${esc(ed.feed?.name || '')} feed. Saving makes a copy of your own that wins over it.`
     : ed.origin === 'user.json' ? 'From your user.json. Saving makes a copy of your own that wins over it.'
     : ed.origin === 'bundled' ? 'Curated: bundled with the launcher. The curated list wins, so it can\'t be changed here.' : 'Nothing yet.';
-  const off = !state.settings.allowAdditionalSources;
-  const locked = off || ed.origin === 'bundled';
+  const admin = state.admin;
+  const off = !admin && !state.settings.allowAdditionalSources;
+  const locked = off || (!admin && ed.origin === 'bundled');
   const legacy = ed.extra.dataFiles?.length
     ? `<div class="hint">Also picks ${esc(ed.extra.dataFiles.map(d => d.name).join(', '))} out of ${esc(decodeURIComponent(String(ed.extra.contentUrl || '').split('/').pop()))} (the first version of the schema). That part is kept as it is.</div>` : '';
   return `<div class="form editor">
-    <p class="lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. ${ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : from}</p>
+    <p class="lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. ${admin
+      ? `<b>Admin mode:</b> saving writes the curated list, catalog/collisions.json, for a PR. ${ed.isNew ? 'A repo no shelf lists becomes a game tile on its shelf.' : ed.origin === 'bundled' ? 'Curated.' : from}`
+      : ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : from}</p>
     ${ed.isNew ? `<div class="field"><label for="ed-repo">GitHub repository</label>
       <input type="text" id="ed-repo" data-ed="repo" value="${esc(ed.repo)}" placeholder="owner/repo" spellcheck="false"></div>`
     : `<div class="field"><label>GitHub repository</label><div class="hint"><a data-href="https://github.com/${esc(ed.repo)}">${esc(ed.repo)}</a></div></div>`}
@@ -1374,7 +1490,12 @@ function viewCollision() {
       <div><label for="ed-folder">Install folder name</label><input type="text" id="ed-folder" data-ed="folderName" value="${esc(ed.folderName)}" placeholder="owner.repo"></div></div>
     <div class="field"><label for="ed-asset">Release asset</label>
       <div class="hint">A pattern for the release file to take, e.g. <code>(?i)x86_64-windows</code>. Empty picks the Windows build.</div>
-      <input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false"></div>
+      ${admin ? `<div class="inline"><input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">
+        <button class="btn" id="btn-pick-release" data-action="ed-releases">Pick a release…</button></div>${releasesHtml()}`
+      : `<input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">`}</div>
+    ${admin ? `<div class="field two"><div><label for="ed-exe">Executable</label><input type="text" id="ed-exe" data-ed="exe" value="${esc(ed.exe)}" placeholder="When the release ships several, e.g. pd.x86_64.exe" spellcheck="false"></div>
+      <div><label for="ed-shelf">Shelf</label><input type="text" id="ed-shelf" data-ed="shelf" value="${esc(ed.shelf)}" placeholder="A tile of its own, e.g. y4bo ports" spellcheck="false"></div></div>
+      <div class="field"><label class="radio"><input type="checkbox" id="ed-hidden" ${ed.hidden ? 'checked' : ''}> Hidden: only admin mode shows it (gate it until it's ready)</label></div>` : ''}
     <div class="field"><label>Order</label>
       <label class="radio"><input type="radio" name="ed-base" value="binary" ${ed.base === 'binary' ? 'checked' : ''}> Release first, then the game data beside or inside it</label>
       <label class="radio"><input type="radio" name="ed-base" value="data" ${ed.base === 'data' ? 'checked' : ''}> Game data first (a full rip), then the release unpacked over it</label></div>
@@ -1389,9 +1510,10 @@ function viewCollision() {
       <button class="btn" data-view="settings">Settings</button></div>` : ''}
     <div class="field actions">
       <button class="btn" data-action="ed-preview">Preview</button>
-      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>Save</button>
-      ${ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
-      <button class="btn" data-action="ed-export">Copy my collisions as a feed</button></div>
+      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>${admin ? 'Save to the curated list' : 'Save'}</button>
+      ${!admin && ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
+      ${admin && ed.origin === 'bundled' ? '<button class="btn" data-action="ed-delete">Remove from the curated list</button>' : ''}
+      ${admin ? '' : '<button class="btn" data-action="ed-export">Copy my collisions as a feed</button>'}</div>
     <div id="ed-preview">${previewHtml()}</div>
   </div>`;
 }
@@ -1403,8 +1525,11 @@ function sourceCard(x, i) {
     <div class="inline"><input type="text" data-src="${i}" data-key="ia" value="${esc(x.ia)}" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
       <button class="btn" data-action="ed-browse" data-i="${i}">Browse</button>
       <button class="btn" data-action="ed-remove-source" data-i="${i}" aria-label="Remove this source">&#10005;</button></div>
+    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.queries[i] || '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
+      <button class="btn" data-action="ed-search" data-i="${i}">Search</button></div>${ed.search?.i === i ? searchHtml() : ''}` : ''}
     <div class="two"><div><label>Take</label><input type="text" data-src="${i}" data-key="path" value="${esc(x.path)}" placeholder="file, folder/* or *" spellcheck="false"></div>
       <div><label>Into folder</label><input type="text" data-src="${i}" data-key="target" value="${esc(x.target)}" placeholder="the install folder" spellcheck="false"></div></div>
+    ${state.admin ? `<div><label>Save as</label><input type="text" data-src="${i}" data-key="as" value="${esc(x.as)}" placeholder="The file name the port expects, e.g. pd.ntsc-final.z64 (a ROM zip: the ROM inside it)" spellcheck="false"></div>` : ''}
     <div class="checks">
       <label><input type="checkbox" data-src="${i}" data-key="extract" ${x.extract ? 'checked' : ''}> Unpack the archive</label>
       <label><input type="checkbox" data-src="${i}" data-key="optional" ${x.optional ? 'checked' : ''}> Optional</label>
@@ -1485,9 +1610,15 @@ function editorEntry() {
   if (ed.assetPattern.trim()) entry.assetPattern = ed.assetPattern.trim();
   if (ed.base === 'data') entry.base = 'data';
   if (ed.binaryTarget.trim()) entry.binaryTarget = ed.binaryTarget.trim();
+  if (state.admin) {
+    if (ed.exe.trim()) entry.exe = ed.exe.trim();
+    if (ed.shelf.trim()) entry.shelf = ed.shelf.trim();
+    if (ed.hidden) entry.hidden = true;
+  }
   const sources = ed.sources.filter(x => x.ia.trim() || x.path.trim()).map(x => ({
     ia: x.ia.trim(), path: x.path.trim(),
     ...(x.target.trim() ? { target: x.target.trim() } : {}),
+    ...(x.as?.trim() ? { as: x.as.trim() } : {}),
     ...(x.extract ? { extract: true } : {}),
     ...(x.sha1.trim() ? { sha1: x.sha1.trim().toLowerCase() } : {}),
     ...(x.optional ? { optional: true } : {}),
@@ -1513,9 +1644,10 @@ async function editorSave() {
   const ed = state.editor;
   const repo = ed.repo.trim();
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { ed.errors = ['The repository must look like owner/repo.']; return render(); }
-  const r = await api.saveCollision(repo, editorEntry());
+  const r = await (state.admin ? api.saveCuratedCollision(repo, editorEntry()) : api.saveCollision(repo, editorEntry()));
   if (!r.ok) { ed.errors = r.error.split('; '); return render(); }
-  toast(`Saved the game data for ${ed.name || repo}. It's yours now, and wins over any feed's.`);
+  toast(state.admin ? `Wrote ${ed.name || repo} to catalog/collisions.json. Commit it in a PR to ship it.`
+    : `Saved the game data for ${ed.name || repo}. It's yours now, and wins over any feed's.`, state.admin ? 6000 : undefined);
   await loadPorts();
   const port = state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
   go('collision', repo);
@@ -1524,11 +1656,123 @@ async function editorSave() {
 
 async function editorDelete() {
   const ed = state.editor;
+  if (state.admin) {
+    if (!confirm(`Remove ${ed.repo} from the curated list, catalog/collisions.json?`)) return;
+    const r = await api.deleteCuratedCollision(ed.repo);
+    if (!r.ok) return toast(`Couldn't remove it: ${r.error}`);
+    toast('Removed from the curated list.');
+    await loadPorts();
+    return go('admin');
+  }
   if (!confirm(`Remove your game data for ${ed.repo}? A feed's or the bundled one takes over again, if there is one.`)) return;
   await api.deleteCollision(ed.repo);
   toast('Removed yours.');
   await loadPorts();
   go('collision', ed.repo);
+}
+
+// ─── Admin mode: releases, archive.org search, the curated list ─────────────
+
+function releasesHtml() {
+  const r = state.editor?.releases;
+  if (!r) return '';
+  if (r.loading) return '<p class="empty">Reading the releases…</p>';
+  if (r.error) return `<p class="empty">${esc(r.error)}</p>`;
+  return `<div class="browser" id="release-list">
+    <div class="hint">${r.picked ? `The pattern picks <b>${esc(r.picked)}</b> from ${esc(r.latest)}.` : `Nothing in ${esc(r.latest || 'the latest release')} matches yet.`} Pick an asset to take it in every later release.</div>
+    ${r.releases.slice(0, 3).map(rel => `<div class="h3">${esc(rel.name)}${rel.prerelease ? ' · prerelease' : ''}${rel.tag === r.latest ? ' · latest' : ''}</div>
+      ${rel.assets.map(a => `<button class="pick" data-action="ed-take-asset" data-pattern="${esc(a.pattern)}"><span class="kind">${ARCHIVE_RE.test(a.name) ? 'ZIP' : 'FILE'}</span>${esc(a.name)}<span class="meta">${fmtBytes(a.size)}</span></button>`).join('') || '<p class="empty">No assets.</p>'}`).join('')}
+    <button class="btn" data-action="ed-close-releases">Done</button></div>`;
+}
+
+async function editorReleases() {
+  const ed = state.editor;
+  const repo = ed.repo.trim();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast('Type the repository first, as owner/repo.');
+  const r = ed.releases = { loading: true };
+  render();
+  const got = await api.getReleases(repo, ed.assetPattern.trim());
+  if (ed.releases !== r) return;
+  ed.releases = got.ok ? got : { error: `Couldn't read the releases: ${got.error}` };
+  render();
+}
+
+function editorTakeAsset(pattern) {
+  const ed = state.editor;
+  ed.assetPattern = pattern;
+  ed.releases = null;
+  editorReleases();
+}
+
+function searchHtml() {
+  const s = state.editor?.search;
+  if (!s) return '';
+  if (s.loading) return '<p class="empty">Searching archive.org…</p>';
+  if (s.error) return `<p class="empty">${esc(s.error)}</p>`;
+  return `<div class="browser" id="search-list">${s.items.map(it =>
+    `<button class="pick" data-action="ed-pick-item" data-ia="${esc(it.identifier)}"><span class="kind">ITEM</span>${esc(it.title)}<span class="meta">${esc(it.identifier)}${it.uploader ? ` · ${esc(it.uploader)}` : ''}${it.size ? ` · ${fmtBytes(it.size)}` : ''}</span></button>`).join('') || '<p class="empty">Nothing found.</p>'}</div>`;
+}
+
+async function editorSearch(i) {
+  const ed = state.editor;
+  const q = String(ed.queries[i] || '').trim();
+  if (!q) return toast('Type something to search for.');
+  const s = ed.search = { i, q, loading: true, items: [] };
+  render();
+  const r = await api.searchArchive(q);
+  if (ed.search !== s) return;
+  Object.assign(s, { loading: false, items: r.items, error: r.ok ? null : `Couldn't search archive.org: ${r.error}` });
+  render();
+}
+
+// A search hit becomes the source's item, and its files open to pick from
+function editorPickItem(ia) {
+  const ed = state.editor;
+  const i = ed.search?.i ?? 0;
+  ed.sources[i].ia = ia;
+  ed.search = null;
+  return editorBrowse(i);
+}
+
+// "Make a game tile" from an archive.org item on the wall: a new tile with it as the data
+function adminFromItem(identifier) {
+  closeDetail();
+  go('collision');
+  state.editor.sources[0].ia = identifier;
+  return editorBrowse(0);
+}
+
+async function loadCurated() {
+  state.curated = null;
+  const r = await api.getCuratedCollisions();
+  state.curated = r || { error: "Admin mode is off. Start it with mise run admin." };
+  if (state.view.name === 'admin') render();
+}
+
+function viewAdmin() {
+  const c = state.curated;
+  if (!c) return '<p class="empty">Loading the curated list…</p>';
+  if (c.error) return `<p class="empty">${esc(c.error)}</p>`;
+  const summary = (e) => [...(e.sources || []).map(x => `${x.ia}/${x.path}${x.as ? ` → ${x.as}` : ''}`), ...(e.dataFiles || []).map(d => d.name)].join(', ');
+  return `<p class="lede">Every curated collision, from <code>${esc(c.file)}</code>. Edits write that file; commit it in a PR to ship them.</p>
+    <div class="field actions"><button class="btn primary" data-view="collision">New game tile…</button></div>
+    <div class="list-head admin-head"><span>Name</span><span>Repository</span><span>Shelf</span><span>Game data</span><span></span></div>
+    <div class="admin-list">${c.collisions.map(e => `<div class="admin-row${e.hidden ? ' is-hidden' : ''}">
+      <span><b>${esc(e.name || e.repository)}</b>${e.hidden ? ' <span class="pill">Hidden</span>' : ''}</span>
+      <span>${esc(e.repository)}</span><span>${esc(e.shelf || '')}</span><span class="meta">${esc(summary(e))}</span>
+      <span class="row-actions"><button class="btn" data-action="edit-collision" data-repo="${esc(e.repository)}">Edit</button>
+        <button class="btn" data-action="admin-hide" data-repo="${esc(e.repository)}">${e.hidden ? 'Show' : 'Hide'}</button></span></div>`).join('')}</div>`;
+}
+
+async function adminToggleHidden(repo) {
+  const e = state.curated?.collisions.find(x => x.repository === repo);
+  if (!e) return;
+  const { hidden, ...rest } = e;
+  const r = await api.saveCuratedCollision(repo, hidden ? rest : { ...rest, hidden: true });
+  if (!r.ok) return toast(`Couldn't save: ${r.error}`);
+  toast(hidden ? `${e.name || repo} shows for everyone again.` : `${e.name || repo} is hidden: only admin mode shows it.`);
+  await loadCurated();
+  loadPorts();
 }
 
 async function editorExport() {
@@ -1550,7 +1794,12 @@ document.addEventListener('input', (e) => {
   if (!ed || state.view.name !== 'collision') return;
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
+  // Kept in state, so a re-render (the release list arriving) doesn't wipe what was typed
+  if (t.dataset.search !== undefined) { ed.queries[t.dataset.search] = t.value; return; }
   if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.dataset?.search !== undefined && state.editor) editorSearch(Number(e.target.dataset.search));
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
@@ -1564,6 +1813,7 @@ document.addEventListener('change', (e) => {
   const t = e.target;
   if (!ed || state.view.name !== 'collision') return;
   if (t.name === 'ed-base') ed.base = t.value;
+  if (t.id === 'ed-hidden') ed.hidden = t.checked;
   if (t.dataset.src !== undefined && t.type === 'checkbox') ed.sources[Number(t.dataset.src)][t.dataset.key] = t.checked;
 });
 
@@ -1685,88 +1935,164 @@ async function importFeedFile(file) {
   if (r.uploaders.length) await sourcesChanged();
 }
 
-// ─── right-click menu (ports), after Quiver's ────────────────────────────────
+// ─── row actions: the ⋯ button and the right-click menu ─────────────────────
+// Every row menu reads this one list (ListView.createActions). An action is
+// { id, label, icon, group, kinds, when(item, ctx), run(item, ctx) }; the
+// menu draws one section per group, in ListView.MENU_GROUPS order (pin,
+// collection, play, manage, goto, admin, remove). More actions (the admin
+// group's Make collision) are added with rowActions.register(...) and need
+// no change to the rows or the menu.
 
-// Entries are [label, key], [label, [...entries]] for a submenu, or '-'
-function portMenu(p) {
-  const lib = state.library[p.id];
-  const about = [
-    ['Details', 'details'],
-    ['Repository on GitHub', 'repo'],
-    ...(p.data.iaIdentifier ? [['Game data on archive.org', 'data']] : []),
-  ];
-  const library = [inPortLibrary(p) ? 'Remove from Library' : 'Add to Library', 'toggle-library'];
-  if (state.downloads.has(p.id)) return [['Cancel Download', 'cancel'], '-', library, ['About', about]];
-  if (lib?.install_dir) {
-    return [
-      ['Launch', 'launch'],
-      ['Open Folder', 'open-folder'],
-      ['Launch Options', [['Choose Executable…', 'choose-exe'], ['Add to Steam…', 'steam']]],
-      library,
-      ['Game Data…', 'collision'],
-      ['About', about],
-      '-',
-      ['Delete', 'delete', 'danger'],
-    ];
-  }
-  return [['Download', 'install'], ['Locate Existing Install…', 'locate'], library, ['Game Data…', 'collision'], ['About', about]];
+const rowActions = ListView.createActions();
+const itemDl = (x, ctx) => state.downloads.get(ctx.kind === 'port' ? x.id : x.identifier);
+const itemInstalled = (x, ctx) => (ctx.kind === 'port' ? !!state.library[x.id]?.install_dir : isInstalled(x));
+const gameTarget = (g) => installedVersion(g) || g;
+const targetOf = (x, ctx) => (ctx.kind === 'port' ? portTarget(x) : gameTarget(x));
+const idle = (x, ctx) => !itemDl(x, ctx);
+const linkOf = (x, ctx) => (ctx.kind === 'port' ? `https://github.com/${x.repository}` : x._manual ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
+
+const ROW_ACTIONS = [
+  // play: get it, run it, find it on disk
+  { id: 'play', label: 'Play', icon: 'play', group: 'play', kinds: ['game'],
+    when: (g, ctx) => itemInstalled(g, ctx) && idle(g, ctx), run: (g) => playGame(gameTarget(g)) },
+  { id: 'launch', label: 'Launch', icon: 'play', group: 'play', kinds: ['port'],
+    when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), run: (p) => launchPort(p) },
+  { id: 'install', label: (x, ctx) => (ctx.kind === 'port' ? 'Download' : 'Install'), icon: 'download', group: 'play',
+    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual,
+    run: (x, ctx) => (ctx.kind === 'port' ? installPort(x) : installGame(x)) },
+  { id: 'cancel', label: 'Cancel Download', icon: 'close', group: 'play', when: (x, ctx) => !!itemDl(x, ctx),
+    run: async (x, ctx) => { const dl = itemDl(x, ctx); if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId }); } },
+  { id: 'locate', label: 'Locate Existing Install…', icon: 'folder', group: 'play', kinds: ['port'],
+    when: (p, ctx) => !itemInstalled(p, ctx) && idle(p, ctx), run: (p) => locateInstall(p) },
+  { id: 'open-folder', label: 'Open Folder', icon: 'folder', group: 'play',
+    when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx), run: (x, ctx) => api.openGameLocation({ identifier: targetOf(x, ctx).identifier }) },
+  { id: 'launch-options', label: 'Launch Options', icon: 'settings', group: 'play', kinds: ['port'],
+    when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), children: [
+      { id: 'choose-exe', label: 'Choose Executable…', icon: 'play', run: (p) => pickExe(p, 'default') },
+      { id: 'steam', label: 'Add to Steam…', icon: 'plus', run: (p) => pickExe(p, 'steam') },
+    ] },
+  { id: 'game-steam', label: 'Add to Steam…', icon: 'plus', group: 'play', kinds: ['game'],
+    when: (g, ctx) => itemInstalled(g, ctx) && idle(g, ctx), run: (g) => { openDetail('game', g.identifier); return onAction('steam'); } },
+
+  // manage: favourite, library, properties
+  { id: 'favorite', label: (g, ctx) => (ListView.isFavorite(g, ctx) ? 'Unfavorite' : 'Favorite'), icon: 'star', group: 'manage', kinds: ['game'],
+    run: async (g, ctx) => {
+      const on = ListView.isFavorite(g, ctx);
+      const ids = on ? (g._versions || [g]).filter(v => state.library[v.identifier]?.is_favorite).map(v => v.identifier) : [gameTarget(g).identifier];
+      for (const identifier of ids) await api.setFavorite({ identifier, isFavorite: !on });
+      await reloadLibrary();
+      render();
+    } },
+  { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
+    run: (p) => togglePort(p.id) },
+  { id: 'collision', label: 'Game Data…', icon: 'box', group: 'manage', kinds: ['port'], run: (p) => go('collision', p.repository) },
+  { id: 'details', label: 'Properties', icon: 'info', group: 'manage',
+    run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
+
+  // goto: where it comes from, and a link to it
+  { id: 'uploader', label: 'Go to Uploader', icon: 'person', group: 'goto', kinds: ['game'],
+    when: (g) => state.sources.some(s => s.uploader === g._uploader && s.enabled !== false), run: (g) => go('uploader', g._uploader) },
+  { id: 'shelf', label: 'Go to Shelf', icon: 'wall', group: 'goto', kinds: ['port'],
+    when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
+  { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
+    run: (p) => api.openExternal(`https://github.com/${p.repository}`) },
+  { id: 'data', label: 'Game Data on archive.org', icon: 'globe', group: 'goto', kinds: ['port'],
+    when: (p) => p.data.iaIdentifier, run: (p) => api.openExternal(`https://archive.org/details/${p.data.iaIdentifier}`) },
+  { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
+    when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
+  { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
+    run: async (x, ctx) => {
+      try { await navigator.clipboard.writeText(linkOf(x, ctx)); toast('Link copied.'); } catch { toast(linkOf(x, ctx), 8000); }
+    } },
+
+  // remove: files off the disk, or the entry out of the library
+  { id: 'delete', label: 'Delete', icon: 'trash', group: 'remove', danger: true,
+    when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx) && !x._manual,
+    run: async (x, ctx) => {
+      const name = ctx.kind === 'port' ? x.name : getTitle(x);
+      if (!confirm(`Delete ${name}? Its install folder goes to the Recycle Bin.`)) return;
+      const r = await api.deleteGame({ identifier: targetOf(x, ctx).identifier, trash: true });
+      if (!r.ok) return toast(`Couldn't delete: ${r.error}`);
+      toast(`Deleted ${name}.`);
+      await reloadLibrary();
+      render();
+    } },
+  { id: 'manual-remove', label: 'Remove from Library', icon: 'trash', group: 'remove', danger: true, kinds: ['game'],
+    when: (g) => g._manual, run: (g) => { openDetail('game', g.identifier); return onAction('manual-remove'); } },
+  // Admin mode (docs/ADMIN.md): a game tile with this archive.org item as its data
+  { id: 'make-tile', label: 'Make a Tile…', icon: 'plus', group: 'admin', kinds: ['game'],
+    when: (g) => state.admin && !g._manual, run: (g) => adminFromItem(g.identifier) },
+];
+ROW_ACTIONS.forEach(rowActions.register);
+
+// The item a row, card or ⋯ button stands for
+function menuItem(kind, id) {
+  if (kind === 'port') return state.ports?.items.find(i => i.id === id) || null;
+  return state.games.find(g => g.identifier === id) || state.versions.find(v => v.identifier === id)
+    || (state.library[id] ? rowGame(state.library[id]) : null);
 }
 
-function menuHtml(entries) {
-  return entries.map(e => e === '-' ? '<div class="sep"></div>'
-    : Array.isArray(e[1])
-      ? `<div class="has-sub"><button class="mi" data-sub>${esc(e[0])}<span class="chev">›</span></button><div class="ctxmenu sub">${menuHtml(e[1])}</div></div>`
-      : `<button class="mi ${e[2] || ''}" data-menu="${esc(e[1])}">${esc(e[0])}</button>`).join('');
+function menuHtml(sections) {
+  const item = (e) => {
+    const body = `${e.icon ? `<i class="ico mi-ico" data-ico="${esc(e.icon)}"></i>` : '<i class="mi-ico"></i>'}<span class="mi-label">${esc(e.label)}</span>`;
+    return e.children
+      ? `<div class="has-sub"><button class="mi" role="menuitem" aria-haspopup="menu" data-sub>${body}<i class="ico chev" data-ico="chev"></i></button>
+          <div class="ctxmenu sub" role="menu">${menuHtml([e.children])}</div></div>`
+      : `<button class="mi${e.danger ? ' danger' : ''}" role="menuitem" data-menu="${esc(e.id)}">${body}</button>`;
+  };
+  return sections.map(s => s.map(item).join('')).join('<div class="sep" role="separator"></div>');
 }
 
-let menuPort = null;
-function openMenu(p, x, y) {
-  menuPort = p;
+let menuTarget = null;   // { kind, item }
+function openMenu(kind, item, x, y, { alignRight = false } = {}) {
+  closeDropdown();
+  menuTarget = { kind, item };
   let el = $('#ctxmenu');
   if (!el) { el = document.createElement('div'); el.id = 'ctxmenu'; el.className = 'ctxmenu'; el.setAttribute('role', 'menu'); document.body.append(el); }
-  el.innerHTML = menuHtml(portMenu(p));
+  el.innerHTML = menuHtml(rowActions.sections(item, listCtx(kind)));
   el.classList.remove('hidden', 'flip');
   // Keep it on screen; submenus open to the left near the right edge
   const r = el.getBoundingClientRect();
-  el.style.left = `${Math.max(8, Math.min(x, innerWidth - r.width - 8))}px`;
+  const left = alignRight ? x - r.width : x;
+  el.style.left = `${Math.max(8, Math.min(left, innerWidth - r.width - 8))}px`;
   el.style.top = `${Math.max(8, Math.min(y, innerHeight - r.height - 8))}px`;
-  if (x + r.width * 2 > innerWidth) el.classList.add('flip');
+  if (Math.min(left, innerWidth - r.width - 8) + r.width * 2 > innerWidth) el.classList.add('flip');
   el.querySelector('.mi')?.focus();
 }
-function closeMenu() { $('#ctxmenu')?.classList.add('hidden'); menuPort = null; }
+function closeMenu() { $('#ctxmenu')?.classList.add('hidden'); menuTarget = null; }
+
+// Up and Down walk the menu's items, Right opens a submenu, Left leaves it
+function menuKey(e) {
+  const el = $('#ctxmenu');
+  const inSub = document.activeElement?.closest('.sub');
+  const scope = inSub || el;
+  const items = [...scope.querySelectorAll(':scope > .mi, :scope > .has-sub > .mi')];
+  const at = items.indexOf(document.activeElement);
+  const move = (i) => { e.preventDefault(); items[(i + items.length) % items.length]?.focus(); };
+  if (e.key === 'ArrowDown') return move(at + 1);
+  if (e.key === 'ArrowUp') return move(at < 0 ? items.length - 1 : at - 1);
+  if (e.key === 'ArrowRight' && document.activeElement?.dataset.sub !== undefined) {
+    e.preventDefault();
+    return document.activeElement.parentNode.querySelector('.sub .mi')?.focus();
+  }
+  if (e.key === 'ArrowLeft' && inSub) { e.preventDefault(); return inSub.parentNode.querySelector(':scope > .mi')?.focus(); }
+}
 
 async function runMenu(btn) {
-  const p = menuPort;
-  const key = btn.dataset.menu;
+  const target = menuTarget;
+  const action = rowActions.get(btn.dataset.menu);
   closeMenu();
-  if (!p) return;
-  const v = portTarget(p);
-  switch (key) {
-    case 'install': return installPort(p);
-    case 'cancel': {
-      const dl = state.downloads.get(p.id);
-      if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId });
-      return;
-    }
-    case 'locate': return locateInstall(p);
-    case 'launch': return launchPort(p);
-    case 'open-folder': return api.openGameLocation({ identifier: p.id });
-    case 'choose-exe': return pickExe(p, 'default');
-    case 'steam': return pickExe(p, 'steam');
-    case 'toggle-library': return togglePort(p.id);
-    case 'details': return openDetail('port', p.id);
-    case 'collision': return go('collision', p.repository);
-    case 'repo': return api.openExternal(`https://github.com/${p.repository}`);
-    case 'data': return api.openExternal(`https://archive.org/details/${p.data.iaIdentifier}`);
-    case 'delete': {
-      if (!confirm(`Delete ${p.name}? Its install folder goes to the Recycle Bin.`)) return;
-      const r = await api.deleteGame({ identifier: v.identifier, trash: true });
-      if (!r.ok) return toast(`Couldn't delete: ${r.error}`);
-      toast(`Deleted ${p.name}.`);
-      await reloadLibrary();
-      return render();
-    }
-  }
+  if (!target || !action?.run) return;
+  return action.run(target.item, listCtx(target.kind));
+}
+
+// The left gutter's play button: an installed item launches, others open their details
+function rowGo(kind, id) {
+  const x = menuItem(kind, id);
+  if (!x) return;
+  const ctx = listCtx(kind);
+  if (itemInstalled(x, ctx) && idle(x, ctx)) return kind === 'port' ? launchPort(x) : playGame(gameTarget(x));
+  return openDetail(kind, id);
 }
 
 // An install already on disk (a manual download, or from another launcher)
@@ -1804,19 +2130,24 @@ async function setDefaultExe(v, exePath) {
   toast(`${getTitle(v)} now launches ${exePath.split(/[\\/]/).pop()}.`);
 }
 
+// Right-click on any game or port (card, list row, New's list) opens its row menu
 document.addEventListener('contextmenu', (e) => {
-  const card = e.target.closest('.port-card');
-  const p = card && state.ports?.items.find(i => i.id === card.dataset.id);
-  if (!p) return closeMenu();
+  const card = e.target.closest('#body [data-open]');
+  const item = card && menuItem(card.dataset.open, card.dataset.id);
+  if (!item) return closeMenu();
   e.preventDefault();
   // The keyboard menu key reports 0,0; anchor to the card instead
   const r = card.getBoundingClientRect();
-  openMenu(p, e.clientX || r.left + r.width / 2, e.clientY || r.top + r.height / 2);
+  openMenu(card.dataset.open, item, e.clientX || r.left + r.width / 2, e.clientY || r.top + r.height / 2);
 });
-document.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctxmenu')) closeMenu(); });
-window.addEventListener('blur', closeMenu);
-window.addEventListener('resize', closeMenu);
-document.addEventListener('scroll', closeMenu, true);
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest('#ctxmenu')) closeMenu();
+  if (!e.target.closest('#ddmenu, [data-dd]')) closeDropdown();
+});
+const closeMenus = () => { closeMenu(); closeDropdown(); };
+window.addEventListener('blur', closeMenus);
+window.addEventListener('resize', closeMenus);
+document.addEventListener('scroll', (e) => { if (!e.target.closest?.('#ddmenu, #ctxmenu')) closeMenus(); }, true);
 
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
@@ -1876,6 +2207,13 @@ async function onAction(action, el) {
     case 'ed-save': return editorSave();
     case 'ed-delete': return editorDelete();
     case 'ed-export': return editorExport();
+    case 'ed-releases': return editorReleases();
+    case 'ed-close-releases': state.editor.releases = null; return render();
+    case 'ed-take-asset': return editorTakeAsset(el.dataset.pattern);
+    case 'ed-search': return editorSearch(Number(el.dataset.i));
+    case 'ed-pick-item': return editorPickItem(el.dataset.ia);
+    case 'admin-from-item': return adminFromItem(el.dataset.ia);
+    case 'admin-hide': return adminToggleHidden(el.dataset.repo);
     case 'feed-add': return addCollisionFeed();
     case 'user-file-save': return saveUserFile();
     case 'feed-trust': return trustUploader(el);
@@ -1939,9 +2277,18 @@ document.addEventListener('click', (e) => {
   if (menuBtn) {
     const p = state.ports?.items.find(i => i.id === menuBtn.closest('.port-card')?.dataset.id);
     const r = menuBtn.getBoundingClientRect();
-    if (p) { e.stopPropagation(); return openMenu(p, r.left, r.bottom + 4); }
+    if (p) { e.stopPropagation(); return openMenu('port', p, r.left, r.bottom + 4); }
   }
-  const t = e.target.closest('button, a, [data-close]');
+  // A list row's ⋯ button: the row menu, its right edge under the button
+  const rowMenu = e.target.closest('[data-row-menu]');
+  if (rowMenu) {
+    const item = menuItem(rowMenu.dataset.rowMenu, rowMenu.dataset.id);
+    const r = rowMenu.getBoundingClientRect();
+    if (item) { e.stopPropagation(); return openMenu(rowMenu.dataset.rowMenu, item, r.right, r.bottom + 4, { alignRight: true }); }
+  }
+  const opt = e.target.closest('#ddmenu .dd-opt');
+  if (opt) return pickDropdown(opt);
+  const t = e.target.closest('button, a, [data-close], .lv-row');
   if (!t) return;
   if (t.matches('[data-close]')) return closeDetail();
   if (t.dataset.href) { e.preventDefault(); return api.openExternal(t.dataset.href); }
@@ -1966,6 +2313,17 @@ document.addEventListener('click', (e) => {
   }
   if (t.dataset.menu !== undefined) return runMenu(t);
   if (t.dataset.sub !== undefined) return;
+  if (t.dataset.dd) return ddOpen === t.dataset.dd ? closeDropdown() : openDropdown(t.dataset.dd);
+  if (t.dataset.rowGo) return rowGo(t.dataset.rowGo, t.dataset.id);
+  if (t.dataset.sortCol) {
+    const col = LIST_COLUMNS[t.dataset.kind]?.find(c => c.id === t.dataset.sortCol);
+    const next = ListView.headerSort(libPrefs[t.dataset.page], col);
+    if (!next) return;
+    setPref(t.dataset.page, 'sort', next.sort);
+    setPref(t.dataset.page, 'order', next.order);
+    return render();
+  }
+  if (t.dataset.viewAs) { setPref(t.dataset.page, 'viewAs', t.dataset.viewAs); return render(); }
   if (t.dataset.pageGo) { state.libPage = Number(t.dataset.pageGo); render(); $('#body').scrollTop = 0; return; }
   if (t.dataset.collapse) return toggleFold(t.dataset.collapse);
   if (t.dataset.action) return onAction(t.dataset.action, t);
@@ -1973,7 +2331,6 @@ document.addEventListener('click', (e) => {
 
 document.addEventListener('change', (e) => {
   const t = e.target;
-  if (t.dataset.pref) { setPref(t.dataset.page, t.dataset.pref, t.value); return render(); }
   if (t.id === 'page-input') { state.libPage = Math.max(1, Number(t.value) || 1); render(); $('#body').scrollTop = 0; }
 });
 let libSearchTimer;
@@ -1995,7 +2352,14 @@ $('#q').addEventListener('input', (e) => {
 });
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && popKind) return closePop();
-  if (e.key === 'Escape' && menuPort) return closeMenu();
+  if (ddOpen && e.target.closest?.('#ddmenu')) return dropdownKey(e);
+  if (ddOpen && e.key === 'Escape') { e.preventDefault(); return closeDropdown(true); }
+  if (menuTarget && e.target.closest?.('#ctxmenu')) menuKey(e);
+  if (e.key === 'Escape' && menuTarget) return closeMenu();
+  // A trigger opens its dropdown from the keyboard too
+  if (e.target.dataset?.dd && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); return openDropdown(e.target.dataset.dd); }
+  // Enter on a focused list row opens it, as a click does
+  if (e.key === 'Enter' && e.target.classList?.contains('lv-row')) { e.preventDefault(); return openDetail(e.target.dataset.open, e.target.dataset.id); }
   if (e.key === 'Escape') { if (state.detail) closeDetail(); else if (state.query) { $('#q').value = ''; state.query = ''; render(); } }
   if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && stepRow(e)) e.preventDefault();
   if ((e.ctrlKey || e.metaKey) && e.key === 'f') { e.preventDefault(); $('#q').focus(); }
@@ -2126,7 +2490,9 @@ async function showAnnouncement() {
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
+  state.admin = !!(await api.getHealth().catch(() => ({}))).admin;
   document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.admin));
   state.sources = (await api.getSources()).sources;
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
