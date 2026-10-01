@@ -102,19 +102,24 @@ test('admin: a wall game\'s detail makes a tile from its archive.org item', asyn
   await expect(page.locator('.browser .pick').first()).toBeVisible();
 });
 
-test('admin: in list view, a wall row makes a tile and a port row edits its collision', async () => {
+test('admin: in list view, a wall row\'s menu makes a tile and a port row\'s edits its collision', async () => {
   await page.locator('[data-view="wall"]').first().click();
   await page.evaluate(() => { libPrefs.wall.viewAs = 'list'; render(); }); // eslint-disable-line no-undef
-  const row = page.locator('.list-row[data-open="game"]').first();
-  const id = await row.getAttribute('data-id');
-  await row.locator('[data-make-tile]').click();
+  const row = page.locator('#body .lv-row').first();
+  const id = await row.locator('.lr-more').getAttribute('data-id');
+  await row.hover();
+  await row.locator('.lr-more').click();
+  await page.locator('#ctxmenu [data-menu="make-tile"]').click();
   await expect(page.locator('#heading')).toHaveText('New game tile');
   await expect(page.locator('[data-src="0"][data-key="ia"]')).toHaveValue(id);
   await expect(page.locator('#detail.open')).toHaveCount(0);
 
   await page.locator('#nav-shelves .navitem', { hasText: 'y4bo ports' }).click();
   await page.evaluate(() => { libPrefs.shelf.viewAs = 'list'; render(); }); // eslint-disable-line no-undef
-  await page.locator('.list-row', { hasText: 'Tile Port' }).locator('[data-edit-repo]').click();
+  const port = page.locator('#body .lv-row', { hasText: 'Tile Port' });
+  await port.hover();
+  await port.locator('.lr-more').click();
+  await page.locator('#ctxmenu [data-menu="collision"]').click();
   await expect(page.locator('#heading')).toHaveText('Game data');
   await expect(page.locator('#ed-exe')).toHaveValue('pd.x86_64.exe');
 });
