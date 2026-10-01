@@ -4,7 +4,7 @@
  * the fixtures can only imitate (Perfect Dark first). Not part of the test
  * suite: CI runs it as the non-blocking "live ports" job.
  *
- *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...]
+ *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...] [--zip item/file.zip ...]
  *
  * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
@@ -28,13 +28,15 @@ const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
 
 function parseArgs(argv) {
   const ia = [];
+  const zips = [];
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--ia') ia.push(argv[++i]);
+    else if (argv[i] === '--zip') zips.push(argv[++i]);
     else rest.push(argv[i]);
   }
   const repos = rest.filter(a => !a.startsWith('--'));
-  return { repos: repos.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia };
+  return { repos: repos.length ? repos : DEFAULT, keep: rest.includes('--keep'), ia, zips };
 }
 
 // "item" or "item:regex" → the item's files whose path matches, to pick a data source from
@@ -66,10 +68,24 @@ function itemFor(c) {
 function tree(dir, depth = 0, out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);
-    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${fs.statSync(p).size} bytes)`}`);
+    const size = e.isDirectory() ? 0 : fs.statSync(p).size;
+    // sha1 for the small files, so a staged ROM can be checked against a known dump
+    const sum = !e.isDirectory() && size < 128 * 1024 * 1024 ? `, sha1 ${require('crypto').createHash('sha1').update(fs.readFileSync(p)).digest('hex')}` : '';
+    out.push(`${'  '.repeat(depth)}${e.name}${e.isDirectory() ? '/' : ` (${size} bytes${sum})`}${/\.(z64|n64|v64)$/i.test(e.name) ? `, ${n64Header(p)}` : ''}`);
     if (e.isDirectory() && depth < 2) tree(p, depth + 1, out);
   }
   return out;
+}
+
+// An N64 ROM's byte order and header, so a dump can be told apart from a byteswapped copy or another revision
+function n64Header(file) {
+  const b = Buffer.alloc(64);
+  const fd = fs.openSync(file, 'r');
+  try { fs.readSync(fd, b, 0, 64, 0); } finally { fs.closeSync(fd); }
+  const magic = b.readUInt32BE(0).toString(16);
+  const order = { 80371240: 'z64 (big-endian)', 37804012: 'v64 (byteswapped)', 40123780: 'n64 (little-endian)' }[magic] || `unknown order ${magic}`;
+  if (!order.startsWith('z64')) return order;
+  return `${order}, title "${b.toString('latin1', 0x20, 0x34).trim()}", code ${b.toString('latin1', 0x3b, 0x3f)}, rev ${b[0x3f]}`;
 }
 
 async function releases(repository, print) {
@@ -81,6 +97,53 @@ async function releases(repository, print) {
   }
 }
 
+// An archive listing as { path, size } rows → lines to print. A long one is
+// summed per folder (two levels down), plus the files that say what it is:
+// executables and libraries, and Build-engine and id-style game data
+const KEY_FILE = /\.(exe|dll|grp|pk3|ipk3|rff|con|ssi|wad|z64|n64|v64|iso|ciso)$/i;
+function summarizeListing(entries, { limit = 150 } = {}) {
+  if (entries.length <= limit) return entries.map(e => `${e.path}${e.size != null ? ` (${e.size} bytes)` : ''}`);
+  const dirs = new Map();
+  for (const e of entries) {
+    if (e.size == null) continue;
+    const parts = e.path.split('/');
+    const dir = parts.length > 1 ? parts.slice(0, Math.min(2, parts.length - 1)).join('/') + '/' : '(top)';
+    const d = dirs.get(dir) || { files: 0, bytes: 0 };
+    d.files++; d.bytes += e.size;
+    dirs.set(dir, d);
+  }
+  const out = [`${entries.length} entries; by folder:`];
+  for (const [dir, d] of [...dirs].sort()) out.push(`  ${dir} ${d.files} files, ${d.bytes} bytes`);
+  const keys = entries.filter(e => e.size != null && KEY_FILE.test(e.path) && e.path.split('/').length <= 4);
+  out.push(`key files (${keys.length}):`);
+  for (const e of keys.slice(0, limit)) out.push(`  ${e.path} (${e.size} bytes)`);
+  if (keys.length > limit) out.push(`  … ${keys.length - limit} more`);
+  return out;
+}
+
+// archive.org's archive listing page → { path, size } rows. Each row reads
+// "path date time [size]"; folders have no size
+function parseListing(html) {
+  return [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)]
+    .map(m => m[1].replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim())
+    .map(row => row.match(/^(.+?) (\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?)(?: (\d+))?$/))
+    .filter(Boolean)
+    .map(([, p, , size]) => ({ path: p.replace(/\/$/, ''), size: size ? Number(size) : null }));
+}
+
+// "item/file.zip" → what the archive holds, from archive.org's own listing
+async function listZip(spec, print) {
+  const at = spec.indexOf('/');
+  const url = `https://archive.org/download/${encodeURIComponent(spec.slice(0, at))}/${encodeURIComponent(spec.slice(at + 1))}/`;
+  let r = await getText(url, { kind: 'archive' });
+  if ([301, 302, 303, 307, 308].includes(r.status) && r.headers?.location) r = await getText(new URL(r.headers.location, url).toString(), { kind: 'archive' });
+  print(`\n== zip ${spec}: HTTP ${r.status}${r.error ? ` ${r.error}` : ''}`);
+  if (r.status !== 200) return 1;
+  const entries = parseListing(r.body);
+  for (const line of summarizeListing(entries)) print(`  ${line}`);
+  return 0;
+}
+
 async function run(opts, print = (l) => console.log(l)) {
   const catalog = JSON.parse(fs.readFileSync(path.join(ROOT, 'catalog', 'collisions.json'), 'utf8'));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'live-port-'));
@@ -90,6 +153,7 @@ async function run(opts, print = (l) => console.log(l)) {
   const installs = createInstalls({ settings, library, archive: createArchive({ log: () => {} }), gamesDir: dir, log: print });
   let failed = 0;
   for (const spec of opts.ia || []) failed += await listIa(spec, print);
+  for (const spec of opts.zips || []) failed += await listZip(spec, print);
   try {
     for (const repo of opts.repos) {
       const c = catalog.find(x => x.repository.toLowerCase() === repo.toLowerCase());
@@ -129,4 +193,4 @@ if (require.main === module) {
     .catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { parseArgs, itemFor, run };
+module.exports = { parseArgs, itemFor, n64Header, parseListing, summarizeListing, run };
