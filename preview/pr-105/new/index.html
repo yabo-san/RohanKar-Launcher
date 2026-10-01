@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self';
+    style-src 'self' 'unsafe-inline';
+    connect-src 'self' http://127.0.0.1:*;
+    img-src 'self' https: http://127.0.0.1:* blob: data:;
+  ">
+  <title>y4bo</title>
+  <link rel="stylesheet" href="app.css" />
+</head>
+<body>
+
+  <div class="app" id="app">
+    <nav class="sidebar" id="sidebar" aria-label="Main">
+      <div class="search"><input id="q" type="search" placeholder="Search" aria-label="Search games and ports" autocomplete="off" /></div>
+      <div class="seg" role="group" aria-label="Show">
+        <button class="on" data-seg="all" aria-label="Everything" title="Everything"><i class="ico" data-ico="browse"></i></button>
+        <button data-seg="yours" aria-label="Only yours" title="Only yours"><i class="ico" data-ico="box"></i></button>
+      </div>
+
+      <div class="navscroll">
+        <button class="navgroup" data-collapse="browse">y4bo</button>
+        <div class="navlist" data-group="browse">
+          <button class="navitem active" data-view="home"><i class="ico" data-ico="home"></i>Home</button>
+          <button class="navitem" data-view="new"><i class="ico" data-ico="new"></i>New</button>
+          <button class="navitem" data-view="wall"><i class="ico" data-ico="wall"></i>Game wall<span class="n" id="n-wall"></span></button>
+        </div>
+
+        <button class="navgroup" data-collapse="yours">Library</button>
+        <div class="navlist" data-group="yours">
+          <button class="navitem" data-view="library"><i class="ico" data-ico="library"></i>Library<span class="n" id="n-library"></span></button>
+          <button class="navitem" data-view="updates"><i class="ico" data-ico="updates"></i>Keep current<span class="n attn" id="n-updates"></span></button>
+        </div>
+
+        <button class="navgroup" data-collapse="uploaders">Uploaders</button>
+        <div class="navlist" id="nav-uploaders" data-group="uploaders"></div>
+
+        <button class="navgroup" data-collapse="ports">Ports</button>
+        <div class="navlist" data-group="ports">
+          <button class="navitem admin-only hidden" data-view="collision" id="nav-new-tile"><i class="ico" data-ico="plus"></i>New game tile…</button>
+          <button class="navitem admin-only hidden" data-view="admin" id="nav-admin"><i class="ico" data-ico="library"></i>Collisions database</button>
+          <button class="navitem additional-only hidden" data-view="collision" id="nav-add-repo"><i class="ico" data-ico="plus"></i>Add a GitHub repo…</button>
+          <div id="nav-shelves"></div>
+        </div>
+      </div>
+
+      <button class="me" id="btn-settings" data-view="settings" title="Settings">
+        <i class="me-avatar" aria-hidden="true">y4</i>
+        <span class="me-text"><span class="brand">y4<span>bo</span></span><small>Settings</small></span>
+      </button>
+    </nav>
+
+    <main class="main">
+      <header class="chrome">
+        <button class="tb" id="nav-back" aria-label="Back" title="Back" disabled><i class="ico" data-ico="back"></i></button>
+        <button class="tb" id="nav-fwd" aria-label="Forward" title="Forward" disabled><i class="ico" data-ico="fwd"></i></button>
+        <button class="tb" id="btn-sidebar" aria-label="Toggle sidebar" title="Toggle sidebar"><i class="ico" data-ico="sidebar"></i></button>
+        <button class="tb additional-only hidden" data-view="collision" aria-label="Add a GitHub repo" title="Add a GitHub repo"><i class="ico" data-ico="addwin"></i></button>
+        <span class="drag"></span>
+        <button class="tb" id="btn-downloads" data-pop="downloads" aria-label="Downloads" title="Downloads" aria-haspopup="true"><i class="ico" data-ico="downloads"></i><span class="badge dot" id="dl-dot" hidden></span></button>
+        <button class="tb" id="btn-notices" data-view="updates" aria-label="Notifications" title="Notifications: catalog changes to review"><i class="ico" data-ico="queue"></i><span class="badge" id="n-notices" hidden></span></button>
+        <button class="tb" id="btn-more" data-pop="more" aria-label="More" title="More" aria-haspopup="true"><i class="ico" data-ico="more"></i></button>
+        <div class="winctl">
+          <button id="win-min" class="light min" aria-label="Minimise" title="Minimise"></button>
+          <button id="win-max" class="light max" aria-label="Maximise" title="Maximise"></button>
+          <button id="win-close" class="light close" aria-label="Close" title="Close"></button>
+        </div>
+      </header>
+      <div class="announce hidden" id="announce" role="status"></div>
+      <div class="body" id="body"></div>
+      <div class="nowbar hidden" id="nowbar" role="status"></div>
+      <div class="pop hidden" id="pop" role="menu"></div>
+    </main>
+  </div>
+
+  <aside class="detail hidden" id="detail" aria-label="Details">
+    <div class="detail-scrim" data-close></div>
+    <div class="detail-panel" id="detail-panel"></div>
+  </aside>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="../preview.js"></script>
+
+  <script src="../api.js"></script>
+  <script src="../sources.js"></script>
+  <script src="../list-view.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
