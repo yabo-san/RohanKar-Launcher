@@ -43,6 +43,7 @@ test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, {
     page: 'new/index.html',
     catalogs: [{ file: 'Nintendo.json', shelf: 'Nintendo' }, { file: 'Xbox.json', shelf: 'Xbox' }, { file: 'TestPorts.json', shelf: 'Test ports' }],
+    exeDir: fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-e2e-exe-')),
   });
   page = await browser.newPage();
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[frontend] ${m.text()}`); });
@@ -592,6 +593,19 @@ test('Settings feeds: subscribe, trust its uploader, copy your feed, import a fe
 
   // put the uploaders back, so the rest of the run sees the shipped wall
   await page.evaluate((s) => api.saveSettings({ sources: s.sources }), before);
+});
+
+test('Settings > Data folder: keep data beside the app asks, then waits for a restart; Don\'t move cancels', async () => {
+  await page.locator('#btn-settings').click();
+  const box = page.locator('#portable');
+  await expect(box).toContainText('Your library, settings, caches and games are in');
+  await box.locator('[data-action="portable-on"]').click();
+  await expect(page.locator('#modal-title')).toHaveText('Keep data beside the app?');
+  await page.locator('#modal [data-modal="1"]').click();
+  await expect(box).toContainText('when y4bo restarts');
+  await expect(box).toContainText('y4bo-data');
+  await box.locator('[data-action="portable-cancel"]').click();
+  await expect(box.locator('[data-action="portable-on"]')).toBeVisible();
 });
 
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {

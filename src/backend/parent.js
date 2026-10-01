@@ -14,7 +14,7 @@
  */
 
 // The host methods the desktop app answers; the rest keep the backend's defaults
-const HOST_METHODS = ['openPath', 'trashItem', 'openExternal', 'chooseFolder', 'window', 'addToSteam', 'updaterInstall'];
+const HOST_METHODS = ['openPath', 'trashItem', 'openExternal', 'chooseFolder', 'window', 'addToSteam', 'updaterInstall', 'relaunch'];
 
 function connectParent(port) {
   let nextId = 1;

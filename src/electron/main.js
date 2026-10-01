@@ -19,7 +19,7 @@ const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
 const { parseCli } = require('../backend/cli');
-const { resolveUserData } = require('./user-data');
+const { resolveDataDir } = require('./user-data');
 
 // Identity across the rename to y4bo (package.json can't hold comments):
 // build.appId stays "com.rohankar.launcher". It is internal (Windows
@@ -30,11 +30,14 @@ const { resolveUserData } = require('./user-data');
 // would leave RohanKar Launcher behind. build.nsis.guid pins that GUID
 // (2bb8c09d-2711-598b-90f1-e9685ecdb3dc) so a later appId change can't break it.
 // The data folder: see user-data.js. Set before anything reads userData.
-const userData = resolveUserData({ current: app.getPath('userData'), appData: app.getPath('appData'), name: app.name });
-if (userData.reason === 'legacy') {
+// A packaged app checks for portable data beside its executable first.
+const EXE_DIR = app.isPackaged ? path.dirname(process.execPath) : null;
+const userData = resolveDataDir({ current: app.getPath('userData'), appData: app.getPath('appData'), name: app.name, exeDir: EXE_DIR });
+if (userData.reason === 'legacy' || userData.reason === 'portable') {
   app.setPath('userData', userData.dir);
-  console.log(`[userData] keeping the existing data folder ${userData.dir}`);
+  console.log(`[userData] ${userData.reason === 'portable' ? 'portable data in' : 'keeping the existing data folder'} ${userData.dir}`);
 }
+const PORTABLE = userData.reason === 'portable';
 
 const USER_DATA   = app.getPath('userData');
 const HEROES_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes');
@@ -64,6 +67,8 @@ const host = {
   },
   addToSteam:     (opts) => addToSteam(opts),
   updaterInstall: () => updaterInstall(),
+  // After Settings asked to move the data folder: the backend moves it on start
+  relaunch:       () => { app.relaunch(); app.quit(); },
 };
 
 // ─── Backend process ─────────────────────────────────────────────────────────
@@ -72,7 +77,8 @@ let backend = null;         // the utility process
 let backendExited = false;
 let quitting = false;
 
-const BACKEND_ARGS = ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR];
+const BACKEND_ARGS = ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR,
+  ...(EXE_DIR ? ['--exe-dir', EXE_DIR, '--default-data-dir', userData.defaultDir] : [])];
 
 // Answers the backend's requests for OS actions
 function answerHost(proc) {
@@ -220,6 +226,11 @@ let availableVersion = null;
 async function setupAutoUpdater() {
   if (!app.isPackaged) {
     console.log('[updater] Dev mode — skipping update check');
+    return;
+  }
+  // The installer would update the installed copy, not this folder
+  if (PORTABLE) {
+    console.log('[updater] Portable data: updates come as a new zip, not the installer');
     return;
   }
   // Off unless turned on in Settings

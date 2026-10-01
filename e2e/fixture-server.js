@@ -46,7 +46,7 @@ async function startFixtures() {
 //   catalogs: Quiver list files to subscribe to first, as [{ file, shelf }]
 //   admin:    admin mode, on a copy of the fixture collisions (dataDir/collisions.json)
 // Resolves { dataDir, pageUrl, base, close }; pageUrl opens the page on that backend.
-async function startStack(settings, { page = 'index.html', catalogs = [], admin = false } = {}) {
+async function startStack(settings, { page = 'index.html', catalogs = [], admin = false, exeDir = null } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-e2e-'));
   const collisionsFile = path.join(__dirname, 'fixtures', 'collisions.json');
   if (admin) fs.copyFileSync(collisionsFile, path.join(dataDir, 'collisions.json'));
@@ -62,6 +62,8 @@ async function startStack(settings, { page = 'index.html', catalogs = [], admin 
     '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
     ...(admin ? ['--admin'] : []),
+    // As the packaged app passes them, for Settings > Data folder
+    ...(exeDir ? ['--exe-dir', exeDir, '--default-data-dir', dataDir] : []),
   ], {}, () => {});
   for (const c of catalogs) {
     await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });

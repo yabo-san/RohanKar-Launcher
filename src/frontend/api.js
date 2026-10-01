@@ -92,6 +92,10 @@ const api = (() => {
     getAppVersion:  async () => (await call('GET', '/health')).body?.version || '',
     getHealth:      async () => (await call('GET', '/health')).body || {},
     updaterInstall: () => call('POST', '/os/updater-install'),
+    // Portable data: where it lives; setPortable asks for a move on the next start
+    getPortable:    async () => (await call('GET', '/portable')).body || null,
+    setPortable:    async (portable) => { const r = await call('PUT', '/portable', { portable }); return r.ok ? { ok: true, status: r.body } : failure(r); },
+    relaunch:       () => call('POST', '/os/relaunch'),
     // Reports the latest status now, if any, then each new one
     onUpdaterStatus: (cb) => {
       on('updater', cb);

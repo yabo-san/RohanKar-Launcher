@@ -55,3 +55,15 @@ test('an explicit userData (app.setPath, --user-data-dir) is left alone', () => 
   const other = path.join(appData, 'e2e-user-data');
   assert.deepEqual(resolveUserData({ current: other, appData, name: NAME }), { dir: other, reason: 'override' });
 });
+
+test('resolveDataDir: launcher data in y4bo-data beside the executable wins; defaultDir is the usual folder', () => {
+  const { resolveDataDir } = require('../src/electron/user-data');
+  const exeDir = path.join(appData, 'Apps', 'y4bo');
+  const args = { current: current(), appData, name: NAME, exeDir };
+  assert.deepEqual(resolveDataDir(args), { dir: current(), reason: 'fresh', defaultDir: current() });
+  fs.mkdirSync(path.join(exeDir, 'y4bo-data'), { recursive: true });
+  assert.equal(resolveDataDir(args).reason, 'fresh', 'an empty y4bo-data is not portable');
+  seed(path.join('Apps', 'y4bo', 'y4bo-data'), 'library.db');
+  assert.deepEqual(resolveDataDir(args), { dir: path.join(exeDir, 'y4bo-data'), reason: 'portable', defaultDir: current() });
+  assert.equal(resolveDataDir({ ...args, exeDir: null }).reason, 'fresh', 'not packaged: never portable');
+});

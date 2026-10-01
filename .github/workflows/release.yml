@@ -69,6 +69,7 @@ jobs:
         with:
           subject-path: |
             dist/*-Setup-*.exe
+            dist/*-win-portable.zip
             dist/latest.yml
 
       - name: Attach installer to draft release
@@ -80,6 +81,7 @@ jobs:
           gh release upload "$TAG" \
             dist/*-Setup-*.exe \
             dist/*-Setup-*.exe.blockmap \
+            dist/*-win-portable.zip \
             dist/latest.yml \
             --clobber
 

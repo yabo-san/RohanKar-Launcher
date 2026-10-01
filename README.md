@@ -71,6 +71,13 @@ direction, and the choice is remembered. `RK_UI=legacy` also opens the classic o
 
 > **Upgrading from v1.0.8 or earlier?** The auto-updater in older versions does not work correctly. Please download and install **v1.0.9** manually from the link above. From v1.0.9 onwards, updates will be detected and linked to automatically.
 
+**Portable.** Each release also has **y4bo-&lt;version&gt;-win-portable.zip**. Unzip it anywhere
+(a USB stick, another drive) and run `y4bo.exe`. In **Settings → Data folder**, **Keep data
+beside the app** moves your library, settings, caches and games into a `y4bo-data` folder next
+to it, so that folder is the whole install and can be moved. The installed copy can't do this,
+since the installer replaces its own folder on every update. A portable copy doesn't update
+itself; unzip the next release over it.
+
 ---
 
 ## Development

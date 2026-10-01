@@ -312,6 +312,23 @@ curl -X PATCH -d '{"favorite":true,"notes":"needs dgVoodoo"}' http://127.0.0.1:7
 # {"identifier":"rk-e2e-halo-ce","is_favorite":1,"notes":"needs dgVoodoo",…}
 ```
 
+### `GET /portable`, `PUT /portable`, `POST /os/relaunch`
+
+Portable data (src/backend/portable.js): the library, settings, caches and games in `y4bo-data`
+beside the executable instead of `%APPDATA%`. `GET` says where the data is (`dataDir`), whether it
+is portable, where it would go (`portableDir`, `defaultDir`), a move waiting for the next start
+(`pending`), the last failed move (`error`), and whether switching is `available` (`reason`
+`installed`, `read_only` or `not_packaged` when not). `PUT {"portable":true|false}` asks for the
+move on the next start (asking for where it already is cancels one), 409 with that reason when it
+isn't available. The backend moves the files on start, before library.db opens, and rewrites the
+install paths that pointed into the old folder. `POST /os/relaunch` restarts the desktop app (501
+standalone).
+
+```sh
+curl -X PUT -d '{"portable":true}' http://127.0.0.1:7777/v1/portable
+# {"portable":false,"pending":"D:\\y4bo\\y4bo-data","available":true,…}
+```
+
 ### `DELETE /library/:id`
 
 Takes the entry out of the library (`204`). Installed files stay unless `?files=trash`, which moves

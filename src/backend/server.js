@@ -548,6 +548,24 @@ function createApi(backend) {
     return { body: await os(() => backend.os.addToSteam({ appName, exePath, startDir })) };
   });
 
+  // Portable data (portable.js): where the data lives; PUT asks for a move on
+  // the next start, then POST /os/relaunch restarts the app to do it
+  route('GET', '/portable', () => ({ body: backend.portableStatus() }));
+  route('PUT', '/portable', ({ body }) => {
+    const { portable } = requireObject(body);
+    if (typeof portable !== 'boolean') throw new HttpError(400, 'bad_request', 'portable must be true or false');
+    try {
+      return { body: backend.setPortable(portable) };
+    } catch (e) {
+      if (!e.code) throw e;
+      throw new HttpError(409, e.code, e.message);
+    }
+  });
+  route('POST', '/os/relaunch', async () => {
+    await os(() => backend.os.relaunch());
+    return { body: { ok: true } };
+  });
+
   route('GET', '/os/updater', () => ({ body: { status: backend.updaterStatus } }));
   route('GET', '/os/open-item', () => ({ body: { identifier: backend.openRequest } }));
   route('DELETE', '/os/open-item', () => { backend.clearOpenRequest(); return { status: 204 }; });

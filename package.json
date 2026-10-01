@@ -45,12 +45,18 @@
       }
     ],
     "win": {
-      "target": "nsis",
+      "target": [
+        "nsis",
+        "zip"
+      ],
       "icon": "assets/icons/rk-logo.ico"
     },
     "nsis": {
       "guid": "2bb8c09d-2711-598b-90f1-e9685ecdb3dc",
       "artifactName": "y4bo-Setup-${version}.${ext}"
+    },
+    "zip": {
+      "artifactName": "y4bo-${version}-win-portable.${ext}"
     },
     "mac": {
       "icon": "assets/icons/rk-logo.icns"

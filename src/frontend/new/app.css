@@ -203,7 +203,7 @@ button { font: inherit; color: inherit; }
 .srcline { margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: var(--fill); border: 1px solid var(--border); line-height: 1.55; }
 .srcline b { font-weight: 600; }
 .srcline .ok { color: var(--ok); }
-.srcline .warn { color: var(--warn); }
+.srcline .warn, .hint.warn { color: var(--warn); }
 .h3 { font-size: 11px; font-weight: 700; letter-spacing: 1.2px; color: var(--text2); text-transform: uppercase; margin: 24px 0 8px; }
 .versions { display: flex; flex-direction: column; gap: 6px; }
 .version {

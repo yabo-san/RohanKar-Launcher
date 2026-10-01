@@ -26,6 +26,7 @@ const state = {
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   libSearch: '',        // the search box in a library header (Cider's library pages)
+  portable: null,       // Settings > Data folder: GET /portable
   libPage: 1,           // the page, when a library header is set to paged
   detail: null,
   downloads: new Map(), // identifier -> { percent, status }
@@ -1026,6 +1027,8 @@ function viewSettings() {
     <div class="field" id="quiver-import"><label>Quiver library</label>
       <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
       <div class="import-body">${quiverImportHtml()}</div></div>
+    <div class="field" id="portable"><label>Data folder</label>
+      <div class="portable-body">${portableHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
       <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
@@ -1059,6 +1062,51 @@ function quiverImportHtml() {
 }
 
 // render() keeps the settings form as typed, so this redraws only the field
+// Portable data (brief 6.3): the library, settings, caches and games in a
+// y4bo-data folder beside the app, so the folder is the whole install
+const PORTABLE_WHY = {
+  installed: 'This is the installed copy, and the installer replaces its folder on every update. To keep everything in one folder, run y4bo from the portable zip on the Releases page.',
+  read_only: "The app's folder can't be written to.",
+  not_packaged: 'Only the desktop app can keep its data beside it.',
+};
+function portableHtml() {
+  const p = state.portable;
+  if (!p) return '<div class="hint">Loading…</div>';
+  const where = `<div class="hint">Your library, settings, caches and games are in <b>${esc(p.dataDir)}</b>.</div>`;
+  const err = p.error ? `<div class="hint warn">The last move didn't happen: ${esc(p.error)}</div>` : '';
+  if (p.pending) {
+    return `${where}<div class="hint">They move to <b>${esc(p.pending)}</b> when y4bo restarts.</div>
+      <div class="inline"><button class="btn primary" data-action="portable-restart">Restart now</button>
+      <button class="btn" data-action="portable-cancel">Don't move</button></div>`;
+  }
+  if (!p.available) return `${where}${err}<div class="hint">${esc(PORTABLE_WHY[p.reason] || '')}</div>`;
+  return p.portable
+    ? `${where}${err}<div class="hint">Portable: move the app's folder and everything comes along.</div>
+      <button class="btn" data-action="portable-off">Move data back to ${esc(p.defaultDir)}</button>`
+    : `${where}${err}<div class="hint">Keep it all in <b>${esc(p.portableDir)}</b> instead, beside the app, so the app's folder is the whole install and can be moved.</div>
+      <button class="btn" data-action="portable-on">Keep data beside the app</button>`;
+}
+async function loadPortable() {
+  state.portable = await api.getPortable().catch(() => null);
+  const el = $('#portable .portable-body');
+  if (el) el.innerHTML = portableHtml();
+}
+async function setPortable(on) {
+  const p = state.portable;
+  const ok = await modal({
+    title: on ? 'Keep data beside the app?' : 'Move data back?',
+    body: `y4bo restarts and moves your library, settings, caches and games folder to ${on ? p.portableDir : p.defaultDir}. Games on another drive stay where they are.`,
+    primary: 'Restart and move',
+  });
+  if (!ok) return;
+  const r = await api.setPortable(on);
+  if (!r.ok) return toast(`Couldn't: ${r.error}`);
+  state.portable = r.status;
+  // The desktop app restarts here; anywhere else the move waits for a restart
+  await api.relaunch();
+  loadPortable();
+}
+
 function renderQuiverImport() {
   const el = $('#quiver-import .import-body');
   if (el) el.innerHTML = quiverImportHtml();
@@ -1138,6 +1186,7 @@ function render() {
   observeCovers(body);
   syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
+  if (v.name === 'settings' && !state.portable) loadPortable();
   if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
   renderNav();
   renderNowbar();
@@ -2250,6 +2299,10 @@ async function onAction(action, el) {
     case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
+    case 'portable-on': return setPortable(true);
+    case 'portable-off': return setPortable(false);
+    case 'portable-restart': await api.relaunch(); return toast('Restart y4bo to move the data.');
+    case 'portable-cancel': { const r = await api.setPortable(state.portable.portable); if (r.ok) state.portable = r.status; return loadPortable(); }
     case 'legacy-ui':
       await api.saveSettings({ ui: 'legacy' });
       location.href = `../index.html${location.search}`;

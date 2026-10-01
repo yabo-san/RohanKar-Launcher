@@ -13,6 +13,7 @@ const { execFile } = require('child_process');
 const { createSettings } = require('./settings');
 const { createNetLog }   = require('./netlog');
 const { createLibrary }  = require('./library');
+const portable = require('./portable');
 const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
 const { createInstalls, GITHUB_API } = require('./installs');
@@ -50,6 +51,7 @@ function defaultHost(platform = process.platform) {
     window:         unsupported('Window controls'),
     addToSteam:     unsupported('Add to Steam'),
     updaterInstall: unsupported('Updating'),
+    relaunch:       unsupported('Restarting'),
   };
 }
 
@@ -66,6 +68,9 @@ function createBackend({
   announcementUrl = ANNOUNCEMENT_URL,
   collisionsFile = path.join(appDir, 'catalog', 'collisions.json'),
   admin = false,
+  // The packaged app's folder and its usual data folder, for portable mode
+  exeDir = null,
+  defaultDataDir = null,
   playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
@@ -285,6 +290,22 @@ function createBackend({
     emit('open-item', { identifier });
   }
 
+  // Portable data (portable.js): where the data lives, and a move asked for
+  // on the next start
+  const portableNow = () => portable.portableStatus({ exeDir, dataDir, defaultDir: defaultDataDir });
+  function setPortable(on) {
+    const st = portableNow();
+    if (on === st.portable) { portable.cancelMove(dataDir); return portableNow(); }
+    if (!st.available) {
+      const e = new Error({ installed: 'An installed copy can\'t keep its data beside it: the installer replaces its folder on every update. Run y4bo from the zip instead.',
+        read_only: `Can't write to ${exeDir}.`, not_packaged: 'Portable data needs the desktop app.', no_default: 'No other data folder to move to.' }[st.reason] || st.reason);
+      e.code = st.reason;
+      throw e;
+    }
+    portable.requestMove(dataDir, on ? st.portableDir : st.defaultDir);
+    return portableNow();
+  }
+
   function close() {
     closed = true;
     clearTimeout(exportTimer);
@@ -297,7 +318,7 @@ function createBackend({
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources, getFeatured,
-    getAnnouncement, dismissAnnouncement, installRoot,
+    getAnnouncement, dismissAnnouncement, installRoot, portableStatus: portableNow, setPortable,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }

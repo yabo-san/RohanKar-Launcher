@@ -45,4 +45,17 @@ function resolveUserData({ current, appData, name, legacyNames = LEGACY_NAMES, e
   return { dir: current, reason: 'fresh' };
 }
 
-module.exports = { resolveUserData, hasLauncherData, LEGACY_NAMES };
+/**
+ * Portable data (src/backend/portable.js): a y4bo-data folder beside the
+ * executable with launcher data in it wins over everything above. exeDir is
+ * null when not packaged. Returns { dir, reason, defaultDir }, defaultDir
+ * being where the data goes when not portable.
+ */
+function resolveDataDir({ exeDir = null, portableName = 'y4bo-data', exists = fs.existsSync, ...rest }) {
+  const usual = resolveUserData({ ...rest, exists });
+  const portable = exeDir ? path.join(exeDir, portableName) : null;
+  if (portable && hasLauncherData(portable, exists)) return { dir: portable, reason: 'portable', defaultDir: usual.dir };
+  return { ...usual, defaultDir: usual.dir };
+}
+
+module.exports = { resolveUserData, resolveDataDir, hasLauncherData, LEGACY_NAMES };

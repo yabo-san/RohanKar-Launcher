@@ -23,6 +23,7 @@ const { createServer, newToken } = require('./server');
 const { connectParent } = require('./parent');
 const { parseCli, runCli } = require('./cli');
 const { findRow } = require('./playnite');
+const { pendingMove, moveData, failMove } = require('./portable');
 
 function parseArgs(argv) {
   const out = {};
@@ -37,7 +38,19 @@ function parseArgs(argv) {
 // parent: the desktop app's port (process.parentPort), when it started us
 async function run(argv = process.argv.slice(2), env = process.env, print = (line) => process.stdout.write(line), { parent = null } = {}) {
   const args = parseArgs(argv);
-  const dataDir = path.resolve(args['data-dir'] || env.LAUNCHER_DATA_DIR || path.join(process.cwd(), '.launcher-data'));
+  let dataDir = path.resolve(args['data-dir'] || env.LAUNCHER_DATA_DIR || path.join(process.cwd(), '.launcher-data'));
+  // Settings asked to move the data (portable.js): done now, before library.db opens
+  const moveTo = pendingMove(dataDir);
+  if (moveTo) {
+    try {
+      moveData({ from: dataDir, to: moveTo, log: (msg) => process.stderr.write(msg + '\n') });
+      dataDir = moveTo;
+    } catch (e) {
+      // Put back as it was; Settings shows why
+      failMove(dataDir, e.message);
+      process.stderr.write(`[portable] ${e.message}\n`);
+    }
+  }
   const bridge = parent ? connectParent(parent) : null;
   const backend = createBackend({
     dataDir,
@@ -51,6 +64,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args.admin === 'true' || env.LAUNCHER_ADMIN === '1' ? { admin: true } : {}),
     ...(args['featured-url'] ? { featuredUrl: args['featured-url'] } : {}),
     ...(args['announcement-url'] ? { announcementUrl: args['announcement-url'] } : {}),
+    ...(args['exe-dir'] ? { exeDir: path.resolve(args['exe-dir']) } : {}),
+    ...(args['default-data-dir'] ? { defaultDataDir: path.resolve(args['default-data-dir']) } : {}),
     ...(bridge ? { host: bridge.host } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),
   });
