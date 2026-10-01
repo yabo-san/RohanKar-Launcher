@@ -53,6 +53,7 @@ An array of entries, `{ "collisions": [...] }`, or an object keyed by repository
       "assetPattern": "(?i)x86_64-windows",
       "base": "data",
       "binaryTarget": "",
+      "exe": "game.exe",
       "sources": [
         { "ia": "some-item", "path": "Full Game.zip", "extract": true }
       ]
@@ -68,6 +69,8 @@ An array of entries, `{ "collisions": [...] }`, or an object keyed by repository
 | `assetPattern` | Regex (`(?i)` prefix for case-insensitive) that picks the release asset. Wins over the catalog's `releaseAssetFilter`. |
 | `base` | Which half lays down first: `"binary"` (default) or `"data"`. The other goes on top and wins on clashes. |
 | `binaryTarget` | Folder, relative to the install folder, that the release unpacks into. Default: the install folder itself. |
+| `keepReleaseFolder` | `true` keeps a release zip's single top-level folder. By default a zip that holds only one folder (like Perfect Dark's `pd-x86_64-windows/`) is unwrapped, so its files and the data sit together in the install folder. |
+| `exe` | The exe to launch, relative to the install folder, when the release ships several (Perfect Dark ships `pd.x86_64.exe` plus PAL and JPN builds). Without it the one exe found is used, and none is set if there are several. |
 | `sources` | archive.org data, in order. See below. |
 | `iaIdentifier`, `contentUrl`, `dataFiles` | The first version of the schema, still read: download `contentUrl`, pick each `dataFiles[].name` out of it, place it in `targetSubpath`, check its `sha1`. A `dataFiles[].patch` (a `.bps` file) is applied first, so `sha1` is the patched file's: a URL, else a path found in the unpacked download, then the install folder (a release can ship its patch), then the same archive.org item. |
 
