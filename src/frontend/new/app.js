@@ -1975,7 +1975,8 @@ const ROW_ACTIONS = [
     } },
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
     run: (p) => togglePort(p.id) },
-  { id: 'collision', label: 'Game Data…', icon: 'box', group: 'manage', kinds: ['port'], run: (p) => go('collision', p.repository) },
+  // An archive.org-only entry (no repository) has neither
+  { id: 'collision', label: 'Game Data…', icon: 'box', group: 'manage', kinds: ['port'], when: (p) => p.repository, run: (p) => go('collision', p.repository) },
   { id: 'details', label: 'Properties', icon: 'info', group: 'manage',
     run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
 
@@ -1984,7 +1985,7 @@ const ROW_ACTIONS = [
     when: (g) => state.sources.some(s => s.uploader === g._uploader && s.enabled !== false), run: (g) => go('uploader', g._uploader) },
   { id: 'shelf', label: 'Go to Shelf', icon: 'wall', group: 'goto', kinds: ['port'],
     when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
-  { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
+  { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'], when: (p) => p.repository,
     run: (p) => api.openExternal(`https://github.com/${p.repository}`) },
   { id: 'data', label: 'Game Data on archive.org', icon: 'globe', group: 'goto', kinds: ['port'],
     when: (p) => p.data.iaIdentifier, run: (p) => api.openExternal(`https://archive.org/details/${p.data.iaIdentifier}`) },
