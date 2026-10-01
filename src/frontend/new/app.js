@@ -890,8 +890,10 @@ function viewLibrary() {
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
   const nameOf = sorts.name[1];
-  uniq = ListView.sortRows(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), p, [sorts, GAME_SORTS], 'name', listCtx('game'), nameOf);
-  ports = ListView.sortRows(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), p, [sorts, PORT_SORTS], 'name', listCtx('port'), nameOf);
+  // Name, tag, repository or folder, as Quiver's library search
+  const rowsOf = (g) => (g._versions || [g]).map(v => state.library[v.identifier]);
+  uniq = ListView.sortRows(ciderSearch(uniq, state.libSearch, g => ListView.libraryFields([getTitle(g), g._sourceLabel], rowsOf(g))), p, [sorts, GAME_SORTS], 'name', listCtx('game'), nameOf);
+  ports = ListView.sortRows(ciderSearch(ports, state.libSearch, i => ListView.libraryFields([i.name, i.repository], [state.library[i.id]])), p, [sorts, PORT_SORTS], 'name', listCtx('port'), nameOf);
   let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
   if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, kind: 'game' }), { count: uniq.length, cls: 'plain' });
   if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, kind: 'port', cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
@@ -1974,6 +1976,7 @@ const ROW_ACTIONS = [
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
     run: (p) => togglePort(p.id) },
   { id: 'collision', label: 'Game Data…', icon: 'box', group: 'manage', kinds: ['port'], run: (p) => go('collision', p.repository) },
+  { id: 'tags', label: 'Edit Tags…', icon: 'tag', group: 'manage', when: (x, ctx) => !!tagRow(x, ctx), run: (x, ctx) => editTags(x, ctx) },
   { id: 'details', label: 'Properties', icon: 'info', group: 'manage',
     run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
 
@@ -2012,6 +2015,39 @@ const ROW_ACTIONS = [
     when: (g) => state.admin && !g._manual, run: (g) => adminFromItem(g.identifier) },
 ];
 ROW_ACTIONS.forEach(rowActions.register);
+
+// The library row a menu item's tags live on: the port's, or the first of a
+// game's versions that is in the library
+function tagRow(x, ctx) {
+  if (ctx.kind === 'port') return state.library[x.id] || null;
+  const v = (x._versions || [x]).find(y => state.library[y.identifier]);
+  return v ? state.library[v.identifier] : null;
+}
+
+// A modal with one text box: the tags, comma-separated. The library search
+// matches them.
+async function editTags(x, ctx) {
+  const row = tagRow(x, ctx);
+  if (!row) return;
+  const name = ctx.kind === 'port' ? x.name : getTitle(x);
+  const shown = modal({ title: `Tags for ${name}`, body: 'Separate tags with commas. Search your library by any of them.', primary: 'Save' });
+  const box = document.createElement('input');
+  box.type = 'text';
+  box.className = 'tags-input';
+  box.setAttribute('aria-label', 'Tags');
+  box.placeholder = 'e.g. co-op, finished, favourites';
+  box.value = (row.tags || []).join(', ');
+  let text = box.value;
+  box.addEventListener('input', () => { text = box.value; });
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.querySelector('#modal [data-modal="1"]')?.click(); } });
+  document.getElementById('modal-body').appendChild(box);
+  box.focus();
+  if (!(await shown)) return;
+  const r = await api.setTags({ identifier: row.identifier, tags: ListView.parseTags(text) });
+  if (!r.ok) return toast(`Couldn't save the tags: ${r.error}`);
+  await reloadLibrary();
+  render();
+}
 
 // The item a row, card or ⋯ button stands for
 function menuItem(kind, id) {

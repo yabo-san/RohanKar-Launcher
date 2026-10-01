@@ -144,3 +144,20 @@ test('row actions: sections in group order, filtered by kind and when, submenus,
   assert.throws(() => reg.register({ id: 'x', group: 'elsewhere' }), /unknown menu group/);
   assert.throws(() => reg.register({ group: 'play' }), /needs an id/);
 });
+
+test('libraryFields: names, then each library row\'s tags and folder; the search finds a game by any of them', () => {
+  const rows = [{ tags: ['co-op', 'finished'], install_dir: 'D:\\Games\\Halo' }, null, { tags: null, install_dir: null }];
+  assert.deepEqual(LV.libraryFields(['Halo', 'uploader'], rows), ['Halo', 'uploader', 'co-op', 'finished', 'D:\\Games\\Halo']);
+  const list = [{ name: 'Halo', row: rows[0] }, { name: 'Zoo', row: { tags: ['tycoon'], install_dir: '/g/zoo' } }];
+  const find = (q) => LV.ciderSearch(list, q, x => LV.libraryFields([x.name], [x.row])).map(x => x.name);
+  assert.deepEqual(find('co-op'), ['Halo']);
+  assert.deepEqual(find('TYCOON'), ['Zoo']);
+  assert.deepEqual(find('games\\halo'), ['Halo']);
+  assert.deepEqual(find('nothing'), []);
+});
+
+test('parseTags: the Edit Tags box split on commas, blanks dropped', () => {
+  assert.deepEqual(LV.parseTags(' co-op, finished ,, '), ['co-op', 'finished']);
+  assert.deepEqual(LV.parseTags(''), []);
+  assert.deepEqual(LV.parseTags(undefined), []);
+});

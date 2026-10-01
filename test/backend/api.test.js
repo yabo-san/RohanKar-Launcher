@@ -136,6 +136,12 @@ test('library: add, get, patch, exes, readme, launch, reveal, delete', async (t)
   assert.deepEqual([fav.body.is_favorite, fav.body.notes], [1, 'hi']);
   assert.equal((await call('PATCH', '/library/fresh', { category: 'rpg', exePath: '/x.exe' })).body.category, 'rpg');
   assert.equal((await call('PATCH', '/library/fresh', { color: 'x' })).body.detail, 'Unknown fields: color');
+  // Tags: an array of strings, tidied by the core; anything else is a 400
+  assert.deepEqual((await call('PATCH', '/library/fresh', { tags: [' Co-op ', 'co-op', 'finished', ''] })).body.tags, ['Co-op', 'finished']);
+  assert.equal((await call('PATCH', '/library/fresh', { tags: 'co-op' })).status, 400);
+  assert.equal((await call('PATCH', '/library/fresh', { tags: [1] })).status, 400);
+  assert.equal((await call('PATCH', '/library/nope', { tags: ['x'] })).status, 404);
+  assert.equal((await call('PATCH', '/library/fresh', { tags: [] })).body.tags, null);
 
   assert.equal((await call('GET', '/library/fresh/exes')).body.error, 'not_installed');
   const dir = path.join(backend.dataDir, 'g');

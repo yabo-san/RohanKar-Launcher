@@ -169,6 +169,10 @@ const api = (() => {
       const r = await call('PATCH', `/library/${enc(identifier)}`, { title });
       return r.ok ? { ok: true } : failure(r);
     },
+    setTags: async ({ identifier, tags }) => {
+      const r = await call('PATCH', `/library/${enc(identifier)}`, { tags });
+      return r.ok ? { ok: true, row: r.body } : failure(r);
+    },
 
     // A Quiver folder (apps.json + Apps/): the plan, or with apply the import
     importQuiver: async ({ dir, apply = false }) => {

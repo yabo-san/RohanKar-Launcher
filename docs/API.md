@@ -302,7 +302,9 @@ curl -X POST -d '{"id":"quiver:8c1f0e2a9b3d:harbourmasters/shipwright","source":
 ### `GET /library/:id`, `PATCH /library/:id`
 
 Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`, `installDir`,
-`title` (the name of an entry no item describes, such as a manual app).
+`title` (the name of an entry no item describes, such as a manual app), `tags` (an array of
+strings, the user's own; stored trimmed, without case-insensitive duplicates, at most 32 of 40
+characters each; `[]` clears them).
 `installDir` adopts a folder already on disk (Locate Existing Install) and picks its executable when
 there's only one. `favorite`, `notes` and `installDir` create the row if needed; the others need it
 to exist.

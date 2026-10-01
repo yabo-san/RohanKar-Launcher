@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { createLibrary } = require('../../src/backend/library');
+const { createLibrary, normalizeTags, MAX_TAGS, MAX_TAG_LENGTH } = require('../../src/backend/library');
 const { openDatabase, transaction } = require('../../src/backend/sqlite');
 const { tmpDir } = require('./helpers');
 
@@ -166,4 +166,20 @@ test('details: title, tags and version; a reinstall keeps title and tags', (t) =
   assert.deepEqual([lib.get('m').title, lib.get('m').tags], [null, null]);
   lib.setDetails('m');
   assert.equal(lib.get('m').install_dir, '/games/m');
+});
+
+test('normalizeTags: trimmed, spaces collapsed, first spelling wins, capped', () => {
+  assert.deepEqual(normalizeTags(['  co-op ', 'Co-Op', 'two   words', '', '   ', 7, null, 'RPG']), ['co-op', 'two words', 'RPG']);
+  assert.deepEqual(normalizeTags('co-op'), []);
+  assert.deepEqual(normalizeTags(undefined), []);
+  assert.equal(normalizeTags(Array.from({ length: 50 }, (_, i) => `t${i}`)).length, MAX_TAGS);
+  assert.equal(normalizeTags(['x'.repeat(100)])[0].length, MAX_TAG_LENGTH);
+});
+
+test('setDetails stores tags tidied, and none as null', (t) => {
+  const { lib } = open(t, () => ({}));
+  lib.setDetails('m', { tags: ['Finished', 'finished ', ' co-op'] });
+  assert.deepEqual(lib.get('m').tags, ['Finished', 'co-op']);
+  lib.setDetails('m', { tags: ['  '] });
+  assert.equal(lib.get('m').tags, null);
 });

@@ -312,6 +312,11 @@ function createApi(backend) {
     notes:    (id, v) => library.setNotes(id, v),
     exePath:  (id, v) => library.setExePath(id, v),
     title:    (id, v) => { requireString(v, 'title'); return library.setDetails(id, { title: v.trim() }); },
+    // The user's own tags; the library search matches them
+    tags:     (id, v) => {
+      if (!Array.isArray(v) || v.some(t => typeof t !== 'string')) throw new HttpError(400, 'bad_request', 'tags must be an array of strings');
+      return library.setDetails(id, { tags: v });
+    },
     // Locate an existing install: point the row at a folder already on disk
     installDir: (id, v) => {
       requireString(v, 'installDir');

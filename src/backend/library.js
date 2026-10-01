@@ -188,7 +188,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     ensureRow(identifier);
     const set = (col, v) => db.prepare(`UPDATE games SET ${col} = ? WHERE identifier = ?`).run(v, identifier);
     if (title !== undefined) set('title', title || null);
-    if (tags !== undefined) set('tags', Array.isArray(tags) && tags.length ? JSON.stringify(tags) : null);
+    if (tags !== undefined) { const t = normalizeTags(tags); set('tags', t.length ? JSON.stringify(t) : null); }
     if (version !== undefined) set('version', version || null);
     changed(identifier);
     return { ok: true };
@@ -306,4 +306,25 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   };
 }
 
-module.exports = { createLibrary };
+// A user's tags as stored: trimmed, inner spaces collapsed, no empties, the
+// first spelling of each kept when two differ only by case, at most MAX_TAGS
+// of at most MAX_TAG_LENGTH characters
+const MAX_TAGS = 32;
+const MAX_TAG_LENGTH = 40;
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const t of tags) {
+    if (typeof t !== 'string') continue;
+    const tag = t.replace(/\s+/g, ' ').trim().slice(0, MAX_TAG_LENGTH).trim();
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length === MAX_TAGS) break;
+  }
+  return out;
+}
+
+module.exports = { createLibrary, normalizeTags, MAX_TAGS, MAX_TAG_LENGTH };

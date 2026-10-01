@@ -201,7 +201,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeVisible();
   // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options',
-    'Remove from Library', 'Game Data…', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Game Data on archive.org', 'Copy Link', 'Delete']);
+    'Remove from Library', 'Game Data…', 'Edit Tags…', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Game Data on archive.org', 'Copy Link', 'Delete']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
   await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
   await expect(menu.locator('.has-sub > .mi .chev')).toBeVisible();
@@ -560,6 +560,33 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   await expect(detail).toBeHidden();
   await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
   expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
+});
+
+test('Library: Edit Tags from the row menu; the search finds by tag, repository or folder', async () => {
+  await page.locator('[data-view="library"]').click();
+  const halo = page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' });
+  await halo.click({ button: 'right' });
+  await page.locator('#ctxmenu [data-menu="tags"]').click();
+  const box = page.locator('#modal .tags-input');
+  await expect(box).toBeFocused();
+  await box.fill('co-op, Finished, co-op');
+  await page.locator('#modal [data-modal="1"]').click();
+  await expect(page.locator('#modal')).toHaveCount(0);
+  const id = await page.evaluate(async () => Object.values(await api.getLibrary()).find(l => l.tags)?.identifier);
+  expect((await page.evaluate(async (i) => (await api.getLibrary())[i].tags, id))).toEqual(['co-op', 'Finished']);
+
+  const search = async (q) => { await page.locator('#lib-search').fill(q); await page.waitForTimeout(250); };
+  await search('finished');
+  await expect(halo).toBeVisible();
+  await expect(page.locator('#body .port-card')).toHaveCount(0);
+  // A port by its repository, a game by its install folder
+  await search('perfect-dark-pc-port');
+  await expect(page.locator('#body .port-card', { hasText: 'Perfect Dark' })).toBeVisible();
+  await search(path.basename(await page.evaluate(async (i) => (await api.getLibrary())[i].install_dir, id)));
+  await expect(halo).toBeVisible();
+  await search('nothing-like-this');
+  await expect(page.locator('#body .game-card')).toHaveCount(0);
+  await search('');
 });
 
 test('Settings feeds: subscribe, trust its uploader, copy your feed, import a feed file', async () => {

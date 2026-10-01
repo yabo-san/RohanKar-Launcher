@@ -26,6 +26,15 @@ const ListView = (() => {
     return t ? list.filter(x => fields(x).some(f => searchKey(f).includes(t))) : list;
   }
 
+  // What the library search matches (Quiver's: name, tag, repository or
+  // folder): the names given, then each library row's own tags and install
+  // folder. rows may hold nulls for versions not in the library.
+  function libraryFields(names, rows) {
+    return [...names, ...rows.flatMap(r => (r ? [...(r.tags || []), r.install_dir] : []))].filter(Boolean);
+  }
+  // The Edit Tags box: comma-separated, as typed; the backend tidies them
+  const parseTags = (text) => String(text ?? '').split(',').map(t => t.trim()).filter(Boolean);
+
   // ─── what a row says about itself ─────────────────────────────────────────
   // ctx: { library: { [identifier]: row }, downloads: Map(identifier → { percent, status }) }
   const versionsOf = (g) => g._versions || [g];
@@ -199,7 +208,7 @@ const ListView = (() => {
   }
 
   return {
-    ciderSort, ciderSearch, searchKey,
+    ciderSort, ciderSearch, searchKey, libraryFields, parseTags,
     isInstalled, isFavorite, outdated, gameStatus, portStatus,
     GAME_COLUMNS, PORT_COLUMNS, GAME_SORTS, PORT_SORTS,
     sortValue, sortRows, headerSort, ariaSort, visibleColumns, columnChoices, toggleColumn, gridTemplate,
