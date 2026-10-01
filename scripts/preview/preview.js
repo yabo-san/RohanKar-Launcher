@@ -10,6 +10,9 @@
  *     against a real backend
  *   - while Allow additional sources is on, a response saved with it on
  *     ("ON " keys, fixtures builds) answers instead of the default one
+ *   - the JSON feeds the app fetches from main at launch (featured.json with
+ *     banners.json, overrides.json, announcement.json) are fetched live from manifest
+ *     info.feed when the page is viewed; the saved copy answers if that fails
  * A pill in the corner says it's a preview and what data it shows.
  */
 (() => {
@@ -30,6 +33,7 @@
   try { state = JSON.parse(sessionStorage.getItem(STORE)) || {}; } catch { state = {}; }
   state.settings ??= {};
   state.library ??= {};         // identifier → row, or null when removed
+  state.dismissed ??= [];       // announcement ids
   const persist = () => { try { sessionStorage.setItem(STORE, JSON.stringify(state)); } catch { /* private window */ } };
 
   function keyOf(u) {
@@ -45,6 +49,66 @@
     return new Response(await res.blob(), { status: entry.status, headers: { 'Content-Type': entry.type } });
   }
   const savedJson = async (k, fallback) => { const r = await saved(k); return r?.ok ? r.json() : fallback; };
+
+  // The live feeds: fetched once per page view, null when there's no feed
+  // (fixtures) or it fails, and then the saved response stands
+  const feeds = {};
+  const feed = (file) => (feeds[file] ??= loadManifest().then(({ info }) => {
+    if (!info.feed) return null;
+    return realFetch(info.feed + file, { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null));
+  }).catch(() => null));
+
+  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
+  // As src/backend/featured.js parses it: a banner is a SteamGridDB CDN image,
+  // pinned on the pick or else from catalog/banners.json
+  function heroUrl(v) {
+    try { const u = new URL(str(v)); return u.protocol === 'https:' && /^cdn\d*\.steamgriddb\.com$/.test(u.hostname) ? u.href : null; } catch { return null; }
+  }
+  function featuredPicks(data, banners) {
+    if (!Array.isArray(data?.picks)) return null;
+    const bannerFor = (key) => {
+      const e = banners && typeof banners === 'object' && !Array.isArray(banners) && banners[Object.keys(banners).find(k => !k.startsWith('_') && k.toLowerCase() === key.toLowerCase())];
+      return heroUrl(e?.url);
+    };
+    return data.picks.flatMap((p) => {
+      const identifier = str(p?.identifier);
+      const repository = str(p?.repository)?.toLowerCase() || null;
+      if (!identifier && !repository) return [];
+      return [{ ...(identifier ? { identifier } : { repository }), blurb: str(p.blurb), banner: heroUrl(p.banner) || bannerFor(identifier || repository) || null }];
+    });
+  }
+  // As src/backend/announcement.js parses it
+  function announcement(data) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+    const get = (key) => data[Object.keys(data).find(k => k.toLowerCase() === key)];
+    const id = str(get('id')), message = str(get('message')), link = str(get('link'));
+    if (get('enabled') === false || !id || !message) return null;
+    return { id, message, ...(link && /^https:\/\//.test(link) ? { link } : {}) };
+  }
+  const overridesFeed = () => feed('overrides.json').then(o => (o && typeof o === 'object' && !Array.isArray(o) ? o : null));
+
+  // A wall list with today's overrides in place of the ones saved at build
+  function withOverrides(body, ov) {
+    const patch = (v) => ({ ...v, override: ov[v.id] || null });
+    return { ...body, items: body.items.map(it => (it.shelf === 'wall' ? { ...patch(it), versions: (it.versions || []).map(patch) } : it)) };
+  }
+  // The override a cover was saved with, from the saved wall
+  async function savedOverride(id) {
+    const wall = await savedJson('GET /items?shelf=wall', { items: [] });
+    for (const it of wall.items || []) for (const v of [it, ...(it.versions || [])]) if (v.id === id) return v.override || null;
+    return null;
+  }
+  // A cover whose override art changed on main since the build: the new image
+  // if the browser may fetch it, else the saved one
+  async function liveCover(id) {
+    const ov = await overridesFeed();
+    const url = ov?.[id]?.artUrl;
+    if (!url || !/^https:\/\//.test(url) || url === (await savedOverride(id))?.artUrl) return null;
+    try {
+      const r = await realFetch(url, { mode: 'cors' });
+      return r.ok ? new Response(await r.blob(), { status: 200, headers: { 'Content-Type': r.headers.get('content-type') || 'image/png' } }) : null;
+    } catch { return null; }
+  }
 
   async function library() {
     const lib = { ...(await savedJson('GET /library', { library: {} })).library };
@@ -64,6 +128,28 @@
       if (p === '/library') return json(200, { library: await library() });
       if (/^\/library\/[^/]+\/exes$/.test(p)) return json(200, { exes: [] });
       if (/^\/installs\//.test(p)) return json(404, { error: 'not_found' });
+      if (p === '/featured') {
+        const [data, banners] = await Promise.all([feed('catalog/featured.json'), feed('catalog/banners.json')]);
+        const picks = featuredPicks(data, banners);
+        if (picks) return json(200, { picks });
+      }
+      if (p === '/announcement') {
+        const data = await feed('announcement.json');
+        if (data) {
+          const a = announcement(data);
+          return json(200, { announcement: a && !state.dismissed.includes(a.id.toLowerCase()) ? a : null });
+        }
+      }
+      if (p === '/items') {
+        const [res, ov] = await Promise.all([saved(keyOf(u)), overridesFeed()]);
+        if (res?.ok && ov) return json(200, withOverrides(await res.json(), ov));
+        if (res) return res;
+      }
+      const cover = /^\/items\/([^/]+)\/cover$/.exec(p);
+      if (cover) {
+        const res = await liveCover(decodeURIComponent(cover[1]));
+        if (res) return res;
+      }
       return (await saved(keyOf(u))) || json(404, { error: 'not_found', detail: 'Not saved in the web preview' });
     }
     if (p === '/settings' && method === 'PUT') {
@@ -91,12 +177,17 @@
       if ((await library())[id]?.install_dir) return notHere();
       state.library[id] = null;
       persist();
-      return json(200, { ok: true });
+      return new Response(null, { status: 204 });
     }
     if (/^\/catalogs\/[^/]+\/refresh$/.test(p)) {
       const id = decodeURIComponent(p.split('/')[2]);
       const { catalogs = [] } = await savedJson('GET /catalogs', {});
       return json(200, catalogs.find(c => c.id === id) || null);
+    }
+    if (p === '/announcement/dismiss' && body?.id) {
+      state.dismissed.push(String(body.id).toLowerCase());
+      persist();
+      return json(200, { ok: true });
     }
     if (/^\/catalogs\/[^/]+\/seen$/.test(p) || p === '/os/open-item') return json(200, { ok: true });
     if (p === '/os/open-external' && body?.url) { window.open(body.url, '_blank', 'noopener'); return json(200, { ok: true }); }
@@ -124,7 +215,7 @@
     loadManifest().then(({ info }) => {
       const el = document.createElement('a');
       const when = new Date(info.builtAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
-      el.textContent = `Web preview${info.ref ? ` · ${info.ref}` : ''} · ${info.data} data, ${when} · installs off`;
+      el.textContent = `Web preview${info.ref ? ` · ${info.ref}` : ''} · ${info.data} data, ${when}${info.feed ? ' · feeds live' : ''} · installs off`;
       el.title = `${info.items} wall items, ${info.ports} ports${info.sourceErrors ? `, ${info.sourceErrors} source(s) failed at build` : ''}${info.commit ? `\ncommit ${info.commit.slice(0, 7)}` : ''}`;
       if (info.repo && info.commit) { el.href = `https://github.com/${info.repo}/commit/${info.commit}`; el.target = '_blank'; el.rel = 'noopener'; }
       Object.assign(el.style, {

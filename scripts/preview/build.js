@@ -26,6 +26,7 @@ const { run } = require('../../src/backend/main');
 
 const ROOT     = path.join(__dirname, '..', '..');
 const FRONTEND = path.join(ROOT, 'src', 'frontend');
+const FEED     = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/';
 
 function parseArgs(argv) {
   const out = { out: path.join(ROOT, 'preview-site'), fixtures: false };
@@ -145,6 +146,7 @@ async function build(opts) {
     await save('/settings');
     await save('/sources');
     await save('/featured');
+    await save('/announcement');
     await save('/os/updater');
     await save('/os/open-item');
     const wall = await save('/items', { shelf: 'wall' });
@@ -192,6 +194,10 @@ async function build(opts) {
       items: wall?.items?.length || 0,
       ports: catalogs.reduce((s, c) => s + (c.entries || 0), 0),
       sourceErrors: wall?.errors?.length || 0,
+      // preview.js reads the JSON feeds the app fetches at launch (featured,
+      // overrides, announcement) from here when the page is viewed, so edits on
+      // main show without a rebuild. Fixtures builds stay offline.
+      feed: process.env.PREVIEW_FEED || (opts.fixtures ? null : FEED),
     };
     fs.writeFileSync(path.join(dataOut, 'manifest.json'), JSON.stringify({ info, responses: manifest }));
 
