@@ -60,6 +60,15 @@ function diffEntries(seen, current) {
   return out;
 }
 
+// What an install needs from a collision, as items() hands it on
+function itemData(data) {
+  return {
+    iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
+    dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
+    ...(data.exe ? { exe: data.exe } : {}), ...(data.keepReleaseFolder ? { keepReleaseFolder: true } : {}),
+  };
+}
+
 const NO_USER = { entries: () => ({ collisions: [], archive: [], github: [] }) };
 
 // userSources: createUserSources(), for user.json
@@ -332,10 +341,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
         icon:        e.appIconUrl || null,
         tags:        Array.isArray(e.tags) ? e.tags : [],
         description: e.description || null,
-        data:        data && {
-          iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
-          dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
-        },
+        data:        data && itemData(data),
         entry:       e,
       };
     }));
@@ -346,4 +352,4 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     userConflicts, additionalAllowed: additional, isCurated: (repository) => bundledCollisions().has(repoKey(repository)) };
 }
 
-module.exports = { createCatalogs, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };
+module.exports = { createCatalogs, itemData, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };

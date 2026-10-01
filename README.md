@@ -126,7 +126,13 @@ builds it with `scripts/preview/build.js`: the backend loads the live sources
 once, every response the UIs ask for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
 favorites, Add/Remove and settings work (kept for the tab); installs and
-launching answer 501. main's preview is rebuilt nightly.
+launching answer 501. The JSON feeds the app reads from main at launch
+(`catalog/featured.json` and `catalog/banners.json`, `overrides.json`,
+`announcement.json`) are fetched
+live when the page is opened, so an edit on main shows on the next reload
+(raw.githubusercontent.com caches for up to 5 minutes); the saved copy answers
+if that fails. The archive.org wall and the Quiver lists are the build's
+snapshot, and main's preview is rebuilt nightly.
 
 `mise run ui` is the same thing locally: the whole UI in a browser, with no
 Windows, Electron or build. It saves the real sources as the Pages build does

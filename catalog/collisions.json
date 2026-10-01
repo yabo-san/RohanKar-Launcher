@@ -39,6 +39,7 @@
     "ingest": "place-file",
     "assetPattern": "(?i)x86_64-windows",
     "folderName": "perfect-dark-pc-port.perfect_dark",
+    "exe": "pd.x86_64.exe",
     "dataFiles": [
       {
         "name": "pd.ntsc-final.z64",
@@ -55,9 +56,10 @@
     "ingest": "place-file",
     "assetPattern": "(?i)win32-x86_64",
     "folderName": "TwilitRealm.dusk",
+    "exe": "dusklight.exe",
     "dataFiles": [
       {
-        "name": "Twilight Princess.iso",
+        "name": "Legend of Zelda, The - Twilight Princess (USA).ciso",
         "targetSubpath": ""
       }
     ]
