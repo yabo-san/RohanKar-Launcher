@@ -47,6 +47,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['uploaders-url'] ? { uploadersUrl: args['uploaders-url'] } : {}),
     ...(args['github-api'] ? { githubApi: args['github-api'] } : {}),
     ...(args['collisions-file'] ? { collisionsFile: path.resolve(args['collisions-file']) } : {}),
+    // The owner's console: curated collisions edited in place (docs/ADMIN.md)
+    ...(args.admin === 'true' || env.LAUNCHER_ADMIN === '1' ? { admin: true } : {}),
     ...(args['featured-url'] ? { featuredUrl: args['featured-url'] } : {}),
     ...(args['announcement-url'] ? { announcementUrl: args['announcement-url'] } : {}),
     ...(bridge ? { host: bridge.host } : {}),

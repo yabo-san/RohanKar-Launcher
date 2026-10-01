@@ -32,6 +32,8 @@ const state = {
   editor: null,         // the collision being edited (viewCollision)
   collisionFeeds: null, // subscribed collision feeds, for Settings
   userSources: null,    // GET /user-sources: user.json's state, invalid entries, conflicts
+  admin: false,         // the owner's console (mise run admin): curated collisions edited in place
+  curated: null,        // GET /admin/collisions, for the Collisions database page
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -228,6 +230,7 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
+    hidden:             !!it.hidden,
     catalogUrl:         cat.url,
     // A collision with no data (a repo added on its own) has nothing to fetch
     data: it.data && (it.data.iaIdentifier || it.data.contentUrl || it.data.dataFiles?.length || it.data.sources?.length)
@@ -356,6 +359,7 @@ function goHistory(dir) {
 }
 function show(name, arg) {
   if (name === 'collision') startEditor(arg);
+  if (name === 'admin') loadCurated();
   state.view = { name, arg };
   state.query = '';
   $('#q').value = '';
@@ -405,7 +409,7 @@ function portCard(p) {
       <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${p.userSource ? USER_BADGE : ''}
+    ${p.userSource ? USER_BADGE : ''}${p.hidden ? '<span class="pill">Hidden</span>' : ''}
   </button>`;
 }
 
@@ -1090,7 +1094,7 @@ function viewSearch(q) {
 
 // The round reload button at the right of the page title (Cider's reload-btn)
 const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data' };
+const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data', admin: 'Collisions database' };
 
 function render() {
   const v = state.view;
@@ -1107,12 +1111,13 @@ function render() {
   else if (v.name === 'updates') html = viewUpdates();
   else if (v.name === 'settings') html = viewSettings();
   else if (v.name === 'collision') html = viewCollision();
+  else if (v.name === 'admin') html = viewAdmin();
   else html = viewHome();
 
   const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
-    : v.name === 'collision' && !v.arg ? 'Add a GitHub repo'
+    : v.name === 'collision' && !v.arg ? (state.admin ? 'New game tile' : 'Add a GitHub repo')
     : HEADINGS[v.name] || 'Home';
 
   // Keep the settings form as typed while the wall is still streaming in
@@ -1235,6 +1240,7 @@ function gameDetail(d) {
   } else {
     actions = `<button class="btn primary" id="btn-download" data-action="install">Install</button>`;
   }
+  if (state.admin && !v._manual) actions += `<button class="btn" data-action="admin-from-item" data-ia="${esc(v.identifier)}">Make a game tile…</button>`;
   const exes = exePicker(d);
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
@@ -1296,7 +1302,7 @@ function portDetail(d) {
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${esc(p.project)} · Source: Quiver / ${esc(p.shelfName)}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}${p.shelf.startsWith('curated-') ? `y4bo's curated list / ${esc(p.shelfName)}` : `Source: Quiver / ${esc(p.shelfName)}`}</div></div></div>
     <div class="d-body">
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
       <div class="actions">
@@ -1311,10 +1317,10 @@ function portDetail(d) {
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
         <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
-        <dt>Folder</dt><dd>${esc(p.folderName)}</dd>
+        <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
-        <dt>Catalog</dt><dd>${esc(p.catalogUrl)}</dd>
+        <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'catalog/collisions.json')}</dd>
       </dl>
     </div>`;
 }
@@ -1422,25 +1428,27 @@ async function togglePort(id) {
 // ─── Game data: the collision editor (docs/COLLISIONS.md) ───────────────────
 
 const ARCHIVE_RE = /\.(zip|7z|rar)$/i;
-const blankSource = () => ({ ia: '', path: '', target: '', extract: false, sha1: '', optional: false });
+const blankSource = () => ({ ia: '', path: '', target: '', as: '', extract: false, sha1: '', optional: false });
 
 // Loads the collision in effect for repo (or a blank one for a new repo) into the editor
 async function startEditor(repo) {
   const port = repo && state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
   const ed = state.editor = { repo: repo || '', isNew: !repo, loading: !!repo, origin: null, feed: null, extra: {},
     name: port?.name || '', folderName: port?.folderName || '', assetPattern: '', base: 'binary', binaryTarget: '',
+    // admin mode: the tile's shelf, the exe to launch, and whether users see it
+    shelf: repo ? '' : 'y4bo ports', exe: '', hidden: false, releases: null, search: null, queries: {},
     sources: repo ? [] : [blankSource()], browse: null, preview: null, errors: null };
   if (!repo) return;
   const c = await api.getCollision(repo);
   if (state.editor !== ed) return;
   ed.loading = false;
   if (c) {
-    const { repository, name, folderName, assetPattern, base, binaryTarget, sources, ...extra } = c.entry;
+    const { repository, name, folderName, assetPattern, base, binaryTarget, sources, shelf, exe, hidden, ...extra } = c.entry;
     Object.assign(ed, {
-      origin: c.origin, feed: c.feed || null, extra,
+      origin: c.origin, feed: c.feed || null, extra, shelf: shelf || '', exe: exe || '', hidden: !!hidden,
       name: name || ed.name, folderName: folderName || ed.folderName, assetPattern: assetPattern || '',
       base: base === 'data' ? 'data' : 'binary', binaryTarget: binaryTarget || '',
-      sources: (sources || []).map(x => ({ ...blankSource(), ...x, sha1: x.sha1 || '', target: x.target || '' })),
+      sources: (sources || []).map(x => ({ ...blankSource(), ...x, sha1: x.sha1 || '', target: x.target || '', as: x.as || '' })),
     });
   }
   if (!ed.sources.length) ed.sources.push(blankSource());
@@ -1454,12 +1462,15 @@ function viewCollision() {
   const from = ed.origin === 'local' ? 'Yours.' : ed.origin === 'feed' ? `From the ${esc(ed.feed?.name || '')} feed. Saving makes a copy of your own that wins over it.`
     : ed.origin === 'user.json' ? 'From your user.json. Saving makes a copy of your own that wins over it.'
     : ed.origin === 'bundled' ? 'Curated: bundled with the launcher. The curated list wins, so it can\'t be changed here.' : 'Nothing yet.';
-  const off = !state.settings.allowAdditionalSources;
-  const locked = off || ed.origin === 'bundled';
+  const admin = state.admin;
+  const off = !admin && !state.settings.allowAdditionalSources;
+  const locked = off || (!admin && ed.origin === 'bundled');
   const legacy = ed.extra.dataFiles?.length
     ? `<div class="hint">Also picks ${esc(ed.extra.dataFiles.map(d => d.name).join(', '))} out of ${esc(decodeURIComponent(String(ed.extra.contentUrl || '').split('/').pop()))} (the first version of the schema). That part is kept as it is.</div>` : '';
   return `<div class="form editor">
-    <p class="lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. ${ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : from}</p>
+    <p class="lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. ${admin
+      ? `<b>Admin mode:</b> saving writes the curated list, catalog/collisions.json, for a PR. ${ed.isNew ? 'A repo no shelf lists becomes a game tile on its shelf.' : ed.origin === 'bundled' ? 'Curated.' : from}`
+      : ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : from}</p>
     ${ed.isNew ? `<div class="field"><label for="ed-repo">GitHub repository</label>
       <input type="text" id="ed-repo" data-ed="repo" value="${esc(ed.repo)}" placeholder="owner/repo" spellcheck="false"></div>`
     : `<div class="field"><label>GitHub repository</label><div class="hint"><a data-href="https://github.com/${esc(ed.repo)}">${esc(ed.repo)}</a></div></div>`}
@@ -1467,7 +1478,12 @@ function viewCollision() {
       <div><label for="ed-folder">Install folder name</label><input type="text" id="ed-folder" data-ed="folderName" value="${esc(ed.folderName)}" placeholder="owner.repo"></div></div>
     <div class="field"><label for="ed-asset">Release asset</label>
       <div class="hint">A pattern for the release file to take, e.g. <code>(?i)x86_64-windows</code>. Empty picks the Windows build.</div>
-      <input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false"></div>
+      ${admin ? `<div class="inline"><input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">
+        <button class="btn" id="btn-pick-release" data-action="ed-releases">Pick a release…</button></div>${releasesHtml()}`
+      : `<input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">`}</div>
+    ${admin ? `<div class="field two"><div><label for="ed-exe">Executable</label><input type="text" id="ed-exe" data-ed="exe" value="${esc(ed.exe)}" placeholder="When the release ships several, e.g. pd.x86_64.exe" spellcheck="false"></div>
+      <div><label for="ed-shelf">Shelf</label><input type="text" id="ed-shelf" data-ed="shelf" value="${esc(ed.shelf)}" placeholder="A tile of its own, e.g. y4bo ports" spellcheck="false"></div></div>
+      <div class="field"><label class="radio"><input type="checkbox" id="ed-hidden" ${ed.hidden ? 'checked' : ''}> Hidden: only admin mode shows it (gate it until it's ready)</label></div>` : ''}
     <div class="field"><label>Order</label>
       <label class="radio"><input type="radio" name="ed-base" value="binary" ${ed.base === 'binary' ? 'checked' : ''}> Release first, then the game data beside or inside it</label>
       <label class="radio"><input type="radio" name="ed-base" value="data" ${ed.base === 'data' ? 'checked' : ''}> Game data first (a full rip), then the release unpacked over it</label></div>
@@ -1482,9 +1498,10 @@ function viewCollision() {
       <button class="btn" data-view="settings">Settings</button></div>` : ''}
     <div class="field actions">
       <button class="btn" data-action="ed-preview">Preview</button>
-      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>Save</button>
-      ${ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
-      <button class="btn" data-action="ed-export">Copy my collisions as a feed</button></div>
+      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>${admin ? 'Save to the curated list' : 'Save'}</button>
+      ${!admin && ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
+      ${admin && ed.origin === 'bundled' ? '<button class="btn" data-action="ed-delete">Remove from the curated list</button>' : ''}
+      ${admin ? '' : '<button class="btn" data-action="ed-export">Copy my collisions as a feed</button>'}</div>
     <div id="ed-preview">${previewHtml()}</div>
   </div>`;
 }
@@ -1496,8 +1513,11 @@ function sourceCard(x, i) {
     <div class="inline"><input type="text" data-src="${i}" data-key="ia" value="${esc(x.ia)}" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
       <button class="btn" data-action="ed-browse" data-i="${i}">Browse</button>
       <button class="btn" data-action="ed-remove-source" data-i="${i}" aria-label="Remove this source">&#10005;</button></div>
+    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.queries[i] || '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
+      <button class="btn" data-action="ed-search" data-i="${i}">Search</button></div>${ed.search?.i === i ? searchHtml() : ''}` : ''}
     <div class="two"><div><label>Take</label><input type="text" data-src="${i}" data-key="path" value="${esc(x.path)}" placeholder="file, folder/* or *" spellcheck="false"></div>
       <div><label>Into folder</label><input type="text" data-src="${i}" data-key="target" value="${esc(x.target)}" placeholder="the install folder" spellcheck="false"></div></div>
+    ${state.admin ? `<div><label>Save as</label><input type="text" data-src="${i}" data-key="as" value="${esc(x.as)}" placeholder="The file name the port expects, e.g. pd.ntsc-final.z64 (a ROM zip: the ROM inside it)" spellcheck="false"></div>` : ''}
     <div class="checks">
       <label><input type="checkbox" data-src="${i}" data-key="extract" ${x.extract ? 'checked' : ''}> Unpack the archive</label>
       <label><input type="checkbox" data-src="${i}" data-key="optional" ${x.optional ? 'checked' : ''}> Optional</label>
@@ -1578,9 +1598,15 @@ function editorEntry() {
   if (ed.assetPattern.trim()) entry.assetPattern = ed.assetPattern.trim();
   if (ed.base === 'data') entry.base = 'data';
   if (ed.binaryTarget.trim()) entry.binaryTarget = ed.binaryTarget.trim();
+  if (state.admin) {
+    if (ed.exe.trim()) entry.exe = ed.exe.trim();
+    if (ed.shelf.trim()) entry.shelf = ed.shelf.trim();
+    if (ed.hidden) entry.hidden = true;
+  }
   const sources = ed.sources.filter(x => x.ia.trim() || x.path.trim()).map(x => ({
     ia: x.ia.trim(), path: x.path.trim(),
     ...(x.target.trim() ? { target: x.target.trim() } : {}),
+    ...(x.as?.trim() ? { as: x.as.trim() } : {}),
     ...(x.extract ? { extract: true } : {}),
     ...(x.sha1.trim() ? { sha1: x.sha1.trim().toLowerCase() } : {}),
     ...(x.optional ? { optional: true } : {}),
@@ -1606,9 +1632,10 @@ async function editorSave() {
   const ed = state.editor;
   const repo = ed.repo.trim();
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { ed.errors = ['The repository must look like owner/repo.']; return render(); }
-  const r = await api.saveCollision(repo, editorEntry());
+  const r = await (state.admin ? api.saveCuratedCollision(repo, editorEntry()) : api.saveCollision(repo, editorEntry()));
   if (!r.ok) { ed.errors = r.error.split('; '); return render(); }
-  toast(`Saved the game data for ${ed.name || repo}. It's yours now, and wins over any feed's.`);
+  toast(state.admin ? `Wrote ${ed.name || repo} to catalog/collisions.json. Commit it in a PR to ship it.`
+    : `Saved the game data for ${ed.name || repo}. It's yours now, and wins over any feed's.`, state.admin ? 6000 : undefined);
   await loadPorts();
   const port = state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
   go('collision', repo);
@@ -1617,11 +1644,123 @@ async function editorSave() {
 
 async function editorDelete() {
   const ed = state.editor;
+  if (state.admin) {
+    if (!confirm(`Remove ${ed.repo} from the curated list, catalog/collisions.json?`)) return;
+    const r = await api.deleteCuratedCollision(ed.repo);
+    if (!r.ok) return toast(`Couldn't remove it: ${r.error}`);
+    toast('Removed from the curated list.');
+    await loadPorts();
+    return go('admin');
+  }
   if (!confirm(`Remove your game data for ${ed.repo}? A feed's or the bundled one takes over again, if there is one.`)) return;
   await api.deleteCollision(ed.repo);
   toast('Removed yours.');
   await loadPorts();
   go('collision', ed.repo);
+}
+
+// ─── Admin mode: releases, archive.org search, the curated list ─────────────
+
+function releasesHtml() {
+  const r = state.editor?.releases;
+  if (!r) return '';
+  if (r.loading) return '<p class="empty">Reading the releases…</p>';
+  if (r.error) return `<p class="empty">${esc(r.error)}</p>`;
+  return `<div class="browser" id="release-list">
+    <div class="hint">${r.picked ? `The pattern picks <b>${esc(r.picked)}</b> from ${esc(r.latest)}.` : `Nothing in ${esc(r.latest || 'the latest release')} matches yet.`} Pick an asset to take it in every later release.</div>
+    ${r.releases.slice(0, 3).map(rel => `<div class="h3">${esc(rel.name)}${rel.prerelease ? ' · prerelease' : ''}${rel.tag === r.latest ? ' · latest' : ''}</div>
+      ${rel.assets.map(a => `<button class="pick" data-action="ed-take-asset" data-pattern="${esc(a.pattern)}"><span class="kind">${ARCHIVE_RE.test(a.name) ? 'ZIP' : 'FILE'}</span>${esc(a.name)}<span class="meta">${fmtBytes(a.size)}</span></button>`).join('') || '<p class="empty">No assets.</p>'}`).join('')}
+    <button class="btn" data-action="ed-close-releases">Done</button></div>`;
+}
+
+async function editorReleases() {
+  const ed = state.editor;
+  const repo = ed.repo.trim();
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast('Type the repository first, as owner/repo.');
+  const r = ed.releases = { loading: true };
+  render();
+  const got = await api.getReleases(repo, ed.assetPattern.trim());
+  if (ed.releases !== r) return;
+  ed.releases = got.ok ? got : { error: `Couldn't read the releases: ${got.error}` };
+  render();
+}
+
+function editorTakeAsset(pattern) {
+  const ed = state.editor;
+  ed.assetPattern = pattern;
+  ed.releases = null;
+  editorReleases();
+}
+
+function searchHtml() {
+  const s = state.editor?.search;
+  if (!s) return '';
+  if (s.loading) return '<p class="empty">Searching archive.org…</p>';
+  if (s.error) return `<p class="empty">${esc(s.error)}</p>`;
+  return `<div class="browser" id="search-list">${s.items.map(it =>
+    `<button class="pick" data-action="ed-pick-item" data-ia="${esc(it.identifier)}"><span class="kind">ITEM</span>${esc(it.title)}<span class="meta">${esc(it.identifier)}${it.uploader ? ` · ${esc(it.uploader)}` : ''}${it.size ? ` · ${fmtBytes(it.size)}` : ''}</span></button>`).join('') || '<p class="empty">Nothing found.</p>'}</div>`;
+}
+
+async function editorSearch(i) {
+  const ed = state.editor;
+  const q = String(ed.queries[i] || '').trim();
+  if (!q) return toast('Type something to search for.');
+  const s = ed.search = { i, q, loading: true, items: [] };
+  render();
+  const r = await api.searchArchive(q);
+  if (ed.search !== s) return;
+  Object.assign(s, { loading: false, items: r.items, error: r.ok ? null : `Couldn't search archive.org: ${r.error}` });
+  render();
+}
+
+// A search hit becomes the source's item, and its files open to pick from
+function editorPickItem(ia) {
+  const ed = state.editor;
+  const i = ed.search?.i ?? 0;
+  ed.sources[i].ia = ia;
+  ed.search = null;
+  return editorBrowse(i);
+}
+
+// "Make a game tile" from an archive.org item on the wall: a new tile with it as the data
+function adminFromItem(identifier) {
+  closeDetail();
+  go('collision');
+  state.editor.sources[0].ia = identifier;
+  return editorBrowse(0);
+}
+
+async function loadCurated() {
+  state.curated = null;
+  const r = await api.getCuratedCollisions();
+  state.curated = r || { error: "Admin mode is off. Start it with mise run admin." };
+  if (state.view.name === 'admin') render();
+}
+
+function viewAdmin() {
+  const c = state.curated;
+  if (!c) return '<p class="empty">Loading the curated list…</p>';
+  if (c.error) return `<p class="empty">${esc(c.error)}</p>`;
+  const summary = (e) => [...(e.sources || []).map(x => `${x.ia}/${x.path}${x.as ? ` → ${x.as}` : ''}`), ...(e.dataFiles || []).map(d => d.name)].join(', ');
+  return `<p class="lede">Every curated collision, from <code>${esc(c.file)}</code>. Edits write that file; commit it in a PR to ship them.</p>
+    <div class="field actions"><button class="btn primary" data-view="collision">New game tile…</button></div>
+    <div class="list-head admin-head"><span>Name</span><span>Repository</span><span>Shelf</span><span>Game data</span><span></span></div>
+    <div class="admin-list">${c.collisions.map(e => `<div class="admin-row${e.hidden ? ' is-hidden' : ''}">
+      <span><b>${esc(e.name || e.repository)}</b>${e.hidden ? ' <span class="pill">Hidden</span>' : ''}</span>
+      <span>${esc(e.repository)}</span><span>${esc(e.shelf || '')}</span><span class="meta">${esc(summary(e))}</span>
+      <span class="row-actions"><button class="btn" data-action="edit-collision" data-repo="${esc(e.repository)}">Edit</button>
+        <button class="btn" data-action="admin-hide" data-repo="${esc(e.repository)}">${e.hidden ? 'Show' : 'Hide'}</button></span></div>`).join('')}</div>`;
+}
+
+async function adminToggleHidden(repo) {
+  const e = state.curated?.collisions.find(x => x.repository === repo);
+  if (!e) return;
+  const { hidden, ...rest } = e;
+  const r = await api.saveCuratedCollision(repo, hidden ? rest : { ...rest, hidden: true });
+  if (!r.ok) return toast(`Couldn't save: ${r.error}`);
+  toast(hidden ? `${e.name || repo} shows for everyone again.` : `${e.name || repo} is hidden: only admin mode shows it.`);
+  await loadCurated();
+  loadPorts();
 }
 
 async function editorExport() {
@@ -1643,7 +1782,12 @@ document.addEventListener('input', (e) => {
   if (!ed || state.view.name !== 'collision') return;
   if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
   if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
+  // Kept in state, so a re-render (the release list arriving) doesn't wipe what was typed
+  if (t.dataset.search !== undefined) { ed.queries[t.dataset.search] = t.value; return; }
   if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.dataset?.search !== undefined && state.editor) editorSearch(Number(e.target.dataset.search));
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
@@ -1657,6 +1801,7 @@ document.addEventListener('change', (e) => {
   const t = e.target;
   if (!ed || state.view.name !== 'collision') return;
   if (t.name === 'ed-base') ed.base = t.value;
+  if (t.id === 'ed-hidden') ed.hidden = t.checked;
   if (t.dataset.src !== undefined && t.type === 'checkbox') ed.sources[Number(t.dataset.src)][t.dataset.key] = t.checked;
 });
 
@@ -1862,6 +2007,9 @@ const ROW_ACTIONS = [
     } },
   { id: 'manual-remove', label: 'Remove from Library', icon: 'trash', group: 'remove', danger: true, kinds: ['game'],
     when: (g) => g._manual, run: (g) => { openDetail('game', g.identifier); return onAction('manual-remove'); } },
+  // Admin mode (docs/ADMIN.md): a game tile with this archive.org item as its data
+  { id: 'make-tile', label: 'Make a Tile…', icon: 'plus', group: 'admin', kinds: ['game'],
+    when: (g) => state.admin && !g._manual, run: (g) => adminFromItem(g.identifier) },
 ];
 ROW_ACTIONS.forEach(rowActions.register);
 
@@ -2047,6 +2195,13 @@ async function onAction(action, el) {
     case 'ed-save': return editorSave();
     case 'ed-delete': return editorDelete();
     case 'ed-export': return editorExport();
+    case 'ed-releases': return editorReleases();
+    case 'ed-close-releases': state.editor.releases = null; return render();
+    case 'ed-take-asset': return editorTakeAsset(el.dataset.pattern);
+    case 'ed-search': return editorSearch(Number(el.dataset.i));
+    case 'ed-pick-item': return editorPickItem(el.dataset.ia);
+    case 'admin-from-item': return adminFromItem(el.dataset.ia);
+    case 'admin-hide': return adminToggleHidden(el.dataset.repo);
     case 'feed-add': return addCollisionFeed();
     case 'user-file-save': return saveUserFile();
     case 'feed-trust': return trustUploader(el);
@@ -2323,7 +2478,9 @@ async function showAnnouncement() {
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
+  state.admin = !!(await api.getHealth().catch(() => ({}))).admin;
   document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
+  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.admin));
   state.sources = (await api.getSources()).sources;
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
