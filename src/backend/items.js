@@ -10,6 +10,7 @@
  * allowed; their versions carry user: true (user-sources.js).
  */
 const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
+const { platformOf } = require('./playnite');
 
 const truthy = (v) => v === true || v === 'true' || v === '1';
 const NO_USER = { enabled: () => false, entries: () => ({ collisions: [], archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
@@ -101,6 +102,13 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     return loading;
   }
 
+  // An upload's platform from its archive.org subjects ("ps2", "nintendo 64"),
+  // else PC, as the Playnite export files every archive.org entry
+  const platformOfSubjects = (subject) => {
+    const list = (Array.isArray(subject) ? subject : [subject]).filter(Boolean).flatMap(s => String(s).split(/[;,]/));
+    return list.map(platformOf).find(p => p !== 'Other') || 'PC';
+  };
+
   const version = (doc) => ({
     id:          doc.identifier,
     title:       getTitle(doc),
@@ -110,6 +118,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     downloads:   doc.downloads ?? null,
     description: doc.description ?? null,
     subject:     doc.subject ?? null,
+    platform:    platformOfSubjects(doc.subject),
     originalTitle: doc.title ?? null,
     override:    doc._override || null,
     user:        !!doc._source.user,

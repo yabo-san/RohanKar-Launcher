@@ -45,6 +45,11 @@ test.describe.configure({ mode: 'serial' });
 
 let stack, page;
 
+// A page change rises in (motion.css); wait it out before opening a dropdown,
+// or Playwright's scroll-into-view retries land mid-animation and scroll the
+// page, which closes the dropdown as a real scroll would
+const settled = () => expect(page.locator('#body.page-enter')).toHaveCount(0);
+
 test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, {
     page: 'new/index.html',
@@ -181,13 +186,24 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.locator('#nav-fwd').click();
   await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
+  await settled();
 
-  // ⋯ lists what has no pill of its own; Escape closes it and stays on the page
+  // ⋯ opens the row menu (the same grouped, iconed list as a list row's ⋯),
+  // without Properties since this is that page; Escape closes it and stays
   await detail.locator('[data-detail-menu]').click();
-  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Install', 'Go to rohanjackson071', 'View on archive.org']);
+  const menu = page.locator('#ctxmenu');
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .sep')).toHaveCount(2);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(5);
   await page.keyboard.press('Escape');
-  await expect(page.locator('#ctxmenu')).toBeHidden();
+  await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
+  // Right-click on the page's head opens the same menu
+  await detail.locator('.album-title').click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
 
   // More from the uploader opens that title's page; Back walks back to this one
   const more = detail.locator('.section', { hasText: 'More from rohanjackson071' });
@@ -236,9 +252,9 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   await expect(page.locator('#btn-play')).toBeVisible({ timeout: 30_000 });
   const lib = await page.evaluate(() => api.getLibrary());
   expect(Object.values(lib).some(l => l.install_dir)).toBe(true);
-  // Installed: ⋯ has Add to Steam and Delete, the drawer's other buttons
+  // Installed: ⋯ (the row menu) has Add to Steam and Delete, the drawer's other buttons
   await page.locator('#detail [data-detail-menu]').click();
-  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Play', 'Open Folder', 'Add to Steam…', 'Go to rohanjackson071', 'View on archive.org', 'Delete']);
+  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Play', 'Open Folder', 'Add to Steam…', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Delete']);
   await page.keyboard.press('Escape');
   // Back to the search, with its results
   await page.keyboard.press('Escape');
@@ -270,8 +286,9 @@ test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', asyn
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  // The ROM lands in data/ beside the exe the collision names, not beside the release folder
   expect(fs.readFileSync(path.join(dir, 'data', 'pd.ntsc-final.z64'), 'utf8')).toBe(PD_ROM);
-  expect(fs.existsSync(path.join(dir, 'pd.exe'))).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'pd.x86_64.exe'))).toBe(true);
   await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
@@ -282,7 +299,12 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await card.click({ button: 'right' });
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options›', 'Remove from Library', 'Game Data…', 'About›', 'Delete']);
+  // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
+  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options',
+    'Remove from Library', 'Game Data…', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Game Data on archive.org', 'Copy Link', 'Delete']);
+  await expect(menu.locator(':scope > .sep')).toHaveCount(3);
+  await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
+  await expect(menu.locator('.has-sub > .mi .chev')).toBeVisible();
   await menu.locator('.has-sub', { hasText: 'Launch Options' }).hover();
   await expect(menu.locator('[data-menu="choose-exe"]')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -293,7 +315,6 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await page.locator('.port-card', { hasText: 'Mario Kart 64' }).click({ button: 'right' });
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi').first()).toHaveText('Download');
   await expect(menu.locator('[data-menu="locate"]')).toBeVisible();
-  await menu.locator('.has-sub', { hasText: 'About' }).hover();
   await menu.locator('[data-menu="details"]').click();
   await expect(menu).toBeHidden();
   await expect(page.locator('#detail')).toContainText('Mario Kart 64');
@@ -302,14 +323,34 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
 
 test("The wall's library header sorts, searches, lists and pages, after Cider's", async () => {
   await page.locator('[data-view="wall"]').click();
+  await settled();
   const titles = () => page.locator('#body .game-card .title').allInnerTexts();
   const header = page.locator('.album-header');
+  // Cider 2's dropdowns: a pill that opens a listbox, the choice marked
+  const choose = async (pref, value) => {
+    await header.locator(`[data-pref="${pref}"]`).click();
+    await page.locator(`#ddmenu [role="option"][data-value="${value}"]`).click();
+    await expect(page.locator('#ddmenu')).toBeHidden();
+  };
 
-  await header.locator('[data-pref="sort"]').selectOption('name');
-  await header.locator('[data-pref="order"]').selectOption('asc');
+  await choose('sort', 'name');
+  await choose('order', 'asc');
+  await expect(header.locator('[data-pref="sort"]')).toHaveAccessibleName('Sort by: Title');
   const asc = await titles();
   expect(asc).toEqual([...asc].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
-  await header.locator('[data-pref="order"]').selectOption('desc');
+  // From the keyboard: Down opens it on the chosen item, arrows move, Enter picks, Escape closes
+  await header.locator('[data-pref="order"]').focus();
+  await page.keyboard.press('ArrowDown');
+  await expect(page.locator('#ddmenu [aria-selected="true"]')).toBeFocused();
+  await expect(page.locator('#ddmenu [aria-selected="true"]')).toHaveText('Ascending');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#ddmenu')).toBeHidden();
+  await expect(header.locator('[data-pref="order"]')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#ddmenu')).toBeHidden();
+  await expect(header.locator('[data-pref="order"]')).toHaveAccessibleName('Sort order: Descending');
   expect(await titles()).toEqual([...asc].reverse());
 
   // Punctuation is ignored, as in Cider's library search; focus stays in the box
@@ -318,16 +359,99 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
   await expect(page.locator('#lib-search')).toBeFocused();
   await page.locator('#lib-search').fill('');
 
-  await header.locator('[data-pref="viewAs"]').selectOption('list');
+  // View as: a two-button switch at the end of the controls row
+  const toggle = header.getByRole('group', { name: 'View as' });
+  await expect(toggle.getByRole('button', { name: 'Cover art' })).toHaveAttribute('aria-pressed', 'true');
+  await toggle.getByRole('button', { name: 'List' }).click();
   await expect(page.locator('#body .list-row').first()).toBeVisible();
   await expect(page.locator('#body .game-card')).toHaveCount(0);
-  await header.locator('[data-pref="viewAs"]').selectOption('covers');
+  await expect(header.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(header.getByRole('button', { name: 'Cover art' })).toHaveAttribute('aria-pressed', 'false');
+  await header.getByRole('button', { name: 'Cover art' }).click();
+  await expect(page.locator('#body .game-card').first()).toBeVisible();
 
-  await header.locator('[data-pref="scroll"]').selectOption('paged');
+  await choose('scroll', 'paged');
   await expect(header.locator('.pagination-container')).toBeVisible();
   await expect(header.locator('.md-input-number')).toContainText('/ 1');
-  await header.locator('[data-pref="scroll"]').selectOption('infinite');
-  await header.locator('[data-pref="sort"]').selectOption('dateAdded');
+  await choose('scroll', 'infinite');
+  await choose('sort', 'dateAdded');
+});
+
+test("The wall's list view: Cider 2's song list, with sorting headers, a column picker and a ⋯ menu", async () => {
+  await page.locator('[data-view="wall"]').click();
+  await settled();
+  await page.locator('.album-header').getByRole('button', { name: 'List' }).click();
+  const table = page.locator('#body .lv');
+  const rows = table.locator('.lv-row');
+  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
+  await expect(rows).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
+  await expect(table.locator('.lv-row img, .lv-row [data-thumb]')).toHaveCount(0);
+
+  // Column headers: the fixtures have no release dates or sizes, so those stay out
+  const headers = table.locator('.lv-head [role="columnheader"] button[data-sort-col]');
+  await expect(headers).toHaveText(['Name', 'Uploader', 'Platform', 'Added', 'Downloads', 'Status']);
+  await expect(rows.first().locator('[role="cell"]').nth(4)).toHaveText('PC');
+
+  // A header click sorts by it; a second click flips the order
+  const names = () => rows.locator('.lv-title').allInnerTexts();
+  await headers.filter({ hasText: 'Name' }).click();
+  await expect(table.locator('.lv-th', { hasText: 'Name' })).toHaveAttribute('aria-sort', 'ascending');
+  const asc = await names();
+  expect(asc).toEqual([...asc].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
+  await expect(page.locator('.album-header [data-pref="sort"]')).toHaveAccessibleName('Sort by: Title');
+  await table.locator('.lv-head button[data-sort-col="name"]').click();
+  await expect(table.locator('.lv-th', { hasText: 'Name' })).toHaveAttribute('aria-sort', 'descending');
+  expect(await names()).toEqual([...asc].reverse());
+  await table.locator('.lv-head button[data-sort-col="downloads"]').click();
+  const downloads = (await rows.locator('.lv-td.num').allInnerTexts()).map(t => Number(t.replace(/,/g, '')));
+  expect(downloads).toEqual([...downloads].sort((a, b) => b - a));
+
+  // The column picker hides a column, and the choice is kept
+  await table.locator('[data-col-picker]').click();
+  const picker = page.locator('#ddmenu');
+  await expect(picker.locator('[role="option"][data-value="size"]')).toContainText('no data');
+  await picker.locator('[role="option"][data-value="uploader"]').click();
+  await expect(picker).toBeVisible();
+  await expect(picker.locator('[role="option"][data-value="uploader"]')).toHaveAttribute('aria-selected', 'false');
+  await expect(page.locator('#body .lv-head button[data-sort-col="uploader"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(picker).toBeHidden();
+  await page.reload();
+  await page.locator('[data-view="wall"]').click();
+  await settled();
+  await expect(page.locator('#body .lv-head button[data-sort-col]')).toHaveText(['Name', 'Platform', 'Added', 'Downloads', 'Status']);
+  await page.locator('#body [data-col-picker]').click();
+  await page.locator('#ddmenu [role="option"][data-value="uploader"]').click();
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#body .lv-head button[data-sort-col="uploader"]')).toHaveCount(1);
+
+  // The ⋯ button opens the row menu, the same one a right-click opens
+  const row = page.locator('#body .lv-row', { hasText: 'The Sims' });
+  await row.hover();
+  await expect(row.locator('.lv-go')).toBeVisible();
+  await row.locator('.lr-more').click();
+  const menu = page.locator('#ctxmenu');
+  await expect(menu).toBeVisible();
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await menu.locator('[data-menu="favorite"]').click();
+  await expect(menu).toBeHidden();
+  await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
+  await row.click({ button: 'right' });
+  await expect(menu.locator('[data-menu="favorite"]')).toHaveText('Unfavorite');
+  await menu.locator('[data-menu="favorite"]').click();
+  await expect(row.locator('.lv-star [data-ico="star-fill"]')).toHaveCount(0);
+  await row.locator('.lr-more').click();
+  await menu.locator('[data-menu="details"]').click();
+  await expect(page.locator('#detail')).toContainText('The Sims');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#detail')).toHaveCount(0);
+  await settled();
+
+  await page.locator('.album-header').getByRole('button', { name: 'Cover art' }).click();
+  await page.locator('.album-header [data-pref="sort"]').click();
+  await page.locator('#ddmenu [data-value="dateAdded"]').click();
+  await page.locator('.album-header [data-pref="order"]').click();
+  await page.locator('#ddmenu [data-value="desc"]').click();
 });
 
 test('Sidebar groups fold and stay folded', async () => {
@@ -561,7 +685,7 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
 
   await page.evaluate(() => { globalThis.prompt = () => 'Homebrew Deluxe'; });
   await detail.locator('[data-detail-menu]').click();
-  await page.locator('#ctxmenu [data-action="manual-rename"]').click();
+  await page.locator('#ctxmenu [data-menu="manual-rename"]').click();
   await expect(detail.locator('.album-title')).toHaveText('Homebrew Deluxe');
   await page.locator('#nav-back').click();
   const card = page.locator('.game-card', { hasText: 'Homebrew Deluxe' });
@@ -569,7 +693,7 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
 
   await card.click();
   await detail.locator('[data-detail-menu]').click();
-  await page.locator('#ctxmenu [data-action="manual-remove"]').click();
+  await page.locator('#ctxmenu [data-menu="manual-remove"]').click();
   await expect(detail).toHaveCount(0);
   await expect(page.locator('#heading')).toHaveText('Library');
   await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
