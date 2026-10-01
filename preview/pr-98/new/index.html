@@ -43,6 +43,8 @@
 
         <button class="navgroup" data-collapse="ports">Ports</button>
         <div class="navlist" data-group="ports">
+          <button class="navitem admin-only hidden" data-view="collision" id="nav-new-tile"><i class="ico" data-ico="plus"></i>New game tile…</button>
+          <button class="navitem admin-only hidden" data-view="admin" id="nav-admin"><i class="ico" data-ico="library"></i>Collisions database</button>
           <button class="navitem additional-only hidden" data-view="collision" id="nav-add-repo"><i class="ico" data-ico="plus"></i>Add a GitHub repo…</button>
           <div id="nav-shelves"></div>
         </div>
@@ -83,8 +85,8 @@
 
   <script src="../api.js"></script>
   <script src="../sources.js"></script>
-  <script src="../details.js"></script>
   <script src="../list-view.js"></script>
+  <script src="../details.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

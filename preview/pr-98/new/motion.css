@@ -173,6 +173,7 @@ button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px;
 /* versions / what installs: a dense track list with hairline dividers */
 .album-tracks { margin-top: 40px; }
 .tracklist { display: flex; flex-direction: column; }
+.tracklist .num { text-align: right; font-variant-numeric: tabular-nums; }   /* app.css's generic .num went with the old list rows */
 .track-head, .track {
   display: grid; grid-template-columns: 36px minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(90px, auto);
   align-items: center; gap: 16px; padding: 0 12px;
