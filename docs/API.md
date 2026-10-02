@@ -41,9 +41,8 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api` and `--collisions-file`
-point archive.org, the catalog fetches, the GitHub API and the collision catalog elsewhere
-(fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+`--archive-base`, `--overrides-url`, `--uploaders-url` and `--github-api` point archive.org, the
+catalog fetches and the GitHub API elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
 the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
@@ -80,8 +79,7 @@ item. Library state is joined in on every read.
 
 A catalog item has `id` `quiver:<catalog id>:<repository>`, `source`
 `{ type: "quiver", catalog, name, url }`, `repository`, `icon`, `tags`, `versions: []`, `entry`
-(the raw catalog entry) and `data`: the matching `collisions.json` record
-(`{ iaIdentifier, contentUrl, dataFiles }`) joined on `repository`, or `null`.
+(the raw catalog entry) and `userSource` (true on "Your ports").
 
 A **library row** is what `library.db` holds: `identifier`, `install_dir`, `exe_path`, `category`,
 `playtime_secs`, `added_at`, `is_favorite` (0/1), `notes`, `source`.
@@ -94,8 +92,6 @@ A **library row** is what `library.db` holds: `identifier`, `install_dir`, `exe_
 curl http://127.0.0.1:7777/v1/health
 # {"ok":true,"api":"v1","version":"1.6.0"}
 ```
-
-In admin mode it also has `"admin": true`.
 
 ### `GET /featured`
 
@@ -242,43 +238,21 @@ Marks the current copy as reviewed (`204`).
 curl -X POST http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/seen
 ```
 
-### Collisions
+### Your repos
 
-The user's own collisions and the collision feeds they subscribe to. The schema is in
-[COLLISIONS.md](COLLISIONS.md). `:repo` is `owner/repo` URL-encoded (`owner%2Frepo`).
+GitHub repos the user adds on their own. A repo no subscribed catalog lists shows on the "Your
+ports" shelf (catalog id `local`) while additional sources are allowed. `:repo` is `owner/repo`
+URL-encoded (`owner%2Frepo`).
 
 | route | does |
 | --- | --- |
-| `GET /collisions` | `{ local: [...] }`, the user's own |
-| `GET /collisions/export` | The user's feed: `{ schemaVersion: 1, collisions: [...], uploaders: [{ uploader, label }] }`, their own collisions and the uploaders they have on |
-| `POST /feed/import` | `{ text }`, a feed file's contents: valid collisions become the user's own, its uploaders join their list (turned on). Answers `{ collisions, rejected, uploaders }`; not a feed is `400 bad_feed` |
-| `POST /sources/trust` | `{ uploader, label? }` adds one uploader to the user's list, turned on (or turns it back on). Answers `{ sources }` |
-| `GET /collisions/:repo` | The collision in effect: `{ origin: "bundled" \| "local" \| "user.json" \| "feed", entry, feed? }`, `404` if none. Curated (bundled) wins; the others count only while additional sources are allowed |
-| `PUT /collisions/:repo` | Saves one (replacing the user's own for that repo); `400 bad_collision` lists every problem; `409 curated` for a repository the bundled collisions have |
-| `DELETE /collisions/:repo` | Removes the user's own (`204`), `404` if there wasn't one |
-| `POST /collisions/preview` | `{ sources }` → per source, the archive.org files it places (`to`) and `bytes`, or `error` |
-| `GET /collision-feeds` | Subscribed feeds with `entries`, `rejected`, `uploaders` (each with `trusted`: on in the user's list), `fetchedAt`, `error` |
-| `POST /collision-feeds` | `{ url, name? }` subscribes and fetches; `201` new, `200` already subscribed |
-| `POST /collision-feeds/:id/refresh`, `DELETE /collision-feeds/:id` | Refetch; unsubscribe |
+| `GET /repos` | `{ repos: [{ repository, name?, folderName?, releaseAssetFilter? }] }` |
+| `PUT /repos/:repo` | Adds one (replacing any for that repo); unknown fields are dropped; `400 bad_repo` names every problem |
+| `DELETE /repos/:repo` | Removes it (`204`), `404` if it isn't there |
 
 ```sh
-curl -X PUT -d '{"base":"data","sources":[{"ia":"game-rip","path":"Game.zip","extract":true}]}' \
-  http://127.0.0.1:7777/v1/collisions/owner%2Fport
+curl -X PUT -d '{"name":"My Port"}' http://127.0.0.1:7777/v1/repos/owner%2Fport
 ```
-
-### Admin mode
-
-Only when the backend runs with `--admin` (or `LAUNCHER_ADMIN=1`; `mise run admin`). Otherwise every
-route here is `403 not_admin`, and `GET /health` has no `admin` field. See [ADMIN.md](ADMIN.md).
-
-| route | does |
-| --- | --- |
-| `GET /admin/collisions` | `{ file, collisions }`: the curated list, and the file it lives in |
-| `PUT /admin/collisions/:repo` | Writes one into the curated file (`201` new, `200` replaced in place); `400 bad_collision` lists every problem |
-| `DELETE /admin/collisions/:repo` | Removes one (`204`), `404` if it isn't there |
-| `GET /admin/releases/:repo?pattern=` | `{ latest, picked, releases: [{ tag, name, prerelease, published, assets: [{ name, size, pattern }] }] }`: `picked` is what `pattern` takes from the latest release, and each asset's `pattern` keeps taking it in later ones |
-| `GET /admin/ia-search?q=` | `{ items: [{ identifier, title, uploader, size }] }` from archive.org's search |
-
 
 ### `GET /library`
 
@@ -389,7 +363,7 @@ apps are adopted where they are, found the way Quiver finds them (`installPath`,
 installed; `version.txt` and `selected_executable.txt` are read).
 
 Each app's `kind` is `port` (a subscribed catalog lists the repository; the row is that item),
-`new` (none does; a collision with just the repository and name puts it on "Your ports", id
+`new` (none does; adding the repository to the user's repos puts it on "Your ports", id
 `quiver:local:<repo>`) or `manual` (no GitHub repository; row `manual:<folderName>`, kept only when
 its folder has something to launch). Tags, the display name and the installed version go to the
 row's `tags`, `title` and `version`. An install already in the library is left as it is, so a
@@ -423,14 +397,11 @@ archives needs `files` (`409 choose_files` lists `choices`); each then extracts 
 `_GAME_<name>` folder, as the desktop app's collection picker does. Returns `202` at once; follow
 progress on `/events` or poll `/installs/:id`.
 
-A catalog port (`quiver:` id) is one job in two steps. `step: "binary"` takes the latest
-non-draft, non-prerelease GitHub release of the port's repository and picks its Windows asset:
-the collision catalog's `assetPattern` wins, then Quiver's `releaseAssetFilter`, then a Windows
-heuristic. It downloads and extracts into `<install folder>/<folderName>`. When the collision
-catalog lists game data, `step: "data"` downloads the archive.org file named by `contentUrl`,
-extracts it, copies each `dataFiles` entry to its `targetSubpath` and checks its sha1 (`status:
-"verifying"`). A mismatch fails the job and names the file; `optional` files may be missing.
-Unknown ports answer `404`, ports that can't start (no repository) `422`.
+A catalog port (`quiver:` id) is one job, `step: "binary"`: it takes the latest non-draft,
+non-prerelease GitHub release of the port's repository and picks its Windows asset (a user.json
+entry's `assetPattern` wins, then Quiver's `releaseAssetFilter`, then a Windows heuristic), then
+downloads and extracts it into `<install folder>/<folderName>`. Only the release binary is
+installed; game data is the user's job. Unknown ports answer `404`, ports that can't start (no repository) `422`.
 
 From an additional source ([USER-SOURCES.md](USER-SOURCES.md)), a downloaded file (an archive.org
 upload, or a port's release asset) is checked against the sha1 its entry gives, or else against the
@@ -509,7 +480,7 @@ user entries ignored because the curated list has them (`from`, `key`, `reason`)
 
 ```sh
 curl http://127.0.0.1:7777/v1/user-sources
-# {"enabled":true,"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"collisions":1,"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a curated uploader has it"}]}
+# {"enabled":true,"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a curated uploader has it"}]}
 ```
 
 ### `POST /export/playnite`

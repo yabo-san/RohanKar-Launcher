@@ -1,13 +1,11 @@
 {
   "schemaVersion": 1,
-  "collisions": [
-    { "repository": "me/my-port", "name": "My Port", "folderName": "MyPort", "sources": [{ "ia": "my-port-data", "path": "data.zip", "extract": true }] }
-  ],
   "archive": [
     { "identifier": "my-homebrew", "title": "My Homebrew", "files": [{ "name": "my-homebrew.zip", "sha1": "0123456789abcdef0123456789abcdef01234567" }] },
     { "identifier": "my-demo" }
   ],
   "github": [
-    { "repository": "me/tool", "name": "My Tool", "assetPattern": "(?i)windows" }
+    { "repository": "me/tool", "name": "My Tool", "assetPattern": "(?i)windows" },
+    { "repository": "me/my-port", "name": "My Port", "folderName": "MyPort" }
   ]
 }

@@ -76,8 +76,7 @@ test('start: real data that fails to load falls back to the fixtures; offline fa
 test('mise run sandbox: the real backend with all its data in one folder, --reset empties it', async (t) => {
   const sandbox = require('../scripts/sandbox');
   assert.equal(sandbox.parseArgs([]).dir, path.join(__dirname, '..', 'sandbox'));
-  assert.deepEqual(sandbox.parseArgs(['--reset', '--dir', 'x']), { reset: true, admin: false, dir: path.resolve('x') });
-  assert.equal(sandbox.parseArgs(['--admin']).admin, true);
+  assert.deepEqual(sandbox.parseArgs(['--reset', '--dir', 'x']), { reset: true, dir: path.resolve('x') });
 
   const dir = path.join(tmp(t), 'sb');
   fs.mkdirSync(dir);
@@ -94,13 +93,3 @@ test('mise run sandbox: the real backend with all its data in one folder, --rese
   assert.ok(fs.readdirSync(dir).some(f => f.startsWith('library')), 'so does the library');
 });
 
-test('mise run admin: the sandbox with the owner\'s console on', async (t) => {
-  const sandbox = require('../scripts/sandbox');
-  const lines = [];
-  const s = await sandbox.start({ reset: false, admin: true, dir: path.join(tmp(t), 'sb') }, { LAUNCHER_PORT: '0', FRONTEND_PORT: '0', LAUNCHER_TOKEN: 'sb' }, (l) => lines.push(l));
-  t.after(s.stop);
-  assert.match(lines.join(''), /admin {5}on: edits go to catalog\/collisions\.json/);
-  const api = /backend\s+(\S+)/.exec(lines.join(''))[1];
-  const health = await (await fetch(`${api}/health`, { headers: { authorization: 'Bearer sb' } })).json();
-  assert.equal(health.admin, true);
-});

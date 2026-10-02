@@ -13,7 +13,7 @@ const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
 const { platformOf } = require('./playnite');
 
 const truthy = (v) => v === true || v === 'true' || v === '1';
-const NO_USER = { enabled: () => false, entries: () => ({ collisions: [], archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
+const NO_USER = { enabled: () => false, entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
 const USER_LABEL = 'Your sources';
 
 function createItems({ archive, settings, catalogs, library, getOverrides, userSources = NO_USER, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {

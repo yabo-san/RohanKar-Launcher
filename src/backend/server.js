@@ -13,11 +13,9 @@ const path   = require('path');
 const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
-const ports = require('./ports');
 const quiverImport = require('./quiver-import');
 const { createManualApp } = require('./manual');
 const { sourcesFromSettings } = require('./sources');
-const feedFile = require('./feed');
 const { withNewer } = require('./updates');
 
 const API_VERSION = 'v1';
@@ -94,7 +92,7 @@ function createApi(backend) {
     }
   };
 
-  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion, ...(backend.admin ? { admin: true } : {}) } }));
+  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion } }));
 
   // ─── Items ────────────────────────────────────────────────────────────────
 
@@ -174,120 +172,17 @@ function createApi(backend) {
   route('GET', '/catalogs/:id/review', ({ params }) => { catalog(params.id); return { body: catalogs.review(params.id) }; });
   route('POST', '/catalogs/:id/seen', ({ params }) => { catalog(params.id); catalogs.markSeen(params.id); return { status: 204 }; });
 
-  // ─── Collisions: the user's own port + archive.org data bindings ────────
-  // docs/COLLISIONS.md. :repo is owner/repo, URL-encoded (owner%2Frepo).
-
-  route('GET', '/collisions', () => ({ body: { local: catalogs.localCollisions() } }));
-  // Your feed, to share: your collisions and the uploaders you have on
-  const currentSources = async () => sourcesFromSettings(settings.load(), await backend.getDefaultSources());
-  route('GET', '/collisions/export', async () => ({
-    body: feedFile.exportFeed({ collisions: catalogs.localCollisions(), sources: await currentSources() }),
-  }));
-  // A feed file the user picked: its collisions become theirs, its uploaders join their list
-  route('POST', '/feed/import', async ({ body }) => {
-    const text = requireString(requireObject(body).text, 'text');
-    const r = feedFile.importFeed(text, { saveCollision: catalogs.saveCollision, sources: await currentSources() });
-    if (!r.ok) throw new HttpError(400, 'bad_feed', r.error);
-    if (r.uploaders.length) settings.save({ sources: r.sources });
-    return { body: { collisions: r.collisions, rejected: r.rejected, uploaders: r.uploaders } };
-  });
-  // Trust one uploader a feed lists: it joins the user's uploaders, turned on
-  route('POST', '/sources/trust', async ({ body }) => {
-    const [u] = feedFile.parseUploaders([requireObject(body)]);
-    if (!u) throw new HttpError(400, 'bad_request', 'uploader must be an archive.org uploader (no spaces)');
-    const r = feedFile.trustUploaders(await currentSources(), [u]);
-    if (r.added.length || r.enabled.length) settings.save({ sources: r.sources });
-    return { body: { sources: r.sources } };
-  });
-
-  route('GET', '/collisions/:repo', ({ params }) => {
-    const c = catalogs.collision(params.repo);
-    if (!c) throw new HttpError(404, 'not_found', `No collision for ${params.repo}`);
-    return { body: c };
-  });
-  route('PUT', '/collisions/:repo', ({ params, body }) => {
-    const entry = { ...requireObject(body), repository: params.repo };
-    const r = catalogs.saveCollision(entry);
-    if (!r.ok && r.curated) throw new HttpError(409, 'curated', r.errors[0]);
-    if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
+  // ─── Your repos: GitHub repos the user adds on their own ("Your ports") ──
+  // :repo is owner/repo, URL-encoded (owner%2Frepo).
+  route('GET', '/repos', () => ({ body: { repos: catalogs.localRepos() } }));
+  route('PUT', '/repos/:repo', ({ params, body }) => {
+    const r = catalogs.addRepo({ ...requireObject(body), repository: params.repo });
+    if (!r.ok) throw new HttpError(400, 'bad_repo', r.errors.join('; '), { errors: r.errors });
     return { body: r.entry };
   });
-  route('DELETE', '/collisions/:repo', ({ params }) => {
-    if (!catalogs.deleteCollision(params.repo)) throw new HttpError(404, 'not_found', `No collision of yours for ${params.repo}`);
+  route('DELETE', '/repos/:repo', ({ params }) => {
+    if (!catalogs.removeRepo(params.repo)) throw new HttpError(404, 'not_found', `No repo of yours for ${params.repo}`);
     return { status: 204 };
-  });
-  // Collision feeds: other people's, subscribed by URL, merged under yours
-  const feed = (id) => {
-    const f = catalogs.feeds().find(x => x.id === id);
-    if (!f) throw new HttpError(404, 'not_found', `No collision feed ${id}`);
-    return f;
-  };
-  // Each feed's uploaders say whether the user already trusts them
-  route('GET', '/collision-feeds', async () => {
-    const on = new Set((await currentSources()).filter(x => x.enabled !== false).map(x => x.uploader.toLowerCase()));
-    const feeds = catalogs.feeds().map(f => ({ ...f, uploaders: f.uploaders.map(u => ({ ...u, trusted: on.has(u.uploader.toLowerCase()) })) }));
-    return { body: { feeds } };
-  });
-  route('POST', '/collision-feeds', async ({ body }) => {
-    const { url, name } = requireObject(body);
-    const r = await catalogs.subscribeFeed({ url: requireString(url, 'url'), name });
-    if (!r.ok) throw new HttpError(400, r.error, r.detail);
-    return { status: r.created ? 201 : 200, body: r.feed };
-  });
-  route('POST', '/collision-feeds/:id/refresh', async ({ params }) => { feed(params.id); return { body: await catalogs.refreshFeed(params.id) }; });
-  route('DELETE', '/collision-feeds/:id', ({ params }) => { feed(params.id); catalogs.unsubscribeFeed(params.id); return { status: 204 }; });
-
-  // ─── Admin mode: the curated collisions (docs/ADMIN.md) ──────────────────
-  const needAdmin = () => { if (!backend.admin) throw new HttpError(403, 'not_admin', 'Admin mode is off; start the backend with --admin'); };
-  route('GET', '/admin/collisions', () => {
-    needAdmin();
-    return { body: { file: backend.collisionsFile, collisions: catalogs.curatedList() } };
-  });
-  route('PUT', '/admin/collisions/:repo', ({ params, body }) => {
-    needAdmin();
-    const r = catalogs.saveCurated({ ...requireObject(body), repository: params.repo });
-    if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
-    return { status: r.created ? 201 : 200, body: r.entry };
-  });
-  route('DELETE', '/admin/collisions/:repo', ({ params }) => {
-    needAdmin();
-    if (!catalogs.deleteCurated(params.repo).ok) throw new HttpError(404, 'not_found', `No curated collision for ${params.repo}`);
-    return { status: 204 };
-  });
-  // A repository's recent releases, each asset with the pattern that keeps picking it
-  route('GET', '/admin/releases/:repo', async ({ params, query }) => {
-    needAdmin();
-    const r = await installs.releases(params.repo, { pattern: query.pattern || null });
-    if (!r.ok) throw new HttpError(502, 'github', r.error);
-    return { body: r };
-  });
-  // archive.org items for a search, to pick a data source from
-  route('GET', '/admin/ia-search', async ({ query }) => {
-    needAdmin();
-    const q = String(query.q || '').trim();
-    if (!q) throw new HttpError(400, 'bad_request', 'q is required');
-    const r = await archive.search({ q, fl: 'identifier,title,uploader,item_size', rows: '40', output: 'json' });
-    if (!r.json) throw new HttpError(502, 'archive', r.error || `HTTP ${r.status}`);
-    return { body: { items: (r.json.response?.docs || []).map(d => ({ identifier: d.identifier, title: d.title || d.identifier, uploader: d.uploader || null, size: Number(d.item_size) || 0 })) } };
-  });
-
-  // What a list of sources would place, file by file, before saving it
-  route('POST', '/collisions/preview', async ({ body }) => {
-    const { sources } = requireObject(body);
-    if (!Array.isArray(sources)) throw new HttpError(400, 'bad_request', 'sources must be an array');
-    const listed = new Map();
-    const out = [];
-    for (const s of sources) {
-      const ia = s?.ia;
-      if (typeof ia !== 'string' || !ia) { out.push({ source: s, error: 'ia is required' }); continue; }
-      if (!listed.has(ia)) listed.set(ia, await archive.fileList(ia));
-      const list = listed.get(ia);
-      if (!list.ok) { out.push({ source: s, error: `Couldn't list ${ia} (${list.error})` }); continue; }
-      const x = ports.expandSource(s, list.files);
-      out.push(x.error ? { source: s, error: x.error }
-        : { source: s, files: x.files.map(f => ({ ...f, to: path.posix.join(s.target || '', f.rel) })), bytes: x.files.reduce((n, f) => n + f.size, 0) });
-    }
-    return { body: { sources: out } };
   });
 
   // ─── Library ──────────────────────────────────────────────────────────────
@@ -511,7 +406,7 @@ function createApi(backend) {
     const count = (k) => f.entries[k].length;
     return { body: {
       enabled, file: f.file, error: f.error, invalid: f.invalid,
-      entries: { collisions: count('collisions'), archive: count('archive'), github: count('github') },
+      entries: { archive: count('archive'), github: count('github') },
       conflicts: enabled ? [...catalogs.userConflicts(), ...items.conflicts()] : [],
     } };
   });

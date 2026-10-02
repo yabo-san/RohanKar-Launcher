@@ -2,8 +2,8 @@
 /**
  * y4bo launcher, new UI (docs/PRODUCT.md, docs/USER-LOOP.md).
  * Draws what the backend's /v1 API serves (through ../api.js): the
- * archive.org game wall from the curated uploaders, Quiver's port shelves
- * joined to the collision catalog, the library, and the review of what
+ * archive.org game wall from the curated uploaders, Quiver's port shelves,
+ * the library, and the review of what
  * changed. ../sources.js supplies getTitle and the Settings text helpers.
  * The classic UI (../index.html) is one click away in Settings.
  */
@@ -29,11 +29,8 @@ const state = {
   libPage: 1,           // the page, when a library header is set to paged
   detail: null,
   downloads: new Map(), // identifier -> { percent, status }
-  editor: null,         // the collision being edited (viewCollision)
-  collisionFeeds: null, // subscribed collision feeds, for Settings
+  repoForm: null,       // { repository, name } while adding a GitHub repo (viewAddRepo)
   userSources: null,    // GET /user-sources: user.json's state, invalid entries, conflicts
-  admin: false,         // the owner's console (mise run admin): curated collisions edited in place
-  curated: null,        // GET /admin/collisions, for the Collisions database page
 };
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -230,13 +227,7 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
-    hidden:             !!it.hidden,
     catalogUrl:         cat.url,
-    // A collision with no data (a repo added on its own) has nothing to fetch
-    data: it.data && (it.data.iaIdentifier || it.data.contentUrl || it.data.dataFiles?.length || it.data.sources?.length)
-      ? { status: 'available', iaIdentifier: it.data.iaIdentifier, contentUrl: it.data.contentUrl, uploader: null,
-        files: [...(it.data.dataFiles || []).map(f => f?.name ?? f), ...(it.data.sources || []).map(x => x.path)] }
-      : { status: 'none', files: [] },
   };
 }
 
@@ -252,7 +243,6 @@ async function loadPorts(refresh = false) {
       return {
         id: c.id, name: c.shelf, url: c.url, preferredTags: [],
         count: mine.length,
-        withData: mine.filter(i => i.data.status === 'available').length,
         error: c.entries ? null : c.error,
         fromCache: !!(c.error && c.entries), fetchedAt: c.fetchedAt,
       };
@@ -358,8 +348,7 @@ function goHistory(dir) {
   show(v.name, v.arg || null);
 }
 function show(name, arg) {
-  if (name === 'collision') startEditor(arg);
-  if (name === 'admin') loadCurated();
+  if (name === 'add-repo') state.repoForm = { repository: '', name: '' };
   state.view = { name, arg };
   state.query = '';
   $('#q').value = '';
@@ -399,17 +388,15 @@ function gameCard(g) {
 
 function portCard(p) {
   const added = inPortLibrary(p);
-  const tag = p.data.status === 'available' ? '<span class="tag data">DATA</span>'
-    : p.data.status === 'missing' ? '<span class="tag needs">NEEDS DATA</span>' : '';
   const art = p.iconUrl
     ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt=""><div class="noart fallback">${esc(p.name)}</div>`
     : `<div class="noart">${esc(p.name)}</div>`;
   return `<button class="card port-card" data-open="port" data-id="${esc(p.id)}" title="${esc(p.name)}">
-    <div class="art icon" style="background:${tint(p.repository)}">${art}${tag}
+    <div class="art icon" style="background:${tint(p.repository)}">${art}
       <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${p.userSource ? USER_BADGE : ''}${p.hidden ? '<span class="pill">Hidden</span>' : ''}
+    ${p.userSource ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -563,11 +550,10 @@ function viewHome() {
   }
 
   for (const shelf of ports?.shelves || []) {
-    const items = ports.items.filter(i => i.shelf === shelf.id)
-      .sort((a, b) => (b.data.status === 'available') - (a.data.status === 'available'));
+    const items = ports.items.filter(i => i.shelf === shelf.id);
     if (!items.length) continue;
     html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
-      { count: items.length, sub: shelf.withData ? `${shelf.withData} with data` : '', cls: 'row ports', seeAll: ['shelf', shelf.id] });
+      { count: items.length, cls: 'row ports', seeAll: ['shelf', shelf.id] });
   }
   if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
   return html;
@@ -583,7 +569,7 @@ const PAGE_SIZE = 60;
 const PREFS_KEY = 'y4bo.libraryPrefs';
 const PREF_DEFAULTS = {
   wall:    { sort: 'dateAdded', order: 'desc', viewAs: 'covers', scroll: 'infinite', uploader: '', hiddenCols: [] },
-  shelf:   { sort: 'data', order: 'desc', viewAs: 'covers', scroll: 'infinite', tag: '', data: '', hiddenCols: [] },
+  shelf:   { sort: 'name', order: 'asc', viewAs: 'covers', scroll: 'infinite', tag: '', hiddenCols: [] },
   library: { sort: 'name', order: 'asc', viewAs: 'covers', scroll: 'infinite', hiddenCols: [] },
 };
 const libPrefs = (() => {
@@ -825,18 +811,17 @@ function viewShelf(id) {
   const p = libPrefs.shelf;
   const all = state.ports.items.filter(i => i.shelf === id);
   const tags = shelf.preferredTags.length ? shelf.preferredTags : [...new Set(all.flatMap(i => i.tags))].slice(0, 12);
-  let list = all.filter(i => (!p.tag || i.tags.includes(p.tag)) && (!p.data || i.data.status === 'available'));
+  let list = all.filter(i => !p.tag || i.tags.includes(p.tag));
   list = ciderSearch(list, state.libSearch, i => [i.name, i.project, i.repository, ...i.tags]);
-  list = ListView.sortRows(list, p, [PORT_SORTS], 'data', listCtx('port'), i => i.name);
-  const extra = prefDropdown('shelf', 'data', 'Show', 'filter', [['', 'All ports'], ['1', 'With game data']])
-    + prefDropdown('shelf', 'tag', 'Tag', 'tag', [['', 'Any tag'], ...tags.map(t => [t, t])]);
+  list = ListView.sortRows(list, p, [PORT_SORTS], 'name', listCtx('port'), i => i.name);
+  const extra = prefDropdown('shelf', 'tag', 'Tag', 'tag', [['', 'Any tag'], ...tags.map(t => [t, t])]);
   let html = libraryHeader('shelf', PORT_SORTS, { extra, total: list.length });
   if (shelf.error) {
     html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   } else if (shelf.fromCache) {
     html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   }
-  html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}${shelf.withData ? ` · ${shelf.withData} with data from archive.org` : ''}</div>`;
+  html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}</div>`;
   return html + (list.length ? libraryBody('shelf', list, { card: portCard, kind: 'port', cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
@@ -1011,18 +996,10 @@ function viewSettings() {
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
     <div class="field" id="additional"><label class="switch-row" for="setting-additional">
-        <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, ports and game data you add,
-          feeds you subscribe to and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
+        <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, GitHub repos you add
+          and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
         <input type="checkbox" class="switch" id="setting-additional" role="switch" ${s.allowAdditionalSources ? 'checked' : ''}></label>
       <div id="additional-body">${additionalHtml()}</div></div>
-    <div class="field additional-only${s.allowAdditionalSources ? '' : ' hidden'}"><label>Feeds</label>
-      <div class="hint">A feed is someone's curation: ports from GitHub releases with the archive.org data they need, and the archive.org uploaders they trust.
-        Subscribe by URL. A feed's ports show up right away (yours win over a feed's, and a feed's over the bundled ones); its uploaders wait until you trust each one.</div>
-      <div id="feed-list">${feedListHtml()}</div>
-      <div class="inline"><input type="text" id="feed-url" placeholder="https://…/feed.json"><button class="btn" data-action="feed-add">Subscribe</button></div>
-      <div class="inline feed-own"><button class="btn" data-action="ed-export">Copy my feed</button>
-        <label class="btn">Import a feed file…<input type="file" id="feed-file" accept=".json,application/json" hidden></label></div>
-      <div class="hint">Your feed is your own ports and the uploaders you have on. Importing a file makes its ports yours and adds its uploaders to your list.</div></div>
     <div class="field" id="quiver-import"><label>Quiver library</label>
       <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
       <div class="import-body">${quiverImportHtml()}</div></div>
@@ -1094,7 +1071,7 @@ function viewSearch(q) {
 
 // The round reload button at the right of the page title (Cider's reload-btn)
 const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', collision: 'Game data', admin: 'Collisions database' };
+const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', 'add-repo': 'Add a GitHub repo' };
 
 function render() {
   const v = state.view;
@@ -1110,14 +1087,12 @@ function render() {
   else if (v.name === 'library') html = viewLibrary();
   else if (v.name === 'updates') html = viewUpdates();
   else if (v.name === 'settings') html = viewSettings();
-  else if (v.name === 'collision') html = viewCollision();
-  else if (v.name === 'admin') html = viewAdmin();
+  else if (v.name === 'add-repo') html = viewAddRepo();
   else html = viewHome();
 
   const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
-    : v.name === 'collision' && !v.arg ? (state.admin ? 'New game tile' : 'Add a GitHub repo')
     : HEADINGS[v.name] || 'Home';
 
   // Keep the settings form as typed while the wall is still streaming in
@@ -1240,7 +1215,6 @@ function gameDetail(d) {
   } else {
     actions = `<button class="btn primary" id="btn-download" data-action="install">Install</button>`;
   }
-  if (state.admin && !v._manual) actions += `<button class="btn" data-action="admin-from-item" data-ia="${esc(v.identifier)}">Make a game tile…</button>`;
   const exes = exePicker(d);
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   return `<div class="d-hero"><div class="bg" style="background:${tint(title)}"></div>
@@ -1270,7 +1244,7 @@ function gameDetail(d) {
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
-const PORT_STEPS = { binary: 'the build from GitHub', data: 'the game data from archive.org' };
+const PORT_STEPS = { binary: 'the build from GitHub' };
 function portActions(p) {
   const dl = state.downloads.get(p.id);
   if (dl) {
@@ -1293,23 +1267,18 @@ function portProgress(p) {
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
-  const data = p.data.status === 'available'
-    ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="ok">archive.org (${esc(p.data.uploader || p.data.iaIdentifier)})</span>, ${esc(p.data.files.join(', ') || 'item contents')}, sha1-checked after staging`
-    : p.data.status === 'missing'
-      ? `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> <span class="warn">needs ${esc(p.data.files.join(', '))}, not in the catalog</span>`
-      : `<b>Binary:</b> GitHub release from ${esc(p.repository)}<br><b>Data:</b> none needed, as far as the catalog knows`;
+  const data = `<b>Binary:</b> GitHub release from ${esc(p.repository)}`;
   const icon = p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="">` : '';
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}${p.shelf.startsWith('curated-') ? `y4bo's curated list / ${esc(p.shelfName)}` : `Source: Quiver / ${esc(p.shelfName)}`}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}Source: Quiver / ${esc(p.shelfName)}</div></div></div>
     <div class="d-body">
-      ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>${p.shelf === 'local' ? 'A port you added' : 'Game data you added'}. We don't monitor it.</span></div>` : ''}
+      ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       <div class="actions">
         <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
         ${portActions(p)}
         <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
-        <button class="btn" data-action="edit-collision" data-repo="${esc(p.repository)}">Game data…</button>
       </div>
       ${portProgress(p)}
       ${exePicker(d)}
@@ -1320,7 +1289,7 @@ function portDetail(d) {
         <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
-        <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'catalog/collisions.json')}</dd>
+        <dt>Catalog</dt><dd>${esc(p.catalogUrl || 'Your repos')}</dd>
       </dl>
     </div>`;
 }
@@ -1425,384 +1394,48 @@ async function togglePort(id) {
 }
 
 
-// ─── Game data: the collision editor (docs/COLLISIONS.md) ───────────────────
+// ─── Add a GitHub repo: a port of the user's own, on "Your ports" ──────────
 
-const ARCHIVE_RE = /\.(zip|7z|rar)$/i;
-const blankSource = () => ({ ia: '', path: '', target: '', as: '', extract: false, sha1: '', optional: false });
-
-// Loads the collision in effect for repo (or a blank one for a new repo) into the editor
-async function startEditor(repo) {
-  const port = repo && state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
-  const ed = state.editor = { repo: repo || '', isNew: !repo, loading: !!repo, origin: null, feed: null, extra: {},
-    name: port?.name || '', folderName: port?.folderName || '', assetPattern: '', base: 'binary', binaryTarget: '',
-    // admin mode: the tile's shelf, the exe to launch, and whether users see it
-    shelf: repo ? '' : 'y4bo ports', exe: '', hidden: false, releases: null, search: null, queries: {},
-    sources: repo ? [] : [blankSource()], browse: null, preview: null, errors: null };
-  if (!repo) return;
-  const c = await api.getCollision(repo);
-  if (state.editor !== ed) return;
-  ed.loading = false;
-  if (c) {
-    const { repository, name, folderName, assetPattern, base, binaryTarget, sources, shelf, exe, hidden, ...extra } = c.entry;
-    Object.assign(ed, {
-      origin: c.origin, feed: c.feed || null, extra, shelf: shelf || '', exe: exe || '', hidden: !!hidden,
-      name: name || ed.name, folderName: folderName || ed.folderName, assetPattern: assetPattern || '',
-      base: base === 'data' ? 'data' : 'binary', binaryTarget: binaryTarget || '',
-      sources: (sources || []).map(x => ({ ...blankSource(), ...x, sha1: x.sha1 || '', target: x.target || '', as: x.as || '' })),
-    });
-  }
-  if (!ed.sources.length) ed.sources.push(blankSource());
-  if (state.view.name === 'collision') render();
+function viewAddRepo() {
+  const f = state.repoForm || (state.repoForm = { repository: '', name: '' });
+  if (!f.repos) { f.repos = []; api.getRepos().then(r => { f.repos = r; if (state.view.name === 'add-repo') render(); }).catch(() => {}); }
+  const off = !state.settings.allowAdditionalSources;
+  return `<div class="editor"><p class="lede">A GitHub repo with Windows releases. It shows on Your ports, and Install takes its latest release's build. Any game data it needs is up to you.</p>
+    ${off ? '<div class="notice"><div class="grow">Turn on <b>Allow additional sources</b> in Settings to add your own repos.</div></div>' : ''}
+    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo" spellcheck="false"></div>
+      <div><label for="repo-name">Name</label><input type="text" id="repo-name" data-repo-field="name" value="${esc(f.name)}" placeholder="Optional; the repo's name otherwise" spellcheck="false"></div></div>
+    <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save" ${off ? 'disabled' : ''}>Add</button></div>
+    ${f.repos.length ? `<div class="field"><label>Your repos</label>${f.repos.map(r => `<div class="repo-row"><div class="grow"><b>${esc(r.name || r.repository)}</b> <span class="meta">${esc(r.repository)}</span></div>
+      <button class="btn" data-action="repo-remove" data-repo="${esc(r.repository)}">Remove</button></div>`).join('')}</div>` : ''}</div>`;
 }
 
-function viewCollision() {
-  const ed = state.editor;
-  if (!ed) return '<p class="empty">Loading…</p>';
-  if (ed.loading) return '<p class="empty">Loading the collision…</p>';
-  const from = ed.origin === 'local' ? 'Yours.' : ed.origin === 'feed' ? `From the ${esc(ed.feed?.name || '')} feed. Saving makes a copy of your own that wins over it.`
-    : ed.origin === 'user.json' ? 'From your user.json. Saving makes a copy of your own that wins over it.'
-    : ed.origin === 'bundled' ? 'Curated: bundled with the launcher. The curated list wins, so it can\'t be changed here.' : 'Nothing yet.';
-  const admin = state.admin;
-  const off = !admin && !state.settings.allowAdditionalSources;
-  const locked = off || (!admin && ed.origin === 'bundled');
-  const legacy = ed.extra.dataFiles?.length
-    ? `<div class="hint">Also picks ${esc(ed.extra.dataFiles.map(d => d.name).join(', '))} out of ${esc(decodeURIComponent(String(ed.extra.contentUrl || '').split('/').pop()))} (the first version of the schema). That part is kept as it is.</div>` : '';
-  return `<div class="form editor">
-    <p class="lede">Binds a GitHub release to the game data it needs on archive.org, and says how the two go together in the install folder. ${admin
-      ? `<b>Admin mode:</b> saving writes the curated list, catalog/collisions.json, for a PR. ${ed.isNew ? 'A repo no shelf lists becomes a game tile on its shelf.' : ed.origin === 'bundled' ? 'Curated.' : from}`
-      : ed.isNew ? 'A repo no catalog lists shows up on the Your ports shelf.' : from}</p>
-    ${ed.isNew ? `<div class="field"><label for="ed-repo">GitHub repository</label>
-      <input type="text" id="ed-repo" data-ed="repo" value="${esc(ed.repo)}" placeholder="owner/repo" spellcheck="false"></div>`
-    : `<div class="field"><label>GitHub repository</label><div class="hint"><a data-href="https://github.com/${esc(ed.repo)}">${esc(ed.repo)}</a></div></div>`}
-    <div class="field two"><div><label for="ed-name">Name</label><input type="text" id="ed-name" data-ed="name" value="${esc(ed.name)}" placeholder="${ed.isNew ? 'Required for a repo of your own' : 'From the catalog'}"></div>
-      <div><label for="ed-folder">Install folder name</label><input type="text" id="ed-folder" data-ed="folderName" value="${esc(ed.folderName)}" placeholder="owner.repo"></div></div>
-    <div class="field"><label for="ed-asset">Release asset</label>
-      <div class="hint">A pattern for the release file to take, e.g. <code>(?i)x86_64-windows</code>. Empty picks the Windows build.</div>
-      ${admin ? `<div class="inline"><input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">
-        <button class="btn" id="btn-pick-release" data-action="ed-releases">Pick a release…</button></div>${releasesHtml()}`
-      : `<input type="text" id="ed-asset" data-ed="assetPattern" value="${esc(ed.assetPattern)}" spellcheck="false">`}</div>
-    ${admin ? `<div class="field two"><div><label for="ed-exe">Executable</label><input type="text" id="ed-exe" data-ed="exe" value="${esc(ed.exe)}" placeholder="When the release ships several, e.g. pd.x86_64.exe" spellcheck="false"></div>
-      <div><label for="ed-shelf">Shelf</label><input type="text" id="ed-shelf" data-ed="shelf" value="${esc(ed.shelf)}" placeholder="A tile of its own, e.g. y4bo ports" spellcheck="false"></div></div>
-      <div class="field"><label class="radio"><input type="checkbox" id="ed-hidden" ${ed.hidden ? 'checked' : ''}> Hidden: only admin mode shows it (gate it until it's ready)</label></div>` : ''}
-    <div class="field"><label>Order</label>
-      <label class="radio"><input type="radio" name="ed-base" value="binary" ${ed.base === 'binary' ? 'checked' : ''}> Release first, then the game data beside or inside it</label>
-      <label class="radio"><input type="radio" name="ed-base" value="data" ${ed.base === 'data' ? 'checked' : ''}> Game data first (a full rip), then the release unpacked over it</label></div>
-    <div class="field"><label for="ed-bintarget">Release folder</label>
-      <div class="hint">Where the release unpacks, inside the install folder. Empty is the install folder itself.</div>
-      <input type="text" id="ed-bintarget" data-ed="binaryTarget" value="${esc(ed.binaryTarget)}" placeholder="e.g. bin" spellcheck="false"></div>
-    <div class="field"><label>Game data from archive.org</label>${legacy}
-      ${ed.sources.map((x, i) => sourceCard(x, i)).join('')}
-      <button class="btn" data-action="ed-add-source">Add a source</button></div>
-    ${ed.errors ? `<div class="notice warn"><div class="grow">${ed.errors.map(esc).join('<br>')}</div></div>` : ''}
-    ${off ? `<div class="notice" id="ed-off"><div class="grow">Game data you add is an additional source. Turn on Allow additional sources in Settings to save it.</div>
-      <button class="btn" data-view="settings">Settings</button></div>` : ''}
-    <div class="field actions">
-      <button class="btn" data-action="ed-preview">Preview</button>
-      <button class="btn primary" id="btn-save-collision" data-action="ed-save" ${locked ? 'disabled' : ''}>${admin ? 'Save to the curated list' : 'Save'}</button>
-      ${!admin && ed.origin === 'local' ? '<button class="btn" data-action="ed-delete">Remove mine</button>' : ''}
-      ${admin && ed.origin === 'bundled' ? '<button class="btn" data-action="ed-delete">Remove from the curated list</button>' : ''}
-      ${admin ? '' : '<button class="btn" data-action="ed-export">Copy my collisions as a feed</button>'}</div>
-    <div id="ed-preview">${previewHtml()}</div>
-  </div>`;
-}
-
-function sourceCard(x, i) {
-  const ed = state.editor;
-  const b = ed.browse?.i === i ? ed.browse : null;
-  return `<div class="source-card">
-    <div class="inline"><input type="text" data-src="${i}" data-key="ia" value="${esc(x.ia)}" placeholder="archive.org item, e.g. perfect-dark-pc-port_202510" spellcheck="false" aria-label="archive.org item">
-      <button class="btn" data-action="ed-browse" data-i="${i}">Browse</button>
-      <button class="btn" data-action="ed-remove-source" data-i="${i}" aria-label="Remove this source">&#10005;</button></div>
-    ${state.admin ? `<div class="inline"><input type="text" id="ed-search-${i}" data-search="${i}" value="${esc(ed.queries[i] || '')}" placeholder="Search archive.org, e.g. N64 TOSEC" spellcheck="false" aria-label="Search archive.org">
-      <button class="btn" data-action="ed-search" data-i="${i}">Search</button></div>${ed.search?.i === i ? searchHtml() : ''}` : ''}
-    <div class="two"><div><label>Take</label><input type="text" data-src="${i}" data-key="path" value="${esc(x.path)}" placeholder="file, folder/* or *" spellcheck="false"></div>
-      <div><label>Into folder</label><input type="text" data-src="${i}" data-key="target" value="${esc(x.target)}" placeholder="the install folder" spellcheck="false"></div></div>
-    ${state.admin ? `<div><label>Save as</label><input type="text" data-src="${i}" data-key="as" value="${esc(x.as)}" placeholder="The file name the port expects, e.g. pd.ntsc-final.z64 (a ROM zip: the ROM inside it)" spellcheck="false"></div>` : ''}
-    <div class="checks">
-      <label><input type="checkbox" data-src="${i}" data-key="extract" ${x.extract ? 'checked' : ''}> Unpack the archive</label>
-      <label><input type="checkbox" data-src="${i}" data-key="optional" ${x.optional ? 'checked' : ''}> Optional</label>
-      <input type="text" class="sha" data-src="${i}" data-key="sha1" value="${esc(x.sha1)}" placeholder="sha1 (optional; archive.org's is checked anyway)" spellcheck="false" aria-label="sha1"></div>
-    ${b ? `<div class="browser">
-      <div class="inline"><input type="text" id="ed-filter" value="${esc(b.filter)}" placeholder="Filter ${esc(b.ia)}" spellcheck="false">
-        <button class="btn" data-action="ed-take" data-path="*">Whole item</button><button class="btn" data-action="ed-close-browse">Done</button></div>
-      <div id="browse-list">${browseList()}</div></div>` : ''}
-  </div>`;
-}
-
-const BROWSE_CAP = 200;
-function browseList() {
-  const b = state.editor?.browse;
-  if (!b) return '';
-  if (b.loading) return '<p class="empty">Listing the item…</p>';
-  if (b.error) return `<p class="empty">Couldn't list ${esc(b.ia)}: ${esc(b.error)}</p>`;
-  const f = b.filter.toLowerCase();
-  const folders = b.folders.filter(d => d.toLowerCase().includes(f));
-  const files = b.files.filter(x => x.name.toLowerCase().includes(f) && x.source !== 'metadata' && x.source !== 'derivative' && !/(_meta\.xml|_files\.xml|_meta\.sqlite|_reviews\.xml|_archive\.torrent|__ia_thumb\.jpg)$/i.test(x.name));
-  const more = (n) => (n > BROWSE_CAP ? `<div class="hint">${fmtNum(n - BROWSE_CAP)} more; filter to narrow it down.</div>` : '');
-  return `${folders.length ? `<div class="h3">Folders</div>${folders.slice(0, BROWSE_CAP).map(d =>
-      `<button class="pick" data-action="ed-take" data-path="${esc(d)}/*"><span class="kind">DIR</span>${esc(d)}/<span class="meta">take everything under it</span></button>`).join('')}${more(folders.length)}` : ''}
-    <div class="h3">Files</div>${files.slice(0, BROWSE_CAP).map(x =>
-      `<button class="pick" data-action="ed-take" data-path="${esc(x.name)}"><span class="kind">${ARCHIVE_RE.test(x.name) ? 'ZIP' : 'FILE'}</span>${esc(x.name)}<span class="meta">${fmtBytes(x.size)}</span></button>`).join('') || '<p class="empty">No files match.</p>'}${more(files.length)}`;
-}
-
-function previewHtml() {
-  const p = state.editor?.preview;
-  if (!p) return '';
-  if (p.loading) return '<p class="empty">Checking against archive.org…</p>';
-  return `<div class="h3">What an install places</div>${p.list.map(r => r.error
-    ? `<div class="preview-row warn">${esc(r.source.path || '?')}: ${esc(r.error)}</div>`
-    : `<div class="preview-row"><b>${esc(r.source.ia)}/${esc(r.source.path)}</b> · ${fmtNum(r.files.length)} file${r.files.length === 1 ? '' : 's'}, ${fmtBytes(r.bytes)}${r.source.extract ? ', unpacked' : ''}
-        <div class="meta">${r.files.slice(0, 8).map(f => `${esc(f.name)} → ${esc(r.source.extract && ARCHIVE_RE.test(f.name) ? `${r.source.target || '.'}/ (unpacked)` : f.to)}`).join('<br>')}${r.files.length > 8 ? `<br>and ${fmtNum(r.files.length - 8)} more` : ''}</div></div>`).join('')}`;
-}
-
-function editorAddSource() { state.editor.sources.push(blankSource()); render(); }
-function editorRemoveSource(i) {
-  const ed = state.editor;
-  ed.sources.splice(i, 1);
-  if (ed.browse?.i === i) ed.browse = null;
+async function repoSave() {
+  const f = state.repoForm;
+  const repo = f.repository.trim();
+  if (!repo) return toast('Type the repository as owner/repo.');
+  const r = await api.saveRepo(repo, f.name.trim() ? { name: f.name.trim() } : {});
+  if (!r.ok) return toast(`Couldn't add it: ${r.error}`, 6000);
+  toast(`Added ${r.entry.name || repo}. It's on Your ports, unless a shelf already lists it.`);
+  state.repoForm = { repository: '', name: '' };
   render();
-}
-
-async function editorBrowse(i) {
-  const ed = state.editor;
-  const ia = ed.sources[i].ia.trim();
-  if (!ia) return toast('Type an archive.org item first.');
-  const b = ed.browse = { i, ia, loading: true, files: [], folders: [], filter: '', error: null };
-  render();
-  const r = await api.fetchItemFiles(ia);
-  if (ed.browse !== b) return;
-  Object.assign(b, { loading: false, files: r.files || [], folders: r.folders || [], error: r.ok ? null : r.error });
-  const list = $('#browse-list');
-  if (list) list.innerHTML = browseList();
-}
-
-// A pick from the browser: a file (with archive.org's sha1), a folder/* or *
-function editorTake(p) {
-  const ed = state.editor;
-  const b = ed.browse;
-  if (!b) return;
-  const x = ed.sources[b.i];
-  const file = b.files.find(f => f.name === p);
-  // An archive is unpacked by default when it's the base of the install
-  const archive = !!file && ARCHIVE_RE.test(p);
-  Object.assign(x, { ia: b.ia, path: p, sha1: file?.sha1 || '', extract: archive && (x.extract || ed.base === 'data') });
-  ed.browse = null;
-  render();
-}
-
-function editorEntry() {
-  const ed = state.editor;
-  const entry = { ...ed.extra };
-  if (ed.name.trim()) entry.name = ed.name.trim();
-  if (ed.folderName.trim()) entry.folderName = ed.folderName.trim();
-  if (ed.assetPattern.trim()) entry.assetPattern = ed.assetPattern.trim();
-  if (ed.base === 'data') entry.base = 'data';
-  if (ed.binaryTarget.trim()) entry.binaryTarget = ed.binaryTarget.trim();
-  if (state.admin) {
-    if (ed.exe.trim()) entry.exe = ed.exe.trim();
-    if (ed.shelf.trim()) entry.shelf = ed.shelf.trim();
-    if (ed.hidden) entry.hidden = true;
-  }
-  const sources = ed.sources.filter(x => x.ia.trim() || x.path.trim()).map(x => ({
-    ia: x.ia.trim(), path: x.path.trim(),
-    ...(x.target.trim() ? { target: x.target.trim() } : {}),
-    ...(x.as?.trim() ? { as: x.as.trim() } : {}),
-    ...(x.extract ? { extract: true } : {}),
-    ...(x.sha1.trim() ? { sha1: x.sha1.trim().toLowerCase() } : {}),
-    ...(x.optional ? { optional: true } : {}),
-  }));
-  if (sources.length) entry.sources = sources;
-  return entry;
-}
-
-async function editorPreview() {
-  const ed = state.editor;
-  const sources = editorEntry().sources || [];
-  if (!sources.length) return toast('Add a source to preview.');
-  ed.preview = { loading: true };
-  $('#ed-preview').innerHTML = previewHtml();
-  const list = await api.previewCollision(sources);
-  if (state.editor !== ed) return;
-  ed.preview = list ? { list } : null;
-  if (!list) toast("Couldn't reach the backend for a preview.");
-  $('#ed-preview').innerHTML = previewHtml();
-}
-
-async function editorSave() {
-  const ed = state.editor;
-  const repo = ed.repo.trim();
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { ed.errors = ['The repository must look like owner/repo.']; return render(); }
-  const r = await (state.admin ? api.saveCuratedCollision(repo, editorEntry()) : api.saveCollision(repo, editorEntry()));
-  if (!r.ok) { ed.errors = r.error.split('; '); return render(); }
-  toast(state.admin ? `Wrote ${ed.name || repo} to catalog/collisions.json. Commit it in a PR to ship it.`
-    : `Saved the game data for ${ed.name || repo}. It's yours now, and wins over any feed's.`, state.admin ? 6000 : undefined);
-  await loadPorts();
-  const port = state.ports?.items.find(i => i.repository?.toLowerCase() === repo.toLowerCase());
-  go('collision', repo);
-  if (port) openDetail('port', port.id);
-}
-
-async function editorDelete() {
-  const ed = state.editor;
-  if (state.admin) {
-    if (!confirm(`Remove ${ed.repo} from the curated list, catalog/collisions.json?`)) return;
-    const r = await api.deleteCuratedCollision(ed.repo);
-    if (!r.ok) return toast(`Couldn't remove it: ${r.error}`);
-    toast('Removed from the curated list.');
-    await loadPorts();
-    return go('admin');
-  }
-  if (!confirm(`Remove your game data for ${ed.repo}? A feed's or the bundled one takes over again, if there is one.`)) return;
-  await api.deleteCollision(ed.repo);
-  toast('Removed yours.');
-  await loadPorts();
-  go('collision', ed.repo);
-}
-
-// ─── Admin mode: releases, archive.org search, the curated list ─────────────
-
-function releasesHtml() {
-  const r = state.editor?.releases;
-  if (!r) return '';
-  if (r.loading) return '<p class="empty">Reading the releases…</p>';
-  if (r.error) return `<p class="empty">${esc(r.error)}</p>`;
-  return `<div class="browser" id="release-list">
-    <div class="hint">${r.picked ? `The pattern picks <b>${esc(r.picked)}</b> from ${esc(r.latest)}.` : `Nothing in ${esc(r.latest || 'the latest release')} matches yet.`} Pick an asset to take it in every later release.</div>
-    ${r.releases.slice(0, 3).map(rel => `<div class="h3">${esc(rel.name)}${rel.prerelease ? ' · prerelease' : ''}${rel.tag === r.latest ? ' · latest' : ''}</div>
-      ${rel.assets.map(a => `<button class="pick" data-action="ed-take-asset" data-pattern="${esc(a.pattern)}"><span class="kind">${ARCHIVE_RE.test(a.name) ? 'ZIP' : 'FILE'}</span>${esc(a.name)}<span class="meta">${fmtBytes(a.size)}</span></button>`).join('') || '<p class="empty">No assets.</p>'}`).join('')}
-    <button class="btn" data-action="ed-close-releases">Done</button></div>`;
-}
-
-async function editorReleases() {
-  const ed = state.editor;
-  const repo = ed.repo.trim();
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) return toast('Type the repository first, as owner/repo.');
-  const r = ed.releases = { loading: true };
-  render();
-  const got = await api.getReleases(repo, ed.assetPattern.trim());
-  if (ed.releases !== r) return;
-  ed.releases = got.ok ? got : { error: `Couldn't read the releases: ${got.error}` };
-  render();
-}
-
-function editorTakeAsset(pattern) {
-  const ed = state.editor;
-  ed.assetPattern = pattern;
-  ed.releases = null;
-  editorReleases();
-}
-
-function searchHtml() {
-  const s = state.editor?.search;
-  if (!s) return '';
-  if (s.loading) return '<p class="empty">Searching archive.org…</p>';
-  if (s.error) return `<p class="empty">${esc(s.error)}</p>`;
-  return `<div class="browser" id="search-list">${s.items.map(it =>
-    `<button class="pick" data-action="ed-pick-item" data-ia="${esc(it.identifier)}"><span class="kind">ITEM</span>${esc(it.title)}<span class="meta">${esc(it.identifier)}${it.uploader ? ` · ${esc(it.uploader)}` : ''}${it.size ? ` · ${fmtBytes(it.size)}` : ''}</span></button>`).join('') || '<p class="empty">Nothing found.</p>'}</div>`;
-}
-
-async function editorSearch(i) {
-  const ed = state.editor;
-  const q = String(ed.queries[i] || '').trim();
-  if (!q) return toast('Type something to search for.');
-  const s = ed.search = { i, q, loading: true, items: [] };
-  render();
-  const r = await api.searchArchive(q);
-  if (ed.search !== s) return;
-  Object.assign(s, { loading: false, items: r.items, error: r.ok ? null : `Couldn't search archive.org: ${r.error}` });
-  render();
-}
-
-// A search hit becomes the source's item, and its files open to pick from
-function editorPickItem(ia) {
-  const ed = state.editor;
-  const i = ed.search?.i ?? 0;
-  ed.sources[i].ia = ia;
-  ed.search = null;
-  return editorBrowse(i);
-}
-
-// "Make a game tile" from an archive.org item on the wall: a new tile with it as the data
-function adminFromItem(identifier) {
-  closeDetail();
-  go('collision');
-  state.editor.sources[0].ia = identifier;
-  return editorBrowse(0);
-}
-
-async function loadCurated() {
-  state.curated = null;
-  const r = await api.getCuratedCollisions();
-  state.curated = r || { error: "Admin mode is off. Start it with mise run admin." };
-  if (state.view.name === 'admin') render();
-}
-
-function viewAdmin() {
-  const c = state.curated;
-  if (!c) return '<p class="empty">Loading the curated list…</p>';
-  if (c.error) return `<p class="empty">${esc(c.error)}</p>`;
-  const summary = (e) => [...(e.sources || []).map(x => `${x.ia}/${x.path}${x.as ? ` → ${x.as}` : ''}`), ...(e.dataFiles || []).map(d => d.name)].join(', ');
-  return `<p class="lede">Every curated collision, from <code>${esc(c.file)}</code>. Edits write that file; commit it in a PR to ship them.</p>
-    <div class="field actions"><button class="btn primary" data-view="collision">New game tile…</button></div>
-    <div class="list-head admin-head"><span>Name</span><span>Repository</span><span>Shelf</span><span>Game data</span><span></span></div>
-    <div class="admin-list">${c.collisions.map(e => `<div class="admin-row${e.hidden ? ' is-hidden' : ''}">
-      <span><b>${esc(e.name || e.repository)}</b>${e.hidden ? ' <span class="pill">Hidden</span>' : ''}</span>
-      <span>${esc(e.repository)}</span><span>${esc(e.shelf || '')}</span><span class="meta">${esc(summary(e))}</span>
-      <span class="row-actions"><button class="btn" data-action="edit-collision" data-repo="${esc(e.repository)}">Edit</button>
-        <button class="btn" data-action="admin-hide" data-repo="${esc(e.repository)}">${e.hidden ? 'Show' : 'Hide'}</button></span></div>`).join('')}</div>`;
-}
-
-async function adminToggleHidden(repo) {
-  const e = state.curated?.collisions.find(x => x.repository === repo);
-  if (!e) return;
-  const { hidden, ...rest } = e;
-  const r = await api.saveCuratedCollision(repo, hidden ? rest : { ...rest, hidden: true });
-  if (!r.ok) return toast(`Couldn't save: ${r.error}`);
-  toast(hidden ? `${e.name || repo} shows for everyone again.` : `${e.name || repo} is hidden: only admin mode shows it.`);
-  await loadCurated();
   loadPorts();
 }
 
-async function editorExport() {
-  const feed = await api.exportCollisions();
-  const text = JSON.stringify(feed, null, 2);
-  try {
-    await navigator.clipboard.writeText(text);
-    toast(`Copied your feed: ${feed.collisions.length} port${feed.collisions.length === 1 ? '' : 's'}, ${feed.uploaders.length} uploader${feed.uploaders.length === 1 ? '' : 's'}. Publish it anywhere and others can subscribe to its URL.`, 6000);
-  } catch {
-    toast("Couldn't reach the clipboard.");
-  }
+async function repoRemove(repo) {
+  await api.removeRepo(repo);
+  state.repoForm = { ...state.repoForm, repos: null };
+  render();
+  loadPorts();
 }
 
-// Editor inputs update state as you type; only structure changes re-render
+// Form inputs update state as you type; only structure changes re-render
 document.addEventListener('input', (e) => {
-  const ed = state.editor;
   const t = e.target;
   if (t.id === 'manual-name' && state.manualForm) { state.manualForm.name = t.value; return; }
-  if (!ed || state.view.name !== 'collision') return;
-  if (t.dataset.ed) { ed[t.dataset.ed] = t.value; return; }
-  if (t.dataset.src !== undefined && t.type !== 'checkbox') { ed.sources[Number(t.dataset.src)][t.dataset.key] = t.value; return; }
-  // Kept in state, so a re-render (the release list arriving) doesn't wipe what was typed
-  if (t.dataset.search !== undefined) { ed.queries[t.dataset.search] = t.value; return; }
-  if (t.id === 'ed-filter' && ed.browse) { ed.browse.filter = t.value; $('#browse-list').innerHTML = browseList(); }
-});
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.dataset?.search !== undefined && state.editor) editorSearch(Number(e.target.dataset.search));
+  if (t.dataset.repoField && state.repoForm) state.repoForm[t.dataset.repoField] = t.value;
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
-  if (e.target.id === 'feed-file' && e.target.files[0]) {
-    importFeedFile(e.target.files[0]);
-    e.target.value = '';
-  }
-});
-document.addEventListener('change', (e) => {
-  const ed = state.editor;
-  const t = e.target;
-  if (!ed || state.view.name !== 'collision') return;
-  if (t.name === 'ed-base') ed.base = t.value;
-  if (t.id === 'ed-hidden') ed.hidden = t.checked;
-  if (t.dataset.src !== undefined && t.type === 'checkbox') ed.sources[Number(t.dataset.src)][t.dataset.key] = t.checked;
 });
 
 // ─── Additional sources (Settings) ───────────────────────────────────────────
@@ -1813,9 +1446,9 @@ function additionalHtml() {
   const u = state.userSources;
   if (!u) { loadUserSources(); return '<div class="hint">Loading…</div>'; }
   const n = (k) => u.entries[k];
-  const status = !u.file ? '<div class="hint">No user.json yet. Pick a file on this computer: <code>{ "schemaVersion": 1, "collisions": [], "archive": [], "github": [] }</code>.</div>'
+  const status = !u.file ? '<div class="hint">No user.json yet. Pick a file on this computer: <code>{ "schemaVersion": 1, "archive": [], "github": [] }</code>.</div>'
     : u.error ? `<div class="notice warn" id="user-file-error"><div class="grow">${esc(u.error)}</div></div>`
-    : `<div class="hint" id="user-file-counts">Loaded: ${n('collisions')} collision${n('collisions') === 1 ? '' : 's'}, ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}.</div>`;
+    : `<div class="hint" id="user-file-counts">Loaded: ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}.</div>`;
   const invalid = u.invalid.length ? `<div class="notice warn user-list" id="user-invalid"><div class="grow"><b>${u.invalid.length} invalid entr${u.invalid.length === 1 ? 'y' : 'ies'}, not loaded:</b>
       ${u.invalid.map(i => `<div>${esc(SECTION_NAME[i.section])}[${i.index}]${i.key ? ` ${esc(i.key)}` : ''}: ${esc(i.errors.join('; '))}</div>`).join('')}</div></div>` : '';
   const conflicts = u.conflicts.length ? `<div class="notice user-list" id="user-conflicts"><div class="grow"><b>Ignored, the curated list already has ${u.conflicts.length === 1 ? 'it' : 'them'}:</b>
@@ -1866,70 +1499,12 @@ async function saveUserFile() {
   loadPorts();
 }
 
-// ─── Collision feeds (Settings) ───────────────────────────────────────────────
-
-function feedListHtml() {
-  const feeds = state.collisionFeeds;
-  if (!feeds) { loadCollisionFeeds(); return '<div class="hint">Loading…</div>'; }
-  if (!feeds.length) return '<div class="hint">None yet.</div>';
-  return feeds.map(f => `<div class="feed-row"><div class="grow"><b>${esc(f.name)}</b> · ${fmtNum(f.entries)} collision${f.entries === 1 ? '' : 's'}
-      ${f.rejected.length ? `, ${f.rejected.length} skipped as invalid` : ''}${f.error ? ` · <span class="warn">${esc(f.error)}</span>` : ''}
-      <div class="meta">${esc(f.url)}</div>
-      ${f.uploaders.length ? `<div class="feed-uploaders">${f.uploaders.map(u => `<span class="feed-uploader"><b>${esc(u.label)}</b> <span class="meta">${esc(u.uploader)}</span>
-        ${u.trusted ? '<span class="trusted">Trusted</span>' : `<button class="btn" data-action="feed-trust" data-uploader="${esc(u.uploader)}" data-label="${esc(u.label)}">Trust</button>`}</span>`).join('')}</div>` : ''}</div>
-    <button class="btn" data-action="feed-refresh" data-id="${esc(f.id)}">Refresh</button>
-    <button class="btn" data-action="feed-remove" data-id="${esc(f.id)}">Remove</button></div>`).join('');
-}
-
-async function loadCollisionFeeds() {
-  state.collisionFeeds = await api.getCollisionFeeds().catch(() => []);
-  const el = $('#feed-list');
-  if (el) el.innerHTML = feedListHtml();
-}
-
-async function addCollisionFeed() {
-  const url = $('#feed-url').value.trim();
-  if (!url) return toast('Paste the URL of a collisions feed.');
-  const r = await api.addCollisionFeed({ url });
-  if (!r.ok) return toast(`Couldn't subscribe: ${r.error}`);
-  toast(`Subscribed to ${r.feed.name}: ${r.feed.entries} collisions${r.feed.error ? ` (${r.feed.error})` : ''}.`);
-  $('#feed-url').value = '';
-  await loadCollisionFeeds();
-  loadPorts();
-}
-
-// The user's uploader list changed from a feed: redraw it and reload the wall
-async function sourcesChanged() {
-  state.sources = (await api.getSources()).sources;
-  const box = $('#setting-sources');
-  if (box) box.value = formatSources(state.sources);
-  await loadCollisionFeeds();
-  loadWall({ refresh: true });
-}
-
-async function trustUploader(el) {
-  const r = await api.trustUploader({ uploader: el.dataset.uploader, label: el.dataset.label });
-  if (!r.ok) return toast(`Couldn't trust it: ${r.error}`);
-  toast(`${el.dataset.label} is one of your uploaders now. Their uploads join the wall.`);
-  await sourcesChanged();
-}
-
-async function importFeedFile(file) {
-  const r = await api.importFeed(await file.text());
-  if (!r.ok) return toast(`Couldn't import ${file.name}: ${r.error}`, 6000);
-  const n = (k, one) => `${r[k].length} ${one}${r[k].length === 1 ? '' : 's'}`;
-  toast(`Imported ${file.name}: ${n('collisions', 'port')}, ${n('uploaders', 'uploader')}${r.rejected.length ? `, ${r.rejected.length} skipped as invalid` : ''}.`, 6000);
-  if (r.collisions.length) loadPorts();
-  if (r.uploaders.length) await sourcesChanged();
-}
-
 // ─── row actions: the ⋯ button and the right-click menu ─────────────────────
 // Every row menu reads this one list (ListView.createActions). An action is
 // { id, label, icon, group, kinds, when(item, ctx), run(item, ctx) }; the
 // menu draws one section per group, in ListView.MENU_GROUPS order (pin,
-// collection, play, manage, goto, admin, remove). More actions (the admin
-// group's Make collision) are added with rowActions.register(...) and need
-// no change to the rows or the menu.
+// collection, play, manage, goto, remove). More actions are added with
+// rowActions.register(...) and need no change to the rows or the menu.
 
 const rowActions = ListView.createActions();
 const itemDl = (x, ctx) => state.downloads.get(ctx.kind === 'port' ? x.id : x.identifier);
@@ -1973,7 +1548,6 @@ const ROW_ACTIONS = [
     } },
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
     run: (p) => togglePort(p.id) },
-  { id: 'collision', label: 'Game Data…', icon: 'box', group: 'manage', kinds: ['port'], run: (p) => go('collision', p.repository) },
   { id: 'details', label: 'Properties', icon: 'info', group: 'manage',
     run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
 
@@ -1984,8 +1558,6 @@ const ROW_ACTIONS = [
     when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
   { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
     run: (p) => api.openExternal(`https://github.com/${p.repository}`) },
-  { id: 'data', label: 'Game Data on archive.org', icon: 'globe', group: 'goto', kinds: ['port'],
-    when: (p) => p.data.iaIdentifier, run: (p) => api.openExternal(`https://archive.org/details/${p.data.iaIdentifier}`) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
     when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
@@ -2007,9 +1579,6 @@ const ROW_ACTIONS = [
     } },
   { id: 'manual-remove', label: 'Remove from Library', icon: 'trash', group: 'remove', danger: true, kinds: ['game'],
     when: (g) => g._manual, run: (g) => { openDetail('game', g.identifier); return onAction('manual-remove'); } },
-  // Admin mode (docs/ADMIN.md): a game tile with this archive.org item as its data
-  { id: 'make-tile', label: 'Make a Tile…', icon: 'plus', group: 'admin', kinds: ['game'],
-    when: (g) => state.admin && !g._manual, run: (g) => adminFromItem(g.identifier) },
 ];
 ROW_ACTIONS.forEach(rowActions.register);
 
@@ -2185,28 +1754,9 @@ async function onAction(action, el) {
       await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
       return loadPorts();
     case 'save-settings': return saveSettingsForm();
-    case 'edit-collision': closeDetail(); return go('collision', el.dataset.repo);
-    case 'ed-add-source': return editorAddSource();
-    case 'ed-remove-source': return editorRemoveSource(Number(el.dataset.i));
-    case 'ed-browse': return editorBrowse(Number(el.dataset.i));
-    case 'ed-close-browse': state.editor.browse = null; return render();
-    case 'ed-take': return editorTake(el.dataset.path);
-    case 'ed-preview': return editorPreview();
-    case 'ed-save': return editorSave();
-    case 'ed-delete': return editorDelete();
-    case 'ed-export': return editorExport();
-    case 'ed-releases': return editorReleases();
-    case 'ed-close-releases': state.editor.releases = null; return render();
-    case 'ed-take-asset': return editorTakeAsset(el.dataset.pattern);
-    case 'ed-search': return editorSearch(Number(el.dataset.i));
-    case 'ed-pick-item': return editorPickItem(el.dataset.ia);
-    case 'admin-from-item': return adminFromItem(el.dataset.ia);
-    case 'admin-hide': return adminToggleHidden(el.dataset.repo);
-    case 'feed-add': return addCollisionFeed();
     case 'user-file-save': return saveUserFile();
-    case 'feed-trust': return trustUploader(el);
-    case 'feed-refresh': await api.refreshCollisionFeed(el.dataset.id); return loadCollisionFeeds();
-    case 'feed-remove': await api.removeCollisionFeed(el.dataset.id); await loadCollisionFeeds(); return loadPorts();
+    case 'repo-save': return repoSave();
+    case 'repo-remove': return repoRemove(el.dataset.repo);
     case 'announce-dismiss':
       $('#announce').classList.add('hidden');
       return api.dismissAnnouncement(el.dataset.id);
@@ -2478,9 +2028,7 @@ async function showAnnouncement() {
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
-  state.admin = !!(await api.getHealth().catch(() => ({}))).admin;
   document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
-  document.querySelectorAll('.admin-only').forEach(el => el.classList.toggle('hidden', !state.admin));
   state.sources = (await api.getSources()).sources;
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();

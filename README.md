@@ -56,8 +56,7 @@ y4bo is a desktop game launcher for the classic PC game collection uploaded to [
 ## Interface
 
 The launcher opens in the new interface (`src/frontend/new/`): a game wall from the curated
-archive.org uploaders, Ports shelves from Quiver's community catalogs joined to
-`catalog/collisions.json`, the library, and a Keep current view of what changed in the catalogs.
+archive.org uploaders, Ports shelves from Quiver's community catalogs, the library, and a Keep current view of what changed in the catalogs.
 The classic interface (`src/frontend/index.html`) is one click away in Settings, in either
 direction, and the choice is remembered. `RK_UI=legacy` also opens the classic one.
 
@@ -136,7 +135,7 @@ snapshot, and main's preview is rebuilt nightly.
 
 `mise run ui` is the same thing locally: the whole UI in a browser, with no
 Windows, Electron or build. It saves the real sources as the Pages build does
-(uploader walls, Quiver's catalogs joined to the collision catalog, main's
+(uploader walls, Quiver's catalogs, main's
 renames and SteamGridDB art) and serves them on `0.0.0.0:5180`: open the
 forwarded port in a devcontainer, or `http://127.0.0.1:5180/`. There are no
 installs in this mode. `mise run ui -- --offline` uses the e2e fixtures and a
