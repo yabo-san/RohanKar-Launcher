@@ -8,7 +8,7 @@ const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'catalog', 'curated-ports.json');
 const SECTIONS = ['recomp port', 'decomp port', 'work in progress', 'source only', 'engine', 'launcher'];
-const FIELDS = ['name', 'repository', 'repositorySource', 'folderName', 'releaseAssetFilter', 'appIconUrl', 'description', 'tags', 'filesToAdd'];
+const FIELDS = ['name', 'repository', 'repositorySource', 'folderName', 'releaseAssetFilter', 'appIconUrl', 'description', 'tags', 'filesToAdd', 'more'];
 
 const catalog = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 
@@ -29,6 +29,7 @@ test('every entry has a name, an owner/repo, a folder and known fields only', ()
       if (k in a) assert.ok(typeof a[k] === 'string' && a[k].trim(), `${at}: ${k} is a non-empty string`);
     }
     if ('appIconUrl' in a) assert.match(a.appIconUrl, /^https:\/\//, `${at}: appIconUrl is https`);
+    if ('more' in a) assert.equal(a.more, true, `${at}: more is true or left out`);
     if ('filesToAdd' in a) assert.ok(Array.isArray(a.filesToAdd), `${at}: filesToAdd is a list`);
     for (const k of Object.keys(a)) assert.ok(FIELDS.includes(k), `${at}: unknown field "${k}"`);
   }

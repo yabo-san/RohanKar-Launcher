@@ -45,7 +45,8 @@ through our one Playnite extension. Keep it small. Every feature is something th
 - **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
   Drop its `collisions` section. Validation and "curated wins on conflict" stay.
 - **`catalog/curated-ports.json` is the source of truth, edited by hand.** Entries change by pull
-  request; no script, outside list or workflow generates it. `test/curated-ports.test.js` checks
+  request; no script, outside list or workflow generates it. Entries with `"more": true` show only
+  with Settings > More ports on. `test/curated-ports.test.js` checks
   every entry. It used to be scraped from an outside list; never write that list's URL, document
   ID or author anywhere.
 

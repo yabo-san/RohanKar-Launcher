@@ -27,7 +27,8 @@
       "folderName": "BFBB",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Blue Dragon",
@@ -80,7 +81,8 @@
       "filesToAdd": [
         "portable.txt"
       ],
-      "repository": "RevoSucks/BMHeroRecomp"
+      "repository": "RevoSucks/BMHeroRecomp",
+      "more": true
     },
     {
       "name": "Castlevania: Symphony of the Night",
@@ -116,7 +118,8 @@
       "folderName": "Dcbdecomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Doaxbv-re",
@@ -181,7 +184,8 @@
       "folderName": "Dwdecomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "KhCom",
@@ -189,7 +193,8 @@
       "folderName": "KhCom",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Kirby's Return to Dream Land",
@@ -211,7 +216,8 @@
       "folderName": "Lomdecomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "MarathonRecomp",
@@ -219,7 +225,8 @@
       "folderName": "MarathonRecomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "MediEvilRecomp",
@@ -235,7 +242,8 @@
       "folderName": "MK64Decomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Mystical Ninja Starring Goemon",
@@ -276,7 +284,8 @@
       "folderName": "Perfectdark",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "PokeEmerald",
@@ -284,7 +293,8 @@
       "folderName": "PokeEmerald",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Quake (ironwail)",
@@ -322,7 +332,8 @@
       "folderName": "RSDKv2Decompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "RSDKv3-Script-Decompilation",
@@ -330,7 +341,8 @@
       "folderName": "RSDKv3ScriptDecompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "RSDKv4-Decompilation",
@@ -338,7 +350,8 @@
       "folderName": "RSDKv4Decompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "RSDKv4-Script-Decompilation",
@@ -346,7 +359,8 @@
       "folderName": "RSDKv4ScriptDecompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "RSDKv5-Decompilation",
@@ -354,7 +368,8 @@
       "folderName": "RSDKv5Decompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "RSonic3D-Decompilation",
@@ -362,7 +377,8 @@
       "folderName": "RSonic3DDecompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "SA2",
@@ -370,7 +386,8 @@
       "folderName": "SA2",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "SM64 Decomp",
@@ -378,7 +395,8 @@
       "folderName": "SM64Decomp",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "SM64 Port",
@@ -386,7 +404,8 @@
       "folderName": "SM64Port",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Sm64Plus",
@@ -409,7 +428,8 @@
         "decompilation",
         "source only"
       ],
-      "repository": "RSDKModding/RSDKv3-Decompilation"
+      "repository": "RSDKModding/RSDKv3-Decompilation",
+      "more": true
     },
     {
       "name": "Sonic Mania - Decompilation",
@@ -417,7 +437,8 @@
       "folderName": "SonicManiaDecompilation",
       "tags": [
         "source only"
-      ]
+      ],
+      "more": true
     },
     {
       "name": "Sonic Unleashed",

@@ -43,6 +43,7 @@ copies of the launcher fetch it from `main`.
 | `appIconUrl` | optional | an https image for the tile when there is no cover |
 | `description` | optional | shown on the tile's page; for engines and launchers, say what the user brings |
 | `filesToAdd` | optional | empty files created in the install folder, e.g. `portable.txt` |
+| `more` | optional | `true`: shown only with Settings > More ports on (or once installed). Older launchers ignore it and show the entry |
 
 Section tags decide how a tile behaves:
 
@@ -52,6 +53,10 @@ Section tags decide how a tile behaves:
 | `work in progress` | installs, with a "work in progress" badge |
 | `engine`, `launcher` | installs, and shows its description (what the user brings) |
 | `source only` | no Install button; links to the repository. The Live ports check skips it |
+
+**More ports.** Entries with `"more": true` are the rest of the community list the shelf started
+from: today the 21 `source only` decompilations. They stay off the shelf unless the user turns on
+Settings > More ports. To promote one, delete its `more` line.
 
 Covers and banners come from `art.json` / `overrides.json` as for everything else. The Live ports
 workflow checks every entry nightly, so a wrong `releaseAssetFilter` or a renamed repository

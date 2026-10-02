@@ -440,7 +440,7 @@ curl http://127.0.0.1:7777/v1/sources
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
-`allowAdditionalSources` must be `true` or `false`; `userSourcesFile` must be a full local path
+`allowAdditionalSources` and `morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
 (`null` or empty clears it; a URL is `400`).
 
 ```sh
