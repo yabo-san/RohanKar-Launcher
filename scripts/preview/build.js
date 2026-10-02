@@ -126,8 +126,11 @@ async function build(opts) {
   }
 
   try {
+    const t0 = Date.now();
+    const step = (msg) => console.log(`preview: ${msg} (${Math.round((Date.now() - t0) / 1000)}s)`);
     // The curated shelf, fetched as the app does on a first run
     await backend.backend.catalogs.warm();
+    step('curated ports loaded; scraping the uploaders on archive.org');
 
     const health = await save('/health');
     await save('/settings');
@@ -140,6 +143,7 @@ async function build(opts) {
     for (const e of wall?.errors || []) console.warn(`source ${e.label || e.source}: ${e.error}`);
     // Better no new preview than an empty wall over the last good one
     if (!wall?.items?.length) throw new Error('the wall is empty: every source failed');
+    step(`${wall.items.length} wall items`);
     if (opts.fixtures) seedLibrary(backend.backend, wall.items);
     await save('/library');
     await save('/collections');
@@ -163,13 +167,18 @@ async function build(opts) {
       await shelves(ADDITIONAL_PREFIX);
     }
 
-    // Covers and file lists: each version of each wall item
+    // Covers and file lists: each version of each wall item. Two archive.org
+    // requests per id, the slow part of a live build, so it reports progress
     const ids = [...new Set([...(wall?.items || []), ...more].flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
+    step(`fetching covers and file lists for ${ids.length} items`);
+    let done = 0;
     await pool(ids, 6, async (id) => {
       const enc = encodeURIComponent(id);
       await save(`/items/${enc}/cover`, {}, { binary: true });
       await save(`/items/${enc}/files`);
+      if (++done % 50 === 0 && done < ids.length) step(`${done}/${ids.length} covers and file lists`);
     });
+    step(`${ids.length}/${ids.length} covers and file lists`);
 
     const info = {
       builtAt: new Date().toISOString(),

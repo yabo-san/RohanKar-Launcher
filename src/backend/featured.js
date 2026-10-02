@@ -90,7 +90,7 @@ async function loadFeatured({
 }) {
   const picks = await loadOne({ name: 'featured', url, fetchText, readBundled, parse: parseFeatured, log, fallback: [] });
   if (!picks.length) return picks;
-  const banners = await loadOne({ name: 'art', url: artUrl, fetchText, readBundled: readBundledArt, parse: parseArtBanners, log, fallback: new Map() });
+  const banners = await loadOne({ name: 'banners', url: artUrl, fetchText, readBundled: readBundledArt, parse: parseArtBanners, log, fallback: new Map() });
   return withBanners(picks, banners);
 }
 
