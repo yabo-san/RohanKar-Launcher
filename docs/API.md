@@ -98,12 +98,16 @@ curl http://127.0.0.1:7777/v1/health
 The hand-picked games and ports that lead the New page, in display order, from
 `catalog/featured.json` (the copy on main at launch, the bundled one if that fails). Each pick names
 an archive.org item by `identifier` or a port by `repository` (lowercase `owner/repo`); `blurb`, when
-set, replaces the item's own description on its card. A pick that isn't on the wall is skipped by
-the page.
+set, replaces the item's own description on its card. `banner` is the pick's SteamGridDB hero on
+its CDN (`https://cdn2.steamgriddb.com/hero/…`): a `banner` pinned on the pick in featured.json,
+else its entry in `catalog/banners.json` (fetched from main next to featured.json, the bundled copy
+if that fails), else `null`; anything that isn't a SteamGridDB CDN URL over https (a page link
+included) is dropped. See catalog/README.md, Home banners. A pick that isn't on the wall is skipped
+by the page.
 
 ```sh
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7777/v1/featured
-# {"picks":[{"identifier":"devil-may-cry-4_202603","blurb":null},{"repository":"perfect-dark-pc-port/perfect_dark","blurb":null}]}
+# {"picks":[{"identifier":"devil-may-cry-4_202603","blurb":null,"banner":"https://cdn2.steamgriddb.com/hero/….png"},{"repository":"perfect-dark-pc-port/perfect_dark","blurb":null,"banner":null}]}
 ```
 
 ### `GET /announcement`, `POST /announcement/dismiss`

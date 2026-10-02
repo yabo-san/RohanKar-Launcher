@@ -44,6 +44,8 @@ test.beforeAll(async ({ browser }) => {
     catalogs: [{ file: 'Nintendo.json', shelf: 'Nintendo' }, { file: 'Xbox.json', shelf: 'Xbox' }, { file: 'TestPorts.json', shelf: 'Test ports' }],
   });
   page = await browser.newPage();
+  // SteamGridDB's CDN, for the featured banners: a small local hero
+  await page.route('https://cdn2.steamgriddb.com/**', r => r.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.join(__dirname, 'fixtures', 'hero.png')) }));
   page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') console.log(`[frontend] ${m.text()}`); });
   page.on('dialog', d => d.accept());
   await page.goto(stack.pageUrl);
@@ -110,6 +112,16 @@ test('New leads with the picks, then the latest uploads newest first', async () 
   await expect(features.nth(0).locator('p')).toHaveText('The one that started it all.');
   await expect(features.nth(1).locator('.title')).toHaveText('Banjo-Kazooie');
   await expect(features.nth(1).locator('.eyebrow')).toHaveText('y4bo pick · port');
+  // Banners are SteamGridDB heroes: Halo's pin in featured.json beats its banners.json entry;
+  // Banjo has none, so a plain banner with its title, never the port's square icon
+  const hero = features.nth(0).locator('.art.banner img');
+  await expect(hero).toHaveAttribute('src', 'https://cdn2.steamgriddb.com/hero/e2e0000000000000000000000000halo.png');
+  await expect.poll(() => hero.evaluate(i => i.complete && i.naturalWidth)).toBe(384);
+  const ratio = await features.nth(0).locator('.art').evaluate(a => a.offsetWidth / a.offsetHeight);
+  expect(Math.abs(ratio - 1920 / 620)).toBeLessThan(0.05);
+  expect(await hero.evaluate(i => i.ownerDocument.defaultView.getComputedStyle(i).objectFit)).toBe('cover');
+  await expect(features.nth(1).locator('.art.plain .banner-title')).toHaveText('Banjo-Kazooie');
+  await expect(features.nth(1).locator('.art img')).toHaveCount(0);
 
   const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
   const items = page.locator('#body .list-item');

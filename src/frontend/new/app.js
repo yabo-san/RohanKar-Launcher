@@ -905,14 +905,17 @@ function resolvePicks() {
   });
 }
 
+// The banner is the pick's SteamGridDB hero (catalog/featured.json or
+// catalog/banners.json, via the backend); never a port's square icon or a
+// portrait cover. With no hero yet, a plain colour banner with the title.
 function featureCard({ kind, g, v, p, pick }) {
   const port = kind === 'port';
   const title = port ? p.name : getTitle(g);
   const sub = port ? (p.project || p.repository) : [v._sourceLabel, v.addeddate ? new Date(v.addeddate).getFullYear() : ''].filter(Boolean).join(' · ');
   const blurb = pick.blurb || blurbOf(port ? p.description : v.description);
-  const art = port
-    ? `<div class="art icon" style="background:${tint(p.repository)}">${p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : ''}`
-    : `<div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(title)}">`;
+  const art = pick.banner
+    ? `<div class="art banner" style="background:${tint(title)}"><img loading="lazy" src="${esc(pick.banner)}" alt="">`
+    : `<div class="art banner plain" style="background:${tint(title)}"><span class="banner-title" aria-hidden="true">${esc(title)}</span>`;
   return `<button class="card feature-card" data-open="${port ? 'port' : 'game'}" data-id="${esc(port ? p.id : g.identifier)}">
     <div class="eyebrow">${port ? 'y4bo pick · port' : 'y4bo pick'}</div>
     <div class="title">${esc(title)}</div>
@@ -920,6 +923,15 @@ function featureCard({ kind, g, v, p, pick }) {
     ${art}${blurb ? `<p>${esc(blurb)}</p>` : ''}</div>
   </button>`;
 }
+
+// A hero that won't load falls back to the plain banner
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.matches('.feature-card .art.banner img')) return;
+  const art = img.parentElement;
+  art.classList.add('plain');
+  img.outerHTML = `<span class="banner-title" aria-hidden="true">${esc(art.closest('.feature-card').querySelector('.title').textContent)}</span>`;
+}, true);
 
 function listItem(g) {
   const v = newestVersion(g);

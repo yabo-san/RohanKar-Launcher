@@ -104,6 +104,7 @@ function createBackend({
     fetchText: (url) => getText(url, { kind: 'featured', timeoutMs: 5000, log: netlog.log })
       .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
     readBundled: () => fs.readFileSync(path.join(appDir, 'catalog', 'featured.json'), 'utf8'),
+    readBundledBanners: () => fs.readFileSync(path.join(appDir, 'catalog', 'banners.json'), 'utf8'),
     log,
   }));
 
