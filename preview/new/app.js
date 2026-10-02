@@ -1061,6 +1061,9 @@ function viewSettings() {
       <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? (sh.bundled ? ' (bundled copy)' : ' (cached)') : ''}`).join(' · ') : 'Loading…'}
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
+    <div class="field" id="more-ports"><label class="switch-row" for="setting-more-ports">
+        <span><b>More ports</b><span class="hint">Also show the rest of the community list we started from: mostly decompilations that publish source but no download.</span></span>
+        <input type="checkbox" class="switch" id="setting-more-ports" role="switch" ${s.morePorts ? 'checked' : ''}></label></div>
     <div class="field" id="additional"><label class="switch-row" for="setting-additional">
         <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, GitHub repos you add
           and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
@@ -1565,7 +1568,16 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
+  if (e.target.id === 'setting-more-ports') return setMorePorts(e.target.checked);
 });
+
+// Settings > More ports: the curated catalog's "more" entries join the shelf
+async function setMorePorts(on) {
+  const r = await api.saveSettings({ morePorts: on });
+  if (r && r.ok === false) { const box = $('#setting-more-ports'); if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
+  state.settings = { ...state.settings, morePorts: on };
+  loadPorts();
+}
 
 // ─── Additional sources (Settings) ───────────────────────────────────────────
 
