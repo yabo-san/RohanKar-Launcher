@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.0-fork.16](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.15...v1.6.0-fork.16) (2026-10-02)
+
+
+### Features
+
+* keep your own uploaders, warn before saving one we don't list ([d980ee0](https://github.com/yabo-san/RohanKar-Launcher/commit/d980ee0030b06dc70f340980eef7f1801e6b3cf9))
+* **ui:** album-style details page, page transitions and motion polish ([c33d172](https://github.com/yabo-san/RohanKar-Launcher/commit/c33d17258c5a662e6b4ac98a53196fab86a9878b))
+* warn before saving an uploader we don't list, add docs/BUILD-YOUR-OWN.md ([7ab2f75](https://github.com/yabo-san/RohanKar-Launcher/commit/7ab2f75fe6a7f71859afccf8816d57ec8a9313d2))
+
 ## [1.6.0-fork.15](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.14...v1.6.0-fork.15) (2026-10-02)
 
 
