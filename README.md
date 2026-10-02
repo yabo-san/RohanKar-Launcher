@@ -27,7 +27,7 @@ y4bo is a desktop game launcher for the classic PC game collection uploaded to [
 - Playtime tracking per game
 
 ### 🖼️ Game Detail Panel
-- Hero banner image — pulled automatically from a `hero.png` bundled in the game's archive
+- Cover and hero banner: the one pinned in `overrides.json`, else the archive.org item's own image, else SteamGridDB art from `catalog/art.json`
 - Archive.org description, year, download count, and file size
 - Readme viewer (reads the readme packaged with the game)
 - Archive.org user reviews tab
@@ -139,7 +139,7 @@ once, every response the UIs ask for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
 favorites, Add/Remove and settings work (kept for the tab); installs and
 launching answer 501. The JSON feeds the app reads from main at launch
-(`catalog/featured.json` and `catalog/banners.json`, `overrides.json`,
+(`catalog/featured.json` and `catalog/art.json`, `overrides.json`,
 `announcement.json`) are fetched
 live when the page is opened, so an edit on main shows on the next reload
 (raw.githubusercontent.com caches for up to 5 minutes); the saved copy answers
@@ -203,14 +203,6 @@ gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher
 
 - Windows 10 or later
 - Internet connection (to browse and download games from Archive.org)
-
----
-
-## Notes for Game Uploaders
-
-To include a hero banner image for your game, place a file named `hero.png` in the root of your archive alongside the game folder and readme. The launcher will automatically display it as the banner when your game is selected.
-
-Recommended hero image dimensions: **1920 × 620px**
 
 ---
 

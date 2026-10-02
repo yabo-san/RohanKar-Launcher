@@ -8,8 +8,7 @@ fallback. Every file changes by pull request.
 | `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
 | `featured.json` | the Home page's hand-picked games and ports, in display order: `{ picks: [{ identifier \| repository, blurb?, banner? }] }` (see Home banners below) | per pick |
-| `banners.json` | one SteamGridDB hero per featured pick, keyed by archive.org identifier or lowercase `owner/repo`: `{ url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art/banners.py` in CI; pinned entries are never overwritten | per pick |
-| `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API | per item |
+| `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Also each featured pick's Home banner, keyed by archive.org identifier or lowercase `owner/repo`: `banner: { url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API; pinned banners are never overwritten | per item |
 
 Rules: uploader emails are what archive.org's `uploader:` field matches; handles are labels.
 
@@ -23,13 +22,13 @@ or a portrait cover; a pick with no hero yet shows a plain colour banner with it
 Where a pick's banner comes from, first match wins:
 
 1. `banner` on the pick in `featured.json` (pinned by hand).
-2. Its entry in `banners.json`, `"source": "pinned"` (by hand) or `"source": "auto"` (picked by
-   the workflow).
+2. The `banner` on its entry in `art.json`, `"source": "pinned"` (by hand) or `"source": "auto"`
+   (picked by the workflow).
 
-To pin one, set `banner` on the pick, or add `"<key>": { "url": "…", "source": "pinned" }` to
-`banners.json`. Either may be a CDN URL or a hero page link (`https://www.steamgriddb.com/hero/<id>`).
-The launcher ignores page links; the **Box art report** workflow resolves them to CDN URLs in
-`banners.json`.
+To pin one, set `banner` on the pick, or set `"banner": { "url": "…", "source": "pinned" }` on the
+pick's entry in `art.json` (add `"<key>": { "banner": … }` if it has none). Either may be a CDN
+URL or a hero page link (`https://www.steamgriddb.com/hero/<id>`). The launcher ignores page links; the **Box art report** workflow resolves them to CDN URLs in
+`art.json`.
 
 The workflow (`.github/workflows/box-art.yml`, manual only: Actions > Box art report > Run
 workflow; tick "Only refresh the Home banners" to skip the pstriple covers) runs
@@ -38,9 +37,10 @@ pin it matches the game on SteamGridDB the way the pstriple covers are matched (
 `art.json`, else an alias or the cleaned title through the search), lists its static heroes, and
 takes the first by an artist in `favorite-artists.json`, in that file's priority order
 (`"favorite": true`); with none, the top-voted hero (`"favorite": false`); with no hero at all the
-entry is dropped. Run from main it opens a PR with previews of each pick; run from a branch it
-commits `banners.json` (and `art.json`) back to that branch. Review the picks in the diff; to
-override one, pin it.
+banner is dropped. It only touches `banner`; the covers in the same entry stay as they are, and
+`pstriple-art.py` keeps every `banner` when it rewrites `art.json`. Run from main it opens a PR
+with previews of each pick; run from a branch it commits `art.json` back to that branch. Review
+the picks in the diff; to override one, pin it.
 
 Kept in this repo for now; may move to its own repo without changing the launcher.
 

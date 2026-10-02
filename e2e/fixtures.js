@@ -9,8 +9,8 @@
  *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
  *     three exes)
  *   - /featured.json is fixtures/featured.json: a wall game (with a pinned
- *     banner), a port and a pick not on the wall; /banners.json is
- *     fixtures/banners.json, whose entry for the wall game the pin overrides
+ *     banner), a port and a pick not on the wall; /art.json is
+ *     fixtures/art.json, whose banner for the wall game the pin overrides
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -60,7 +60,7 @@ function answer(url, base = '') {
   if (url.pathname === '/announcement.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'announcement.json')), 'application/json');
   }
-  if (url.pathname === '/featured.json' || url.pathname === '/banners.json') {
+  if (url.pathname === '/featured.json' || url.pathname === '/art.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', url.pathname.slice(1))), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');

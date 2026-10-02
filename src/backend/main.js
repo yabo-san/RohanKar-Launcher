@@ -1,8 +1,7 @@
 'use strict';
 /**
  * The backend process: `node src/backend/main.js --data-dir <dir> [--port N]`
- * (--heroes-dir for the app's bundled heroes; tests add --archive-base,
- * --overrides-url, --uploaders-url, --featured-url, --announcement-url and --github-api).
+ * (tests add --archive-base, --overrides-url, --uploaders-url, --featured-url, --announcement-url and --github-api).
  * Prints one JSON line, { port, token, url }, once listening, so a parent
  * process (or a person) can find it. The token is random per start unless
  * LAUNCHER_TOKEN is set.
@@ -40,7 +39,6 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
   const bridge = parent ? connectParent(parent) : null;
   const backend = createBackend({
     dataDir,
-    ...(args['heroes-dir'] ? { heroesDir: path.resolve(args['heroes-dir']) } : {}),
     ...(args['archive-base'] ? { archiveBase: args['archive-base'] } : {}),
     ...(args['overrides-url'] ? { overridesUrl: args['overrides-url'] } : {}),
     ...(args['uploaders-url'] ? { uploadersUrl: args['uploaders-url'] } : {}),

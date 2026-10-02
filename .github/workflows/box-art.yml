@@ -5,7 +5,7 @@ name: Box art report
 # hero where a 1920x620 exists), with cover previews in the PR body, and refreshes
 # catalog/art.json (every grid and hero found per item). It also picks a
 # SteamGridDB hero for every Home pick in catalog/featured.json (uploads and
-# ports alike) into catalog/banners.json (scripts/box-art/banners.py: pins win,
+# ports alike) into its catalog/art.json entry's `banner` (scripts/box-art/banners.py: pins win,
 # then the favourite artists in priority order, then the top-voted hero) and
 # resolves pinned hero page links to CDN URLs. Never runs
 # on push or PR, so PR checks never call archive.org. The script paces
@@ -23,7 +23,7 @@ on:
         required: false
         default: ''
       banners_only:
-        description: 'Only refresh the Home banners (catalog/banners.json), skipping the pstriple covers'
+        description: 'Only refresh the Home banners (the banner field in catalog/art.json), skipping the pstriple covers'
         type: boolean
         required: false
         default: false
@@ -76,7 +76,7 @@ jobs:
           STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
         run: |
           python3 scripts/box-art/banners.py
-          git diff catalog/banners.json
+          git diff --stat catalog/art.json
           cat scripts/box-art/banners.md >> "$GITHUB_STEP_SUMMARY"
 
       # Also in the log and job summary, so the report can be read without downloading the artifact.
@@ -107,14 +107,14 @@ jobs:
       - name: Commit art catalogs to this branch
         if: github.ref != 'refs/heads/main' && inputs.grids == ''
         run: |
-          if [ -z "$(git status --porcelain catalog/art.json catalog/banners.json)" ]; then
-            echo "catalog/art.json and catalog/banners.json unchanged."
+          if [ -z "$(git status --porcelain catalog/art.json)" ]; then
+            echo "catalog/art.json unchanged."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add catalog/art.json catalog/banners.json
-          git commit -m "chore: refresh catalog/art.json and catalog/banners.json from SteamGridDB"
+          git add catalog/art.json
+          git commit -m "chore: refresh catalog/art.json from SteamGridDB"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Open batch PR
@@ -122,7 +122,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet overrides.json catalog/art.json catalog/banners.json; then
+          if git diff --quiet overrides.json catalog/art.json; then
             echo "No new art; no PR."
             exit 0
           fi
@@ -136,7 +136,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add overrides.json catalog/art.json catalog/banners.json
+          git add overrides.json catalog/art.json
           git commit -m "$title"
           git push -u origin "$branch"
           gh pr create --base main --head "$branch" --title "$title" --body-file scripts/box-art/pr-body.md

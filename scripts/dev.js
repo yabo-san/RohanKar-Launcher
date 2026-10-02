@@ -29,7 +29,7 @@ function settings(env = process.env) {
 // The standalone backend, as the desktop app starts it (minus the OS actions)
 function startBackend({ backendPort, token, dataDir }, extraArgs = [], print = () => {}) {
   return run(
-    ['--data-dir', dataDir, '--heroes-dir', path.join(ROOT, 'assets', 'heroes'), '--port', String(backendPort), ...extraArgs],
+    ['--data-dir', dataDir, '--port', String(backendPort), ...extraArgs],
     { ...process.env, LAUNCHER_TOKEN: token },
     print,
   );
