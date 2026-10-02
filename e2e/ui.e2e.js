@@ -114,7 +114,7 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
   await expect(features.nth(0).locator('p')).toHaveText('The one that started it all.');
   await expect(features.nth(1).locator('.title')).toHaveText('Banjo-Kazooie');
   await expect(features.nth(1).locator('.eyebrow')).toHaveText('y4bo pick · port');
-  // Banners are SteamGridDB heroes: Halo's pin in featured.json beats its banners.json entry;
+  // Banners are SteamGridDB heroes: Halo's pin in featured.json beats its art.json banner;
   // Banjo has none, so a plain banner with its title, never the port's square icon
   const hero = features.nth(0).locator('.art.banner img');
   await expect(hero).toHaveAttribute('src', 'https://cdn2.steamgriddb.com/hero/e2e0000000000000000000000000halo.png');

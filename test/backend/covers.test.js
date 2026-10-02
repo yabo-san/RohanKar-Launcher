@@ -3,11 +3,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { createCovers, fileUrl, safeName } = require('../../src/backend/covers');
+const { createCovers, catalogArtUrl, fileUrl, safeName } = require('../../src/backend/covers');
 const { createArchive } = require('../../src/backend/archive');
 const { fakeArchive, tmpDir, JPEG } = require('./helpers');
 
-async function setup(t, overrides = {}, routes = {}) {
+async function setup(t, overrides = {}, routes = {}, art = {}) {
   const fake = await fakeArchive(t, { routes });
   const dir = tmpDir(t);
   const appDir = path.join(dir, 'app');
@@ -15,7 +15,7 @@ async function setup(t, overrides = {}, routes = {}) {
   fs.writeFileSync(path.join(appDir, 'assets', 'covers', 'tlr.jpg'), JPEG);
   const covers = createCovers({
     cacheDir: path.join(dir, 'thumbcache'), appDir, archive: createArchive({ base: fake.base }),
-    getOverrides: async () => overrides,
+    getOverrides: async () => overrides, art: typeof art === 'function' ? art() : art,
   });
   return { fake, dir, appDir, covers };
 }
@@ -44,7 +44,6 @@ test('thumb: 404, non-image and tiny images are not cached', async (t) => {
 });
 
 test('overrides: bundled art, remote art, and no fall-through to archive.org', async (t) => {
-  let fakeBase;
   const overrides = {
     tlr:    { artUrl: 'assets/covers/tlr.jpg', hero: 'assets/covers/tlr.jpg' },
     remote: { artUrl: 'PLACEHOLDER' },
@@ -52,8 +51,7 @@ test('overrides: bundled art, remote art, and no fall-through to archive.org', a
     ignored: { artUrl: 'C:/somewhere/else.jpg' },
   };
   const { fake, appDir, covers } = await setup(t, overrides);
-  fakeBase = fake.base;
-  overrides.remote.artUrl = `${fakeBase}/services/img/remote-art`;
+  overrides.remote.artUrl = `${fake.base}/services/img/remote-art`;
   assert.equal(await covers.thumb('tlr'), path.join(appDir, 'assets/covers/tlr.jpg'));
   assert.match(await covers.thumb('remote'), /override-[0-9a-f]{16}\.jpg$/);
   assert.equal(await covers.thumb('broken'), null);
@@ -61,15 +59,64 @@ test('overrides: bundled art, remote art, and no fall-through to archive.org', a
   assert.equal(await covers.overrideArt('nothing', 'hero'), undefined);
 });
 
-test('hero: override first, then hero.* in the install folder', async (t) => {
-  const { dir, appDir, covers } = await setup(t, { tlr: { hero: 'assets/covers/tlr.jpg' } });
-  const install = path.join(dir, 'game');
-  fs.mkdirSync(install);
-  assert.equal(await covers.hero('x', install), null);
-  fs.writeFileSync(path.join(install, 'hero.webp'), 'x');
-  assert.equal(await covers.hero('x', install), path.join(install, 'hero.webp'));
-  assert.equal(await covers.hero('tlr', install), path.join(appDir, 'assets/covers/tlr.jpg'));
-  assert.equal(covers.installHero(null), null);
+test('cover and hero: the pin, else the archive.org image, else catalog/art.json', async (t) => {
+  const missing = (req, res) => { res.writeHead(404); res.end(); };
+  const art = {};
+  const { fake, dir, appDir, covers } = await setup(t, { tlr: { hero: 'assets/covers/tlr.jpg' } }, {
+    '/services/img/sgdb-only': missing, '/services/img/nothing': missing,
+  }, () => art);
+  const base = fake.base;
+  art['sgdb-only'] = {
+    grids:  [{ url: `${base}/services/img/grid-a` }, { url: `${base}/services/img/grid-curated`, curated: true }],
+    heroes: [{ url: `${base}/services/img/hero-a` }],
+  };
+  art['with-ia'] = { grids: [{ url: `${base}/services/img/never` }] };
+
+  // pinned hero
+  assert.equal(await covers.hero('tlr'), path.join(appDir, 'assets/covers/tlr.jpg'));
+  // no pin: the archive.org item's own image, for the cover and the hero alike
+  assert.equal(await covers.thumb('with-ia'), path.join(dir, 'thumbcache', 'with-ia.jpg'));
+  assert.equal(await covers.hero('with-ia'), path.join(dir, 'thumbcache', 'with-ia.jpg'));
+  assert.ok(!fake.requests.some(r => r.includes('never')), 'art.json is not reached while archive.org has an image');
+  // no archive.org image: art.json's curated grid, and its hero
+  assert.match(await covers.thumb('sgdb-only'), /art-[0-9a-f]{16}\.jpg$/);
+  assert.ok(fake.requests.some(r => r.endsWith('/grid-curated')) && !fake.requests.some(r => r.endsWith('/grid-a')));
+  assert.match(await covers.hero('sgdb-only'), /art-[0-9a-f]{16}\.jpg$/);
+  // none of the three
+  assert.equal(await covers.thumb('nothing'), null);
+  assert.equal(await covers.hero('nothing'), null);
+  assert.equal(await covers.hero('../x'), null);
+});
+
+test('localArt: the same order from what is on disk, fetching nothing', async (t) => {
+  const { fake, dir, appDir, covers } = await setup(t, {}, {}, { sg: { grids: [{ url: 'https://x/g.jpg' }], heroes: [{ url: 'https://x/h.jpg' }] } });
+  const before = fake.requests.length;
+  const cache = path.join(dir, 'thumbcache');
+  assert.deepEqual(covers.localArt('sg', {}), { cover: null, hero: null });
+  fs.writeFileSync(path.join(cache, 'sg.jpg'), 'x');
+  assert.deepEqual(covers.localArt('sg', {}), { cover: path.join(cache, 'sg.jpg'), hero: path.join(cache, 'sg.jpg') });
+  fs.rmSync(path.join(cache, 'sg.jpg'));
+  // an art.json download on disk counts
+  const crypto = require('crypto');
+  const artFile = path.join(cache, `art-${crypto.createHash('sha1').update('https://x/h.jpg').digest('hex').slice(0, 16)}.jpg`);
+  fs.writeFileSync(artFile, 'x');
+  assert.equal(covers.localArt('sg', {}).hero, artFile);
+  // a pin never falls through, even when it isn't on disk yet
+  assert.deepEqual(covers.localArt('sg', { sg: { hero: 'assets/covers/tlr.jpg', artUrl: 'https://x/pin.jpg' } }),
+    { cover: null, hero: path.join(appDir, 'assets/covers/tlr.jpg') });
+  assert.equal(fake.requests.length, before, 'nothing fetched');
+});
+
+test('catalogArtUrl: first curated, else first; nothing for an unknown item or a bad list', () => {
+  const art = { a: { grids: [{ url: 'u1' }, { url: 'u2', curated: true }], heroes: [{ url: 'h1' }] }, b: { grids: 'x' }, c: { grids: [{ id: 1 }] } };
+  assert.equal(catalogArtUrl(art, 'a', 'grids'), 'u2');
+  assert.equal(catalogArtUrl(art, 'a', 'heroes'), 'h1');
+  assert.equal(catalogArtUrl({ a: { banner: { url: 'picked' }, heroes: [{ url: 'h1' }] } }, 'a', 'heroes'), 'picked', 'the picked banner wins');
+  assert.equal(catalogArtUrl({ a: { banner: { url: 'picked' } } }, 'a', 'grids'), null);
+  assert.equal(catalogArtUrl(art, 'b', 'grids'), null);
+  assert.equal(catalogArtUrl(art, 'c', 'grids'), null);
+  assert.equal(catalogArtUrl(art, 'zz', 'grids'), null);
+  assert.equal(catalogArtUrl(null, 'a', 'grids'), null);
 });
 
 test('fileUrl and safeName', () => {

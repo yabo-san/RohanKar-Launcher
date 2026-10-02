@@ -866,7 +866,7 @@ function resolvePicks() {
 }
 
 // The banner is the pick's SteamGridDB hero (catalog/featured.json or
-// catalog/banners.json, via the backend); never a port's square icon or a
+// catalog/art.json, via the backend); never a port's square icon or a
 // portrait cover. With no hero yet, a plain colour banner with the title.
 function featureCard({ kind, g, v, p, pick }) {
   const port = kind === 'port';

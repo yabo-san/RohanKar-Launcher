@@ -219,11 +219,6 @@ function applyThumb(imgEl, identifier) {
   if (!thumbFailed.has(identifier)) thumbObserver.observe(imgEl);
 }
 
-// The hero shipped with the app, as a URL to try: it 404s when there is none
-function getLocalHero(identifier) {
-  return api.bundledHeroUrl(identifier);
-}
-
 function truncate(str, max) {
   const s = Array.isArray(str) ? str[0] : str;
   if (!s) return '';
@@ -1182,24 +1177,17 @@ async function selectGame(game) {
       if (url && selectedGame?.identifier === game.identifier) setHeroImage(url);
     });
   };
-  const localHero = getLocalHero(game.identifier);
-
-  const libEntry   = library[game.identifier];
-  const installDir = libEntry?.install_dir || null;
-  const overrideHero = await api.getOverrideHero({ identifier: game.identifier });
-  const gameHeroUrl = !overrideHero && installDir
-    ? await api.getInstallHero({ identifier: game.identifier })
-    : null;
-
-  if (overrideHero) {
-    setHeroLocal(overrideHero);
-  } else if (gameHeroUrl) {
-    setHeroLocal(gameHeroUrl);
-  } else if (localHero) {
-    const testImg = new Image();
-    testImg.onload  = () => setHeroLocal(localHero);
-    testImg.onerror = heroFromCover;
-    testImg.src = localHero;
+  // The backend picks the hero (overrides.json, archive.org, catalog/art.json)
+  const libEntry = library[game.identifier];
+  const heroUrl  = await api.getHero({ identifier: game.identifier });
+  if (heroUrl) {
+    // A wide banner shows as is; a cover-shaped image (archive.org's) as the blurred backdrop
+    setHeroImage(heroUrl);
+    const probe = new Image();
+    probe.onload = () => {
+      if (selectedGame?.identifier === game.identifier && probe.naturalWidth >= 2 * probe.naturalHeight) setHeroLocal(heroUrl);
+    };
+    probe.src = heroUrl;
   } else {
     heroFromCover();
   }
@@ -2427,7 +2415,6 @@ function renderHomeBanner(game) {
   const title = getTitle(game);
   document.getElementById('home-banner-title').textContent = title;
 
-  const localHero   = getLocalHero(game.identifier);
   const bannerBg    = document.getElementById('home-banner-bg');
   const bannerLocal = document.getElementById('home-banner-local');
   // Same rule as the detail hero: cached cover only, no live archive.org fetch
@@ -2443,17 +2430,9 @@ function renderHomeBanner(game) {
     bannerBg.style.backgroundImage = 'none';
   };
 
-  api.getOverrideHero({ identifier: game.identifier }).then(overrideHero => {
-    if (overrideHero) {
-      showBannerLocal(overrideHero);
-    } else if (localHero) {
-      const testImg = new Image();
-      testImg.onload = () => showBannerLocal(localHero);
-      testImg.onerror = () => {
-        bannerLocal.classList.add('hidden');
-        bannerFromCover();
-      };
-      testImg.src = localHero;
+  api.getHero({ identifier: game.identifier }).then(heroUrl => {
+    if (heroUrl) {
+      showBannerLocal(heroUrl);
     } else {
       bannerLocal.classList.add('hidden');
       bannerFromCover();
@@ -2484,8 +2463,8 @@ async function crossfadeBanner(game) {
   const bg2 = document.getElementById('home-banner-bg2');
   if (!bg2) { homeFeaturedGame = game; renderHomeBanner(game); return; }
 
-  // Override hero, else the disk-cached cover; never a live archive.org image
-  const art = await api.getOverrideHero({ identifier: game.identifier })
+  // The backend's hero for the game, else the cover
+  const art = await api.getHero({ identifier: game.identifier })
     || await resolveThumb(game.identifier);
   const newUrl = art ? `url("${art}")` : 'none';
   bg2.style.backgroundImage = newUrl;

@@ -1,7 +1,9 @@
 'use strict';
 /**
- * Covers cache: archive.org thumbnails and overrides.json art, downloaded once
- * into thumbcache/. Everything here returns a path on disk (or null); the IPC
+ * Covers and hero banners, downloaded once into thumbcache/. Both come from
+ * one order: the overrides.json pin (artUrl for the cover, hero for the
+ * banner), else the archive.org item's own image, else catalog/art.json's
+ * SteamGridDB art. Everything here returns a path on disk (or null); the IPC
  * layer turns it into a file:// URL and the API serves the bytes.
  */
 const fs     = require('fs');
@@ -15,7 +17,21 @@ const MIN_IMAGE_BYTES = 1024;  // smaller than this is an error page, not a cove
 // An identifier becomes a file name in the cache: no separators, no dot-only names
 const safeName = (s) => typeof s === 'string' && s !== '' && !/[\\/]/.test(s) && !/^\.+$/.test(s);
 
-function createCovers({ cacheDir, appDir, heroesDir = path.join(appDir, 'assets', 'heroes'), archive, getOverrides, log = () => {} }) {
+// catalog/art.json's pick for an item. For the hero, the banner picked for it
+// (the one the Home page shows) wins. Otherwise its first curated grid (or
+// hero), else its first.
+function catalogArtUrl(art, identifier, kind) {
+  const entry = art?.[identifier];
+  if (kind === 'heroes' && typeof entry?.banner?.url === 'string') return entry.banner.url;
+  const list = Array.isArray(entry?.[kind]) ? entry[kind].filter(a => typeof a?.url === 'string') : [];
+  return (list.find(a => a.curated) || list[0])?.url || null;
+}
+
+const FIELD = { cover: 'artUrl', hero: 'hero' };
+const KIND  = { cover: 'grids', hero: 'heroes' };
+
+// art: catalog/art.json, keyed by identifier
+function createCovers({ cacheDir, appDir, archive, getOverrides, art = {}, log = () => {} }) {
   fs.mkdirSync(cacheDir, { recursive: true });
 
   // Path of a cached copy of liveUrl, downloading it first if needed. Null on
@@ -55,14 +71,15 @@ function createCovers({ cacheDir, appDir, heroesDir = path.join(appDir, 'assets'
     });
   }
 
+  const remoteFile = (prefix, url) => path.join(cacheDir, `${prefix}-${crypto.createHash('sha1').update(url).digest('hex').slice(0, 16)}.jpg`);
+
   // Where an override image lives on disk (bundled, or its cache file), or
   // undefined when the title has no override for that field
   function overridePath(overrides, identifier, field) {
     const src = artSource(overrides?.[identifier]?.[field]);
     if (!src) return undefined;
     if (src.bundled) return { file: path.join(appDir, src.bundled) };
-    const name = crypto.createHash('sha1').update(src.remote).digest('hex').slice(0, 16);
-    return { file: path.join(cacheDir, `override-${name}.jpg`), remote: src.remote };
+    return { file: remoteFile('override', src.remote), remote: src.remote };
   }
 
   // Path for an override image, null if it couldn't be fetched, or undefined
@@ -73,55 +90,43 @@ function createCovers({ cacheDir, appDir, heroesDir = path.join(appDir, 'assets'
     return p.remote ? cacheImage(p.remote, p.file) : p.file;
   }
 
-  // Cover and hero already on disk, fetching nothing: what the Playnite export points at
-  function localArt(identifier, installDir, overrides) {
-    const onDisk = (p) => (p && fs.existsSync(p) ? p : null);
-    const cover = overridePath(overrides, identifier, 'artUrl');
-    const hero  = overridePath(overrides, identifier, 'hero');
-    return {
-      cover: cover ? onDisk(cover.file) : (safeName(identifier) ? onDisk(path.join(cacheDir, `${identifier}.jpg`)) : null),
-      hero:  (hero && onDisk(hero.file)) || installHero(installDir) || bundledHero(identifier),
+  // The three steps, as places on disk and where to fetch them from
+  function steps(identifier, which, overrides) {
+    const sgdb = catalogArtUrl(art, identifier, KIND[which]);
+    return [
+      overridePath(overrides, identifier, FIELD[which]),
+      { file: path.join(cacheDir, `${identifier}.jpg`), remote: archive.thumbUrl(identifier) },
+      sgdb ? { file: remoteFile('art', sgdb), remote: sgdb } : null,
+    ];
+  }
+
+  // The cover (which = 'cover') or hero banner (which = 'hero') of an item.
+  // A pinned override never falls through: a broken pin shows no art.
+  async function resolve(identifier, which) {
+    if (!safeName(identifier)) return null;
+    const [pin, ia, sgdb] = steps(identifier, which, await getOverrides());
+    if (pin) return pin.remote ? cacheImage(pin.remote, pin.file) : pin.file;
+    return (await cacheImage(ia.remote, ia.file)) || (sgdb ? cacheImage(sgdb.remote, sgdb.file) : null);
+  }
+
+  // Cover and hero already on disk, in the same order, fetching nothing: what
+  // the Playnite export points at
+  function localArt(identifier, overrides) {
+    if (!safeName(identifier)) return { cover: null, hero: null };
+    const onDisk = (which) => {
+      const [pin, ...rest] = steps(identifier, which, overrides);
+      const found = (pin ? [pin] : rest).find(s => s && fs.existsSync(s.file));
+      return found ? found.file : null;
     };
+    return { cover: onDisk('cover'), hero: onDisk('hero') };
   }
 
-  // Cover for an item. A title with an artUrl override never falls through to archive.org.
-  async function thumb(identifier) {
-    if (!safeName(identifier)) return null;
-    const override = await overrideArt(identifier, 'artUrl');
-    if (override !== undefined) return override;
-    return cacheImage(archive.thumbUrl(identifier), path.join(cacheDir, `${identifier}.jpg`));
-  }
+  const thumb = (identifier) => resolve(identifier, 'cover');
+  const hero  = (identifier) => resolve(identifier, 'hero');
 
-  // hero.png (or .jpg/.jpeg/.webp) shipped inside an install folder
-  function installHero(installDir) {
-    if (!installDir) return null;
-    for (const name of ['hero.png', 'hero.jpg', 'hero.jpeg', 'hero.webp']) {
-      const p = path.join(installDir, name);
-      if (fs.existsSync(p)) return p;
-    }
-    return null;
-  }
-
-  // <heroes>/<identifier>.png shipped with the app
-  function bundledHero(identifier) {
-    if (!safeName(identifier)) return null;
-    const p = path.join(heroesDir, `${identifier}.png`);
-    return fs.existsSync(p) ? p : null;
-  }
-
-  // The hero banner from one place (from = override | install | bundled), or
-  // the first of them that has one: an overrides.json hero, then one in the
-  // install folder, then one shipped with the app
-  async function hero(identifier, installDir, from = null) {
-    if (from === 'override') return (await overrideArt(identifier, 'hero')) ?? null;
-    if (from === 'install') return installHero(installDir);
-    if (from === 'bundled') return bundledHero(identifier);
-    return (await overrideArt(identifier, 'hero')) ?? installHero(installDir) ?? bundledHero(identifier);
-  }
-
-  return { cacheImage, overrideArt, localArt, thumb, installHero, bundledHero, hero };
+  return { cacheImage, overrideArt, localArt, thumb, hero };
 }
 
 const fileUrl = (p) => (p ? 'file:///' + p.replace(/\\/g, '/') : p);
 
-module.exports = { createCovers, fileUrl, safeName };
+module.exports = { createCovers, catalogArtUrl, fileUrl, safeName };
