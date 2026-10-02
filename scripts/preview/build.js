@@ -76,7 +76,6 @@ async function startBackend({ fixtures }, dataDir) {
     '--overrides-url', `${f.base}/overrides.json`,
     '--uploaders-url', `${f.base}/uploaders.json`,
     '--github-api', f.base,
-    '--collisions-file', path.join(ROOT, 'e2e', 'fixtures', 'collisions.json'),
     '--featured-url', `${f.base}/featured.json`,
   ], {}, () => {});
   return { backend, catalogUrl: (_, file) => `${f.base}/quiver/${file}`, close: async () => { await backend.stop(); await f.close(); } };

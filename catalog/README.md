@@ -5,18 +5,13 @@ fallback. Every file changes by pull request.
 
 | file | what | entries |
 | --- | --- | --- |
-| `catalog.json` | ports with `repository`, `iaIdentifier`, `contentUrl`, `dataFiles[{name,targetSubpath,sha1,optional}]` | 519 |
-| `ia-matches.json` | owner-confirmed `identifier::path` pairs, keyed by entry name | 21 |
-| `collisions.json` | fully resolved port plus data with checksums | 13 |
 | `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
 | `featured.json` | the Home page's hand-picked games and ports, in display order: `{ picks: [{ identifier \| repository, blurb?, banner? }] }` (see Home banners below) | per pick |
 | `banners.json` | one SteamGridDB hero per featured pick, keyed by archive.org identifier or lowercase `owner/repo`: `{ url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art/banners.py` in CI; pinned entries are never overwritten | per pick |
 | `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API | per item |
 
-Rules: `dataFiles[].sha1` is the hash of the file after extraction and staging, not of the archive.
-Match ports and data on `repository`, never on title. A sha1 mismatch after staging is a failure,
-not a warning. Uploader emails are what archive.org's `uploader:` field matches; handles are labels.
+Rules: uploader emails are what archive.org's `uploader:` field matches; handles are labels.
 
 ## Home banners
 
@@ -48,3 +43,6 @@ commits `banners.json` (and `art.json`) back to that branch. Review the picks in
 override one, pin it.
 
 Kept in this repo for now; may move to its own repo without changing the launcher.
+
+The collision files (`catalog.json`, `ia-matches.json`, `collisions.json`) are parked on the
+`parked/collisions` branch.

@@ -17,8 +17,8 @@
  *   - no repository means a manually managed app
  *
  * readQuiverLibrary only reads; planImport matches entries to catalog items;
- * applyImport writes library rows (and a local collision for a repository no
- * catalog lists, which puts it on "Your ports").
+ * applyImport writes library rows (and adds a repository no catalog lists to
+ * the user's repos, which puts it on "Your ports").
  */
 const fs   = require('fs');
 const path = require('path');
@@ -106,7 +106,7 @@ function readQuiverLibrary(dir, { findExes = () => [] } = {}) {
 
 // What importing would do, per app:
 //   port    - a catalog lists the repository; the row is that item's id
-//   new     - no catalog does; a local collision adds it to "Your ports"
+//   new     - no catalog does; adding it to the user's repos puts it on "Your ports"
 //   manual  - no GitHub repository (manual, or GitLab, which ports can't
 //             install yet); kept only when its folder has something to launch
 // items: catalogs.items(); rows: library.all()
@@ -148,7 +148,7 @@ function applyImport(plan, { library, catalogs }) {
   const out = { added: 0, adopted: 0, ports: 0, unchanged: 0 };
   for (const app of plan.apps) {
     if (app.kind === 'new') {
-      const r = catalogs.saveCollision({ repository: app.repository, name: app.name, ...(app.folderName ? { folderName: app.folderName } : {}) });
+      const r = catalogs.addRepo({ repository: app.repository, name: app.name, ...(app.folderName ? { folderName: app.folderName } : {}) });
       if (r.ok) out.ports++;
     }
     if (app.alreadyInstalled || (app.inLibrary && !app.installed)) { out.unchanged++; continue; }
@@ -165,7 +165,7 @@ function applyImport(plan, { library, catalogs }) {
       out.added++;
     }
   }
-  // Ports saved as the user's own show once additional sources are allowed
+  // Repos added as the user's own show once additional sources are allowed
   if (out.ports && catalogs.additionalAllowed?.() === false) out.needAdditionalSources = out.ports;
   return out;
 }

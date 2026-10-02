@@ -418,107 +418,34 @@ test('GET /items/:id/hero?from= picks one source; the bundled hero ships with th
   assert.equal((await call2('GET', '/items/..%2Fx/hero?from=bundled', undefined, { raw: true })).status, 404);
 });
 
-test('collisions: yours (save, read, export, delete), feeds you subscribe to, and a preview of what sources place', async (t) => {
-  const feedBody = { collisions: [
-    { repository: 'feed/port', name: 'Feed Port', sources: [{ ia: 'feed-item', path: 'rom.z64' }] },
-    { repository: 'feed/broken', sources: [{ ia: 'bad id', path: 'x' }] },
-  ] };
-  const { call, fake } = await testApi(t, { state: {
-    routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
-    files: { 'my-data': [{ name: 'roms/a.z64', size: '3', sha1: 'a'.repeat(40) }, { name: 'roms/b/c.z64', size: '5' }, { name: 'Game.zip', size: '9' }] },
-  } });
+test('repos: your own GitHub repos (add, list, replace, remove) make up "Your ports"', async (t) => {
+  const { call } = await testApi(t);
   await call('PUT', '/settings', { allowAdditionalSources: true });
   const enc = encodeURIComponent;
 
-  const entry = { name: 'My Port', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'my-data', path: 'Game.zip', extract: true }] };
-  const saved = await call('PUT', `/collisions/${enc('me/port')}`, entry);
-  assert.deepEqual(saved.body, { ...entry, repository: 'me/port' });
-  assert.deepEqual((await call('GET', `/collisions/${enc('Me/Port')}`)).body, { origin: 'local', entry: saved.body });
-  assert.deepEqual((await call('GET', '/collisions')).body.local, [saved.body]);
-  const exported = (await call('GET', '/collisions/export')).body;
-  assert.deepEqual([exported.schemaVersion, exported.collisions], [1, [saved.body]]);
-  assert.ok(exported.uploaders.length > 0, 'your feed carries the uploaders you have on');
-  const bad = await call('PUT', `/collisions/${enc('me/port')}`, { sources: [{ ia: 'x', path: '../up' }] });
-  assert.deepEqual([bad.status, bad.body.error], [400, 'bad_collision']);
-  assert.match(bad.body.detail, /sources\[0\]\.path/);
-  const shelf = (await call('GET', '/catalogs')).body.catalogs.find(c => c.id === 'local');
-  assert.equal(shelf.entries, 1);
-  assert.equal((await call('GET', '/catalogs/local/items')).body.items[0].id, 'quiver:local:me/port');
+  const saved = await call('PUT', `/repos/${enc('me/port')}`, { name: 'My Port', sources: [{ ia: 'x', path: 'y' }] });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body, { repository: 'me/port', name: 'My Port' }, 'only the repo fields are kept');
+  assert.deepEqual((await call('GET', '/repos')).body.repos, [saved.body]);
+  assert.deepEqual((await call('PUT', `/repos/${enc('Me/Port')}`, { name: 'Renamed' })).body, { repository: 'Me/Port', name: 'Renamed' });
+  assert.deepEqual((await call('GET', '/repos')).body.repos.map(r => r.name), ['Renamed']);
 
-  // A feed: valid entries join, invalid ones are listed as rejected, yours still win
-  const sub = await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json`, name: 'Friends' });
-  assert.equal(sub.status, 201);
-  assert.deepEqual([sub.body.name, sub.body.entries, sub.body.rejected.map(r => r.repository)], ['Friends', 1, ['feed/broken']]);
-  assert.equal((await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json` })).status, 200);
-  assert.equal((await call('POST', '/collision-feeds', { url: 'ftp://x' })).body.error, 'bad_url');
-  const fromFeed = (await call('GET', `/collisions/${enc('feed/port')}`)).body;
-  assert.deepEqual([fromFeed.origin, fromFeed.feed.name], ['feed', 'Friends']);
-  assert.equal((await call('POST', `/collision-feeds/${sub.body.id}/refresh`)).body.entries, 1);
-  assert.equal((await call('GET', '/collision-feeds')).body.feeds.length, 1);
-  assert.equal((await call('DELETE', `/collision-feeds/${sub.body.id}`)).status, 204);
-  assert.equal((await call('DELETE', `/collision-feeds/${sub.body.id}`)).status, 404);
-  assert.equal((await call('GET', `/collisions/${enc('feed/port')}`)).status, 404);
+  const local = (await call('GET', '/catalogs')).body.catalogs.find(c => c.id === 'local');
+  assert.deepEqual([local.name, local.entries], ['Your ports', 1]);
+  const [item] = (await call('GET', '/catalogs/local/items')).body.items;
+  assert.deepEqual([item.repository, item.userSource, 'data' in item], ['Me/Port', true, false]);
 
-  // Preview: which archive.org files each source places, and where
-  const preview = (await call('POST', '/collisions/preview', { sources: [
-    { ia: 'my-data', path: 'roms/*', target: 'data' }, { ia: 'my-data', path: 'nope' }, { path: 'x' },
-  ] })).body.sources;
-  assert.deepEqual(preview[0].files.map(f => f.to), ['data/a.z64', 'data/b/c.z64']);
-  assert.equal(preview[0].bytes, 8);
-  assert.equal(preview[1].error, "nope isn't in my-data");
-  assert.equal(preview[2].error, 'ia is required');
-  assert.deepEqual((await call('GET', '/items/my-data/files')).body.folders, ['roms', 'roms/b']);
-
-  assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 204);
-  assert.equal((await call('DELETE', `/collisions/${enc('me/port')}`)).status, 404);
+  const bad = await call('PUT', `/repos/${enc('not-a-repo')}`, {});
+  assert.deepEqual([bad.status, bad.body.error], [400, 'bad_repo']);
+  assert.equal((await call('DELETE', `/repos/${enc('me/port')}`)).status, 204);
+  assert.equal((await call('DELETE', `/repos/${enc('me/port')}`)).status, 404);
+  assert.equal((await call('GET', '/catalogs/local')).status, 404);
 });
 
-test('feeds: uploaders from a feed wait to be trusted; your feed exports and imports both halves', async (t) => {
-  const feedBody = {
-    schemaVersion: 1,
-    collisions: [{ repository: 'feed/port', name: 'Feed Port', sources: [{ ia: 'feed-item', path: 'rom.z64' }] }],
-    uploaders: [{ uploader: 'friend@example.com', label: 'Friend' }, { uploader: 'has space' }],
-  };
-  const { call, fake } = await testApi(t, { state: {
-    routes: { '/feed.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(feedBody)); } },
-  } });
-  await call('PUT', '/settings', { allowAdditionalSources: true });
-  const mine = async () => (await call('GET', '/sources')).body.sources;
-  const before = await mine();
-
-  const sub = await call('POST', '/collision-feeds', { url: `${fake.base}/feed.json`, name: 'Friends' });
-  assert.deepEqual(sub.body.uploaders, [{ uploader: 'friend@example.com', label: 'Friend' }]);
-  const listed = (await call('GET', '/collision-feeds')).body.feeds[0].uploaders;
-  assert.deepEqual(listed, [{ uploader: 'friend@example.com', label: 'Friend', trusted: false }]);
-  assert.deepEqual(await mine(), before, 'subscribing adds no uploader');
-
-  const trust = await call('POST', '/sources/trust', { uploader: 'friend@example.com', label: 'Friend' });
-  assert.equal(trust.status, 200);
-  assert.deepEqual((await mine()).at(-1), { uploader: 'friend@example.com', label: 'Friend', enabled: true });
-  assert.equal((await call('GET', '/collision-feeds')).body.feeds[0].uploaders[0].trusted, true);
-  assert.equal((await call('POST', '/sources/trust', { uploader: 'no good' })).status, 400);
-  await call('POST', '/sources/trust', { uploader: 'FRIEND@example.com' });
-  assert.equal((await mine()).length, before.length + 1, 'trusting twice is a no-op');
-
-  // Import a file: its ports become yours, its uploaders join your list
-  const file = JSON.stringify({ collisions: [
-    { repository: 'shared/port', name: 'Shared', sources: [{ ia: 'shared-item', path: 'x.z64' }] },
-    { repository: 'shared/broken', sources: [{ ia: 'bad id', path: 'x' }] },
-  ], uploaders: [{ uploaderEmail: 'curator@example.com', handle: 'curator' }] });
-  const imp = await call('POST', '/feed/import', { text: file });
-  assert.equal(imp.status, 200);
-  assert.deepEqual([imp.body.collisions, imp.body.rejected.map(r => r.repository), imp.body.uploaders], [['shared/port'], ['shared/broken'], ['curator@example.com']]);
-  assert.equal((await call('GET', `/collisions/${encodeURIComponent('shared/port')}`)).body.origin, 'local');
-  assert.ok((await mine()).some(x => x.uploader === 'curator@example.com' && x.label === 'curator'));
-  const again = await call('POST', '/feed/import', { text: file });
-  assert.deepEqual(again.body.uploaders, [], 'importing again adds nothing new');
-
-  assert.equal((await call('POST', '/feed/import', { text: 'not json' })).body.error, 'bad_feed');
-  assert.equal((await call('POST', '/feed/import', { text: '{}' })).body.error, 'bad_feed');
-  assert.equal((await call('POST', '/feed/import', {})).status, 400);
-
-  const out = (await call('GET', '/collisions/export')).body;
-  assert.deepEqual(out.collisions.map(c => c.repository), ['shared/port']);
-  assert.ok(out.uploaders.some(u => u.uploader === 'friend@example.com'));
-  assert.ok(out.uploaders.some(u => u.uploader === 'curator@example.com'));
+test('the collision, feed and admin routes are gone', async (t) => {
+  const { call } = await testApi(t);
+  for (const [method, url] of [['GET', '/collisions'], ['GET', '/collision-feeds'], ['GET', '/admin/collisions'], ['POST', '/feed/import'], ['POST', '/sources/trust']]) {
+    assert.equal((await call(method, url, method === 'POST' ? {} : undefined)).status, 404, `${method} ${url}`);
+  }
+  assert.equal((await call('GET', '/health')).body.admin, undefined);
 });

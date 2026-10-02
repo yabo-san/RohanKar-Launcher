@@ -1,8 +1,7 @@
 # User-added sources
 
 The launcher's default is the curated list only: the archive.org uploaders in
-`catalog/uploaders.json` and the collisions in `catalog/collisions.json`, plus the Quiver community
-catalogs as port shelves. Anything else is an **additional source**, and needs Settings >
+`catalog/uploaders.json`, plus the Quiver community catalogs as port shelves. Anything else is an **additional source**, and needs Settings >
 **Allow additional sources**, which is off by default.
 
 Turning it on shows a warning every time it goes from off to on:
@@ -20,26 +19,20 @@ confirmation: everything from additional sources is hidden, and installed files 
 | Source | Where it's added |
 | --- | --- |
 | `user.json` | Settings > Allow additional sources > user.json (a file path) |
-| Your own collisions | Game data… on a port, Add a GitHub repo, Import a feed file, the Quiver import's repos no catalog lists |
-| Collision feeds | Settings > Feeds (subscribed by URL) |
-| Uploaders not in `catalog/uploaders.json` | Settings > Uploaders, or Trust on a feed's uploader |
+| Your own GitHub repos | Add a GitHub repo, the Quiver import's repos no catalog lists |
+| Uploaders not in `catalog/uploaders.json` | Settings > Uploaders |
 
 Every card from one of these carries a **Your source · not reviewed** badge: a wall game whose
-every upload is from an additional source, a port on Your ports, and a curated port whose game
-data an additional source supplies. Curated cards never carry it. A single upload from an
+every upload is from an additional source, and a port on Your ports. Curated cards never carry it. A single upload from an
 additional source inside a curated game's versions is badged in the detail panel's version list.
 
 ## user.json
 
-A local file (no URLs for now), named by its full path in Settings. Schema version 1, three arrays,
-each in the same shape as the curated catalog:
+A local file (no URLs for now), named by its full path in Settings. Schema version 1, two arrays:
 
 ```json
 {
   "schemaVersion": 1,
-  "collisions": [
-    { "repository": "me/my-port", "name": "My Port", "sources": [{ "ia": "my-port-data", "path": "data.zip", "extract": true }] }
-  ],
   "archive": [
     { "identifier": "my-homebrew", "title": "My Homebrew", "files": [{ "name": "my-homebrew.zip", "sha1": "0123…" }] },
     { "identifier": "my-demo" }
@@ -50,12 +43,14 @@ each in the same shape as the curated catalog:
 }
 ```
 
-- `collisions`: a GitHub repository plus the archive.org data it needs, exactly as in
-  [COLLISIONS.md](COLLISIONS.md). A repository no catalog lists shows on Your ports.
 - `archive`: a standalone archive.org download. `title` is optional (archive.org's title
   otherwise); `files` lists sha1s for files you want checked.
 - `github`: a standalone GitHub release binary: `repository`, and optionally `name`,
-  `folderName`, `assetPattern` and the `sha1` of the release asset.
+  `folderName`, `assetPattern` and the `sha1` of the release asset. A repository no catalog lists
+  shows on Your ports.
+
+An older file's `collisions` array is not read: each entry is listed as invalid ("collisions are
+no longer supported"), since collisions are parked on the `parked/collisions` branch.
 
 `sha1` is optional everywhere.
 
@@ -64,11 +59,9 @@ each in the same shape as the curated catalog:
 1. **Badge.** Every card from user.json (and every other additional source) shows
    "Your source · not reviewed". Curated cards never do.
 2. **Curated wins.** A user entry with the same repository or identifier as a curated one is
-   ignored and listed under the file in Settings as a conflict: a collision or `github` entry for a
-   repository `catalog/collisions.json` has, a `github` entry for a repository a port shelf lists,
-   and an `archive` entry for an item a curated uploader has. The collision editor won't save over a
-   curated repository either (`409 curated`).
-3. **sha1.** A file with a sha1 is checked like curated entries, and a mismatch fails the install.
+   ignored and listed under the file in Settings as a conflict: a `github` entry for a repository a
+   port shelf lists, and an `archive` entry for an item a curated uploader has.
+3. **sha1.** A file with a sha1 is checked, and a mismatch fails the install.
    A file without one has its sha1 recorded on first install (`pins.json` in the data folder). If
    a later install of the same file gets a different sha1, the install stops before anything is
    written and a modal asks:
@@ -83,6 +76,6 @@ each in the same shape as the curated catalog:
 5. **Off hides.** Turning Allow additional sources off hides every user entry; installed files and
    library rows stay.
 
-The logic is in `src/backend/user-sources.js` (read, validate, pins), `catalogs.js` (collisions and
-the curated-wins join), `items.js` (uploaders and `archive` entries) and `installs.js` (sha1 checks
+The logic is in `src/backend/user-sources.js` (read, validate, pins), `catalogs.js` (`github`
+entries and Your ports), `items.js` (uploaders and `archive` entries) and `installs.js` (sha1 checks
 and pins). The renderer only draws what `GET /v1/user-sources` and the items say.

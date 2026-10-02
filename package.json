@@ -35,7 +35,6 @@
       "assets/**/*",
       "overrides.json",
       "catalog/uploaders.json",
-      "catalog/collisions.json",
       "catalog/featured.json",
       "catalog/banners.json"
     ],

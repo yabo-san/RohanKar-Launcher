@@ -1,179 +1,163 @@
-# Agent brief: Quiver catalogs, collisions, one core model
+# Agent brief
 
-Read `PRODUCT.md` and `USER-LOOP.md` first. This file is the work order.
+This file is the work order. Read it before every PR. It replaces the earlier brief (collisions,
+Quiver parity); that plan is retired.
 
-## Goal
+## What this is
 
-Turn this fork into one launcher with two kinds of shelf and one install button: the archive.org
-uploader walls it has today, plus Quiver's catalogs of open-source ports as browsable shelves you
-Add from, with the collision catalog joining the two so a port that needs game data installs end
-to end with the data verified by hash. The current web UI will be replaced later; build the model
-and sources so the UI is only a renderer.
+y4bo downloads GitHub releases and archive.org zips, and gives people a few ways to import
+things. That is the whole product. Most users never look at its UI: Playnite is where they play,
+through our one Playnite extension. Keep it small. Every feature is something that can break.
 
-## Architecture rule
+## In scope
 
-All sources (archive.org uploaders, Quiver catalogs, the collision catalog) feed one normalized
-model (`items`, `versions`, `library`) in `src/core/` with no DOM references. The renderer reads it
-over IPC and draws it. No fetching, joining or platform logic in `renderer.js`.
+- **Curated archive.org uploaders** (`catalog/uploaders.json`). Their uploads are the game wall.
+- **Curated port shelf** (`catalog/curated-ports.json`, built by `scripts/curated-ports.js` from a
+  community list plus `catalog/curated-extras.json`). Installs the release binary from GitHub or
+  GitLab. Nothing else: no data files, no wiring between apps.
+- **Imports:** `user.json` with single archive.org items and single GitHub (or GitLab) repos.
+- **Playnite export** (`playnite-export.json`, `--export-playnite`, `--install`, `--uninstall`).
+- **Curation data:** `overrides.json`, `catalog/art.json`, `catalog/favorite-artists.json`, and
+  the dupe handling (separate cards where a shared title would merge different uploads).
+- Install, uninstall (folder to the Recycle Bin, entry kept), Open folder, Add to Steam, playtime,
+  update checks.
 
-## Reference code
+## Out of scope. Do not build, propose or reopen
 
-Primary spec is `tgeorgiadis/quiver-launcher` (MIT): clone it and read `Services/` and `Models/`
-for the catalog schema, the subscribe, browse, review, add loop, release lookup and
-`releaseAssetFilter`, download and extraction, installed-version tracking and update checks;
-`docs/` and `MIGRATING.md` for how `apps.json` and the library file evolved. Port that logic into
-`src/core/`; keep their MIT notice where ported. `SirDiabo/GithubLauncher` only where Quiver's
-history references it.
+- Collisions of any kind (port + data, launcher + engine + data + config). The code is parked on
+  `parked/collisions`.
+- Grouping tiles into one card, or several Play actions per Playnite game.
+- Any mod support: no mod manager, no "browse mods" or "open mods folder", no links to mod sites.
+  The Thunderstore mod manager (r2modman) is just another tile in `curated-extras.json`.
+- Search UIs for /idgames, Quaddicted or similar. Doom and Quake are separate tiles.
+- Announcements, manual apps, Android.
+- Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import. Remove both,
+  including `src/backend/quiver-import.js` and the four Quiver catalog URLs in the frontend.
+  (`scripts/curated-ports.js` may still read Quiver's catalogs at build time to borrow names,
+  icons and asset filters; that is a data source, not a feature.)
+- Adding a whole archive.org uploader from the app (see Locked down).
 
-The data half is ours and Quiver has none of it. Four JSON files will be supplied at a URL:
+## Locked down
 
-- `catalog.json`: port entries with `repository`, `iaIdentifier`, `contentUrl`,
-  `dataFiles[{name,targetSubpath,sha1,optional}]`
-- `ia-matches.json`: owner-confirmed `identifier::path` pairs
-- `collisions.json`: fully resolved port plus data with checksums
-- `uploaders.json`: the curated archive.org uploaders
+- **The curated uploader list changes only in source.** Remove the "trust this uploader" button
+  and the feed import of uploaders (`src/backend/feed.js` `trustUploaders`/`importFeed`,
+  `server.js` trust route, the frontend button). A user who wants different uploaders edits
+  `catalog/uploaders.json` and builds their own copy; `docs/BUILD-YOUR-OWN.md` explains how.
+- **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
+  Drop its `collisions` section. Validation and "curated wins on conflict" stay.
+- **`catalog/curated-ports.json` is a one-time pass, refreshed by hand only.** The owner re-runs
+  `scripts/curated-ports.js` locally when they want; no workflow, schedule or CI check runs it.
+  Its source URL comes from `CURATED_PORTS_SOURCE_URL` in the owner's shell and never appears in
+  the repo, commits, PRs or logs. Never write that URL, its document ID or its author anywhere.
 
-No C# in this repo.
+## User data
 
-## Steps, one PR each
+- What a user installed lives in their local `library.db` and survives updates and reinstalls of
+  the app. Never migrate it in a way that drops entries.
+- User additions live in their `user.json` (a path in Settings). Never copy them into the repo.
+- Uninstall moves the folder to the Recycle Bin; it never deletes outright.
 
-### Step 0: research, no code
+## Work order, one PR each
 
-Report with file:line references:
+`git fetch` and `gh pr list` before each; do not duplicate open work.
 
-1. the full catalog entry schema and how the four `community-app-catalog/*.json` files are
-   structured and discovered;
-2. how an entry becomes a download: GitHub and GitLab release lookup, how `releaseAssetFilter`
-   selects an asset, prerelease handling, rate limits, auth;
-3. the subscribe, browse by catalog, review, add loop: how a catalog is subscribed, how the review
-   screen presents new, changed and removed entries, what Add writes to the user's library, how
-   library and catalog stay separate;
-4. install semantics: extraction, `filesToAdd`, version tracking, updates;
-5. confirm Quiver carries no game-data mechanism.
+1. **Park collisions.** Branch `parked/collisions` from main (merge #99, #100, #101 into it), push.
+   Then remove from main: `catalog/collisions.json`, `catalog/ia-matches.json`, the collisions
+   fetch, data-file staging, sha1-of-staged-data verification, `.bps` handling, collision card
+   text, and `user.json` collisions, with their tests. Report net lines removed.
+2. **Lock down** as above, and write `docs/BUILD-YOUR-OWN.md`: fork the repo, edit
+   `catalog/uploaders.json` and `catalog/curated-extras.json`, run
+   `CURATED_PORTS_SOURCE_URL=... node scripts/curated-ports.js` (or keep the committed file),
+   then build: push to your fork and let `release.yml` build the installer, or run
+   `npm run build` on Windows.
+3. **The port shelf = curated only.** Load `catalog/curated-ports.json` (raw URL from main,
+   cached, bundled copy as fallback) plus the user's `user.json` repos. Remove the Quiver catalog
+   URLs, the full-Quiver option and Quiver library import, with their tests.
+4. **Card states from tags:** "source only" shows "Source only, no download" plus a repository
+   link instead of Install; "work in progress" gets a badge; "engine"/"launcher" tiles show their
+   description (what the user brings).
+5. **GitLab releases:** `repositorySource: "gitlab"` installs from
+   `https://gitlab.com/api/v4/projects/<url-encoded owner/repo>/releases` with
+   `releaseAssetFilter`. Fixture of GitLab's response; no network in tests.
+6. **Art:** drop the `hero.png` special case. Cover and banner order: `overrides.json` artUrl,
+   else the archive.org item's own image, else `catalog/art.json`.
+7. **Optional API tokens.** Settings fields "GitHub token" and "GitLab token" (optional, empty by
+   default), stored in the user's settings, never logged. When set, send them on GitHub/GitLab API
+   requests; when empty, keep working unauthenticated. Explain in Settings why: GitHub allows 60
+   API requests an hour without one, and a big shelf or an update check can hit that. Show a clear
+   message when the limit is hit, suggesting the token.
+8. **"Newer release" badge in the launcher.** The logic exists (`src/backend/playnite.js`
+   `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
+   source has a newer release, with an Update button that reinstalls into the same folder. No
+   automatic updates.
+9. **Live ports job, binaries only.** Bring back a non-blocking scheduled CI job (nightly plus
+   workflow_dispatch) that really installs the Acceptance tiles below into a temp folder with the
+   app's own install engine, against the real GitHub and GitLab: pick the release asset, download,
+   extract, list what landed. No game data. It catches a port renaming its release files or
+   breaking its filter. Report results in the job summary; failures never block PRs. The old
+   collision version lives on `parked/collisions` (`scripts/live-port.js`,
+   `.github/workflows/live-ports.yml`) and can be the starting point.
+10. **README**: replace it with exactly the text in "README" below; move Development and Releases
+   into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
+11. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
+   community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
+   community-supported. PRs that add sources, catalog entries or asset filters for other
+   platforms are welcome."
 
-Stop and wait for a go.
+## Acceptance: installs must work
 
-### Step 1: catalogs as shelves
+Before calling the shelf done, prove these install end to end with `mise run sandbox` and attach
+the log lines to the PR:
 
-Source type `quiver`: a catalog URL (defaults: the four community files; a Settings list to add
-more). Fetch, cache to disk, refresh on demand, logged like archive traffic. A Ports area with one
-shelf per subscribed catalog (Nintendo, PlayStation, Xbox, Other: the console the port came from).
-Shelf cards show title, `appIconUrl`, "Source: Quiver / <catalog>", tags, grouped via `titleKey`,
-but are not in the library. Add puts an entry in the library (recorded in `library.db` with
-source = catalog URL); Remove takes it out without deleting installed files. A review view lists
-entries new, changed or removed since the catalog was last seen, with per-item Add. Windows asset
-selection happens at install time via `releaseAssetFilter`, not as a shelf filter.
+| tile | source | why |
+|---|---|---|
+| Zelda 64: Recompiled | GitHub | the common case |
+| Star Fox 64: Recompiled | GitLab | item 5 |
+| Quake (ironwail) | GitHub, owner pick | releaseAssetFilter `win64` |
+| Doom Launcher | GitHub, owner pick | two zips in the release; the portable one must win |
+| r2modman | GitHub, owner pick | portable exe, not the Setup installer |
+| a "source only" entry | n/a | shows no Install button |
 
-### Step 2: the collision catalog
+## README
 
-Third input, `collisions`, fetched from the supplied URL with a bundled fallback: JSON keyed by
-`repository` (lowercase `owner/repo`) to
-`{ iaIdentifier, contentUrl, sourcePath, dataFiles: [{ name, targetSubpath, sha1, optional, patch? }] }`
-where `sourcePath` is `identifier::path` inside the archive item and `patch` is an optional `.bps`
-path or URL. Join to Quiver entries on `repository` only; never match by title. A matched card, on
-the shelf and in the library, shows "Binary: GitHub, Data: archive.org (<uploader>)"; an unmatched
-port card installs the binary only and says "needs <dataFiles[].name>, not in the catalog". Unit
-tests with fixtures cut from the real files.
+Use this text exactly:
 
-### Step 3: install
+```markdown
+# y4bo
 
-Port: resolve the latest non-prerelease release unless the entry says otherwise, apply
-`releaseAssetFilter` exactly as Quiver does, download to the library folder, extract, apply
-`filesToAdd`. Data, when a collision exists: download the archive item file at `sourcePath` with
-resume, list and extract members, stage each `dataFiles[].name` into `targetSubpath`, apply the
-`.bps` patch if named, verify sha1 after staging (the hash is of the staged file, never the
-download), fail loudly naming the file on mismatch. Adopt an install that already exists on disk
-(matching folder and exe) instead of re-downloading. Same progress UI and Add-to-Steam path as
-archive.org installs; source and versions recorded in `library.db`.
+A launcher that downloads and installs games and ports from archive.org and GitHub.
+It's a semi-curated list: my picks are built in, and you can add your own.
 
-### Step 4: updates
+I made this to test a CI/CD pipeline (see the commit history), not to show what a
+proper frontend looks like. **The frontend is vibecoded.**
 
-"Newer release" badge per Quiver's check; no auto-update; data files never re-downloaded while the
-staged sha1 still matches.
+## What it does
 
-### Step 5: see it without Windows
+- **archive.org:** browse a few uploaders I trust; one-click download and extract (zip, 7z, rar).
+- **GitHub and GitLab:** install release builds of decomp and recomp ports.
+- **Add your own:** single archive.org items or GitHub repos in a `user.json`.
+  Want a different curated list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
+- **Launch:** picks the right exe, or lets you choose when there are several.
+- **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).
+- **Playtime:** tracks how long you've played each game.
+- **Uninstall:** moves the game's folder to the Recycle Bin, so it can be undone.
+- **Open folder:** opens the install folder, for adding data files, mods or saves by hand.
+- **Updates:** the launcher updates itself; installed ports show when a newer release is out.
+- **Playnite:** the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library in Playnite.
 
-A `mise run ui` task that serves `src/renderer/` from a static server with a stub
-`window.electronAPI` backed by cached JSON (sources, catalogs, collisions, a fake library), so the
-shelves and cards render in a browser through the devcontainer's forwarded port. No installs in
-that mode.
+## Install
 
-### Step 5b: User-added sources
+Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest).
+SmartScreen will warn (unsigned): **More info, then Run anyway**.
+Verify a download: `gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher`
 
-Comes before the Quiver import (6.4) in the order of things; 6.4 had already merged, so it landed
-after it. The full rules are in [USER-SOURCES.md](USER-SOURCES.md).
+## Credits
 
-- Default is the curated list only: our uploaders (`catalog/uploaders.json`) and `catalog/`.
-- A Settings toggle, **Allow additional sources**, off by default. Turning it on shows a Cider-style
-  modal (centered, dimmed backdrop, clear title, one primary and one secondary button) every time
-  it goes from off to on: title "Additional sources", body "Warning: we do not monitor additional
-  sources. Make sure you trust the repo or uploader before you add it.", buttons "I understand"
-  (turns it on) and "Cancel" (leaves it off).
-- `user.json`: a local file path in Settings (no URLs for now). Schema version 1 with three arrays in
-  the curated catalog's shapes: `collisions` (GitHub repo + archive.org data files), `archive`
-  (standalone archive.org downloads), `github` (standalone GitHub release binaries). sha1 is
-  optional per file.
-- Every other non-curated input sits behind the same toggle and badge: the user's own collisions,
-  feeds, and uploaders not on the curated list.
-- Rules: every card from an additional source shows "Your source · not reviewed", curated cards
-  never do; curated wins, and a user entry with a curated repository or identifier is ignored and
-  listed as a conflict in Settings; a sha1 is verified like curated entries, and without one the
-  hash is recorded on first install and a later change asks in the same modal style; user.json is
-  validated on load and each invalid entry is shown with why, never skipped silently; turning the
-  toggle off hides user entries and leaves installed files on disk.
-- Logic in the backend (`src/backend/`, the core), the renderer only renders. Tests with fixture
-  user.json files: valid, invalid, conflicting with curated.
-
-### Step 6: Supersede Quiver
-
-This fork supersedes Quiver: users switch to it, and it does not integrate with Quiver. Quiver's
-community catalogs stay a data source for the port shelves (Step 1); nothing else of Quiver's is
-read at runtime. The only library integrations are this fork's Playnite export (Step 7) and Drop
-OSS, which is handled outside this repo.
-
-What Quiver has that steps 1 to 5 do not cover, so nobody loses anything by switching. One PR each;
-6.4 first (it is the switch path), then 6.1, 6.2, 6.3.
-
-1. **Manually managed apps.** An entry with no repository and no archive item: the user names it,
-   drops files into its folder, the library launches it. Adopt-existing (step 3) handles installs
-   we recognise; this handles ones we do not.
-2. **Tags and library search.** User tags on library entries; the search box filters by name, tag,
-   repository or folder, as Quiver does.
-3. **Portable data layout.** Option to keep `library.db`, settings, cache and installs beside the
-   executable instead of `%APPDATA%`, so a folder is the whole install and can be moved. Quiver's
-   default; ours should be a Settings choice with a migration.
-4. **Import a Quiver library.** Read a Quiver `apps.json` plus its `Apps/` folder and adopt
-   everything it lists, so a Quiver user can switch without reinstalling. A one-way import, not a
-   sync: nothing is written back to Quiver.
-5. **Mod management** (Thunderstore, GameBanana) as Quiver does it. Last; large; only if asked for.
-6. **Announcements.** A remote `announcement.json` shown once per message id. Small; do it with 1.
-
-Not needed: Linux and Android builds (Electron can, nobody asked), code signing (a purchase, not a
-PR), and any integration with Quiver itself beyond reading its catalogs and the one-way import.
-
-### Step 7: Playnite export, trivial by design
-
-Playnite is the owner's front end. Exporting to it must never be a manual step.
-
-- On every library change, write `playnite-export.json` next to `library.db`: one record per
-  library entry with `id`, `name`, `source` (archive.org uploader, quiver catalog URL, manual),
-  `installDir`, `exe`, `args`, `workingDir`, `installed`, `version`, `coverPath` (the cached cover
-  on disk), `heroPath`, `platform` (the console shelf for ports, `PC` otherwise), `tags`,
-  `lastPlayed`, `playtimeSeconds`. Atomic write (temp file then rename). Stable ids so Playnite
-  keeps its own metadata across re-imports.
-- A `--export-playnite <path>` CLI flag that writes the same file on demand and exits, for the
-  Playnite plugin to call.
-- Add to Steam stays as is; this is the Playnite equivalent and it costs nothing at runtime.
-- The Playnite library plugin in `yabo-san/playnite-extensions` reads this file; document the
-  schema in `docs/PLAYNITE-EXPORT.md` with an example record, and version it (`schemaVersion`).
+Fork of the RohanKar Launcher by Kilted-Kraken. Not affiliated with the Internet Archive.
+Games belong to their owners and are hosted publicly on archive.org.
+```
 
 ## Rules
 
-- One PR per step against `main`; stop after each and wait for the merge; do not stack on unmerged
-  PRs.
-- Unit tests for schema mapping, asset filter, the review diff, the collision join and the sha1
-  staging.
-- No changes to the archive.org uploader code paths beyond moving them under `src/core/`.
-- No new runtime dependencies unless GitLab or `.bps` needs one, and say why.
-- Fixtures only in CI: never live GitHub or archive.org.
-- Conventional-commit titles; PR bodies say what changed and the one manual check to do.
+Logic in core, the renderer only renders. Tests for every core change. No network in tests.
+Before/after and `mise run ui` screenshots in every UI PR. No em dashes in docs or PR text.
