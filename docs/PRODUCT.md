@@ -1,51 +1,43 @@
 # What this launcher is
 
-One launcher, two kinds of shelf, one install button.
+A Windows launcher for PC games and ports, with the smallest feature set that does the job. It
+supersedes upstream RohanKar and Quiver.
 
-## What you see
+## The product, in full
 
-The default view is a scrollable wall of everything the curated archive.org uploaders have posted:
-PC games, cover art, one card per title, a version picker when two uploaders have the same game.
-That is the archive.org half, working today.
-
-Next to it, a Ports area: shelves named Nintendo, PlayStation, Xbox, Other, pulled from Quiver's
-community catalogs. Each shelf lists open-source ports and recompilations. You browse a shelf, hit
-Add, and the port sits in your library beside the archive.org games. That is the Quiver half.
+- **Sources:** our curated archive.org uploaders, plus any uploader the user adds. The default view
+  is a wall of everything they have posted: one card per title, a version picker when two
+  uploaders have the same game.
+- **Ports:** Quiver's community catalogs as port shelves (Nintendo, PlayStation, Xbox, Other), plus
+  any catalog URL or GitHub repo the user adds. A port installs its release binary only; game data
+  is the user's job.
+- **Quiver users:** import a Quiver library (`apps.json` plus its `Apps/` folder) and keep every
+  install, nothing downloaded again.
+- **Playnite:** `playnite-export.json` (and `--export-playnite`) feeds our one Playnite extension.
+- **Curation:** `overrides.json`, `catalog/art.json` (SteamGridDB) and the dupe handling (separate
+  cards where a shared title would merge uploads).
 
 ## What happens on Install
 
-- An archive.org game: download the item, extract, run its setup if it has one, register it.
-- A port: look up its latest GitHub or GitLab release, pick the Windows asset, download, extract.
-- A port that needs game data: the part nobody else has. The collision catalog says, for that
-  repository, which archive.org item and which file inside it is the data the port needs, and what
-  its sha1 must be after staging. The launcher fetches both halves, puts the data where the port
-  expects it, verifies the hash, applies a translation patch if the entry names one, and the port is
-  playable in one click. Ship of Harkinian plus the Ocarina ROM from the right uploader, verified,
-  is the canonical example.
+- An archive.org game: download the item, extract, register it.
+- A port: look up its latest GitHub release, pick the Windows asset, download, extract.
 
 ## What it tracks
 
-A library database: what is installed, from which source, at which version, whether a newer port
-release exists, whether the data still hashes clean. Add to Steam writes the shortcut. Adopt-existing
-recognises installs already on disk instead of re-downloading them.
+A library database: what is installed, from which source, at which version, and whether a newer
+port release exists. Add to Steam writes the shortcut. Adopt-existing recognises installs already
+on disk instead of re-downloading them.
 
 ## What sits behind it
 
-Three inputs, one model:
-
 | feed | what it is | who curates |
 | --- | --- | --- |
-| `uploaders.json` | archive.org uploader accounts to search | this repo |
+| `catalog/uploaders.json` | archive.org uploader accounts to search | this repo |
 | Quiver catalogs | `apps.json` files of ports, by console | `tgeorgiadis/quiver-community-app-catalog`, by PR |
-| `collisions.json` | repository to archive item and path, with sha1 per data file | this project's catalog |
+| `overrides.json`, `catalog/art.json` | titles, covers and banners | this repo |
 
-All three are files, fetched at launch, cached, joined on `repository` in `src/core/` with no UI in
-it. The renderer reads that model over IPC. The current web UI is a placeholder for a custom one;
-the model and the sources are what we keep.
+All of them are files, fetched at launch and cached. The logic lives in the backend
+(`src/backend/`) with no UI in it; the renderer only renders what the API serves.
 
-No feed is a service. Every feed is a file in Git that changes by pull request.
-
-## In one sentence
-
-A game launcher where the games come from archive.org and the ports come from GitHub, and the only
-one that knows how to put the two together.
+Collisions (a port joined to the archive.org data it needs) are parked on the
+`parked/collisions` branch, not deleted.

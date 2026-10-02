@@ -46,11 +46,9 @@ const ListView = (() => {
     if (dl) return { label: dl.status === 'downloading' ? `${dl.percent || 0}%` : 'Installing…', kind: 'busy' };
     if (ctx.library[p.id]?.install_dir) return { label: 'Installed', kind: 'ok' };
     if (ctx.library[p.id]) return { label: 'In library', kind: '' };
-    if (p.data?.status === 'available') return { label: 'Game data', kind: 'data' };
-    if (p.data?.status === 'missing') return { label: 'Needs data', kind: 'warn' };
     return { label: '', kind: '' };
   }
-  const STATUS_RANK = { busy: 4, update: 3, ok: 2, data: 1 };
+  const STATUS_RANK = { busy: 4, update: 3, ok: 2 };
 
   const fmtDate = (d) => { if (!d) return ''; const t = new Date(d); return Number.isNaN(t.getTime()) ? String(d) : t.toISOString().slice(0, 10); };
   const fmtNum = (n) => (n ? Number(n).toLocaleString('en-US') : '');
@@ -99,7 +97,6 @@ const ListView = (() => {
     status:    ['Status', (g, ctx) => STATUS_RANK[gameStatus(g, ctx).kind] || 0],
   };
   const PORT_SORTS = {
-    data:    ['Game data', p => (p.data?.status === 'available' ? 1 : 0)],
     name:    ['Name', p => p.name],
     project: ['Project', p => p.project],
     repo:    ['Repository', p => p.repository],
@@ -163,9 +160,8 @@ const ListView = (() => {
   // label may be a function of (item, ctx); kinds lists the item kinds it
   // applies to ('game', 'port'); children makes it a submenu of actions. The
   // menus draw one section per group, in MENU_GROUPS order, with a divider
-  // between sections; an empty group draws nothing. 'admin' holds the
-  // actions only admin mode shows (Make a Tile).
-  const MENU_GROUPS = ['pin', 'collection', 'play', 'manage', 'goto', 'admin', 'remove'];
+  // between sections; an empty group draws nothing.
+  const MENU_GROUPS = ['pin', 'collection', 'play', 'manage', 'goto', 'remove'];
 
   function createActions() {
     const actions = [];

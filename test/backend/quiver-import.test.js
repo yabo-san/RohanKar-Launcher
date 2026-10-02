@@ -150,7 +150,7 @@ test('apply: adopts installs, adds the rest, and a second import changes nothing
   const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
   t.after(() => library.close());
   const saved = [];
-  const catalogs = { saveCollision: (c) => { saved.push(c); return { ok: true }; } };
+  const catalogs = { addRepo: (c) => { saved.push(c); return { ok: true }; } };
   const items = [
     { id: 'quiver:c1:fgsfdsfgs/perfect_dark', repository: 'fgsfdsfgs/perfect_dark' },
     { id: 'quiver:c1:harbourmasters/shipwright', repository: 'HarbourMasters/Shipwright' },
@@ -173,7 +173,7 @@ test('apply: adopts installs, adds the rest, and a second import changes nothing
 
   // Re-importing leaves installs alone (a user's own exe pick survives)
   library.setExePath('quiver:c1:fgsfdsfgs/perfect_dark', 'C:/mine.exe');
-  const again = applyImport(planImport(readQuiverLibrary(root, { findExes }), { rows: library.all(), items }), { library, catalogs: { saveCollision: () => ({ ok: false }) } });
+  const again = applyImport(planImport(readQuiverLibrary(root, { findExes }), { rows: library.all(), items }), { library, catalogs: { addRepo: () => ({ ok: false }) } });
   assert.deepEqual(again, { added: 0, adopted: 0, ports: 0, unchanged: 6 });
   assert.equal(library.get('quiver:c1:fgsfdsfgs/perfect_dark').exe_path, 'C:/mine.exe');
 });

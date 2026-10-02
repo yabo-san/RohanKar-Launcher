@@ -34,10 +34,10 @@ test('gameMeta: platform, year, size, downloads, only what is known', () => {
   assert.deepEqual(gameMeta({}), []);
 });
 
-test('portMeta: shelf, platform, data', () => {
-  assert.deepEqual(portMeta({ shelfName: 'Nintendo', data: { status: 'available' }, tags: ['n64', 'platformer', 'rare', 'x'] }),
-    ['Nintendo port', 'Windows', 'Game data from archive.org', 'n64, platformer, rare']);
-  assert.deepEqual(portMeta({ data: { status: 'missing' }, tags: [] }), ['Port', 'Windows', 'Needs game data']);
+test('portMeta: shelf, platform, tags', () => {
+  assert.deepEqual(portMeta({ shelfName: 'Nintendo', tags: ['n64', 'platformer', 'rare', 'x'] }),
+    ['Nintendo port', 'Windows', 'n64, platformer, rare']);
+  assert.deepEqual(portMeta({ tags: [] }), ['Port', 'Windows']);
 });
 
 test('versionRows: newest first, numbered, installed, newer and selected marked', () => {
@@ -64,10 +64,11 @@ test('moreFrom: same uploader, most downloaded first, the current title left out
   assert.deepEqual(moreFrom([a], null), []);
 });
 
-test('morePorts: the same shelf, with data first', () => {
-  const p = (id, shelf, status = 'none') => ({ id, shelf, data: { status } });
-  const items = [p('x', 's1'), p('y', 's1', 'available'), p('z', 's2'), p('me', 's1')];
-  assert.deepEqual(morePorts(items, items[3]).map(i => i.id), ['y', 'x']);
+test('morePorts: the same shelf, in catalog order, the current port left out', () => {
+  const p = (id, shelf) => ({ id, shelf });
+  const items = [p('x', 's1'), p('y', 's1'), p('z', 's2'), p('me', 's1')];
+  assert.deepEqual(morePorts(items, items[3]).map(i => i.id), ['x', 'y']);
+  assert.deepEqual(morePorts(items, items[3], { limit: 1 }).map(i => i.id), ['x']);
 });
 
 test('createHistory: back returns the page with its scroll, forward redoes, a new page clears forward', () => {

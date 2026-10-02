@@ -3,25 +3,17 @@
  * Quiver-style catalogs: JSON files of ports ({ apps: [...] } or a bare
  * array) that the user subscribes to by URL. Each subscription is fetched on
  * demand, cached under catalogs/, and diffed against the copy the user last
- * reviewed. The collision catalog joins entries to archive.org data on
- * `repository` (lowercase owner/repo), never on title. The user's own
- * collisions (collisions.local.json) win over the bundled ones, and those for
- * repositories no subscribed catalog lists make up a "Your ports" shelf.
+ * reviewed. GitHub repos the user adds on their own (and user.json's github
+ * entries) that no subscribed catalog lists make up a "Your ports" shelf.
  */
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
 const { getText } = require('./net');
-const { validateCollision } = require('./ports');
-const { parseUploaders } = require('./feed');
-const { githubAsCollision, additionalAllowed } = require('./user-sources');
+const { additionalAllowed } = require('./user-sources');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
-// A curated collision with a `shelf` is a game tile of its own on that shelf
-// (unless a subscribed shelf lists the repo): the tiles the owner adds in admin mode
-const CURATED_PREFIX = 'curated-';
-const curatedShelf = (name) => ({ id: CURATED_PREFIX + (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'ports'), url: null, name, shelf: name, curated: true });
-const isVirtual = (id) => id === LOCAL.id || String(id).startsWith(CURATED_PREFIX);
+const REPO = /^[\w.-]+\/[\w.-]+$/;
 
 const catalogId = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 12);
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
@@ -34,22 +26,6 @@ function parseCatalog(text) {
   const apps = Array.isArray(data) ? data : data?.apps;
   if (!Array.isArray(apps)) throw new Error('catalog must be an array or { apps: [...] }');
   return apps.filter(e => e && typeof e === 'object' && entryKey(e));
-}
-
-// collisions.json: an array of entries with `repository`, { collisions: [...] },
-// or an object keyed by repository (a feed's other keys aside)
-const FEED_KEYS = ['schemaVersion', 'uploaders'];
-function parseCollisions(text) {
-  const data = JSON.parse(text);
-  const list = Array.isArray(data) ? data
-    : Array.isArray(data?.collisions) ? data.collisions
-    : Object.entries(data || {}).filter(([k]) => !k.startsWith('_') && !FEED_KEYS.includes(k)).map(([repository, v]) => ({ repository, ...v }));
-  const out = new Map();
-  for (const c of list) {
-    const key = repoKey(c?.repository);
-    if (key) out.set(key, c);
-  }
-  return out;
 }
 
 // Entries new, changed or removed in `current` relative to `seen`
@@ -65,22 +41,10 @@ function diffEntries(seen, current) {
   return out;
 }
 
-// What an install needs from a collision, as items() hands it on
-function itemData(data) {
-  return {
-    iaIdentifier: data.iaIdentifier || data.sources?.[0]?.ia || null, contentUrl: data.contentUrl || null, assetPattern: data.assetPattern || null,
-    dataFiles: data.dataFiles || [], sources: data.sources || [], base: data.base || 'binary', binaryTarget: data.binaryTarget || '',
-    ...(data.exe ? { exe: data.exe } : {}), ...(data.keepReleaseFolder ? { keepReleaseFolder: true } : {}),
-  };
-}
-
-const NO_USER = { entries: () => ({ collisions: [], archive: [], github: [] }) };
+const NO_USER = { entries: () => ({ archive: [], github: [] }) };
 
 // userSources: createUserSources(), for user.json
-// admin: the owner's console, where the curated collisions (collisionsFile,
-// catalog/collisions.json in a source checkout) are edited in place and
-// entries marked hidden still show
-function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO_USER, admin = false, netLog = () => {}, log = () => {} }) {
+function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {}, log = () => {} }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = (id, kind) => path.join(dir, `${id}.${kind}.json`);
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
@@ -89,176 +53,74 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     fs.renameSync(p + '.tmp', p);
   };
 
-  let collisions = null;
-  function bundledCollisions() {
-    if (!collisions) {
-      try { collisions = collisionsFile ? parseCollisions(fs.readFileSync(collisionsFile, 'utf8')) : new Map(); }
-      catch (e) { log(`[catalogs] collisions unreadable (${e.message})`); collisions = new Map(); }
+  // ─── The user's own GitHub repos ──────────────────────────────────────────
+  // repos.local.json. A repos list from before collisions were parked
+  // (collisions.local.json) carries over once, keeping only the repo fields.
+  const reposFile = path.join(dir, 'repos.local.json');
+  const REPO_FIELDS = ['repository', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
+  const pickRepo = (c) => Object.fromEntries(REPO_FIELDS.filter(k => c[k] != null).map(k => [k, c[k]]));
+  function localList() {
+    if (!fs.existsSync(reposFile)) {
+      const old = readJson(path.join(dir, 'collisions.local.json'), null);
+      if (Array.isArray(old)) {
+        const repos = old.filter(c => repoKey(c?.repository)).map(pickRepo);
+        writeJson(reposFile, repos);
+        log(`[catalogs] carried ${repos.length} repo(s) over from collisions.local.json`);
+      }
     }
-    return collisions;
+    const l = readJson(reposFile, []);
+    return Array.isArray(l) ? l.filter(c => repoKey(c?.repository)) : [];
   }
 
-  // ─── The user's own collisions ────────────────────────────────────────────
-  const localFile = path.join(dir, 'collisions.local.json');
-  const localList = () => { const l = readJson(localFile, []); return Array.isArray(l) ? l : []; };
-  const localMap = () => new Map(localList().filter(c => repoKey(c?.repository)).map(c => [repoKey(c.repository), c]));
-
-  // ─── Collision feeds: other people's collisions, subscribed by URL ────────
-  const feedList = () => (Array.isArray(settings.load().collisionFeeds) ? settings.load().collisionFeeds : []);
-  const findFeed = (id) => feedList().find(f => f.id === id) || null;
-  const feedCache = (id) => readJson(file(id, 'collisions'), null);
-  const describeFeed = (f) => {
-    const c = feedCache(f.id);
-    return { ...f, entries: c?.entries.length ?? 0, rejected: c?.rejected ?? [], uploaders: c?.uploaders ?? [], fetchedAt: c?.fetchedAt ?? null, error: c?.error ?? null };
-  };
-  const feeds = () => feedList().map(describeFeed);
-
-  // Fetches and caches a feed, keeping only entries that validate. A failed
-  // fetch keeps the last good copy.
-  async function refreshFeed(id) {
-    const f = findFeed(id);
-    if (!f) return null;
-    const r = await getText(f.url, { kind: 'collisions', log: netLog });
-    const prev = feedCache(id);
-    let entries = null;
-    let rejected = [];
-    let uploaders = [];
-    let error = null;
-    if (r.status === 200) {
-      try {
-        uploaders = parseUploaders(JSON.parse(r.body)?.uploaders);
-        const all = [...parseCollisions(r.body).values()];
-        entries = all.filter(c => !validateCollision(c).length);
-        rejected = all.filter(c => validateCollision(c).length).map(c => ({ repository: c.repository, errors: validateCollision(c) }));
-      } catch (e) { error = e.message; }
-    } else {
-      error = r.status ? `HTTP ${r.status}` : (r.error || 'network error');
-    }
-    writeJson(file(id, 'collisions'), entries
-      ? { fetchedAt: Date.now(), entries, rejected, uploaders, error: null }
-      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], rejected: prev?.rejected ?? [], uploaders: prev?.uploaders ?? [], error });
-    return describeFeed(f);
+  // Adds one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
+  function addRepo(entry) {
+    const errors = [];
+    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !REPO.test(entry.repository.trim())) errors.push('repository must be owner/repo');
+    for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (entry?.[k] != null && typeof entry[k] !== 'string') errors.push(`${k} must be a string`);
+    if (errors.length) return { ok: false, errors };
+    const clean = pickRepo({ ...entry, repository: entry.repository.trim() });
+    const key = repoKey(clean.repository);
+    writeJson(reposFile, [...localList().filter(c => repoKey(c.repository) !== key), clean]);
+    return { ok: true, entry: clean };
   }
-  async function subscribeFeed({ url, name }) {
-    let parsed;
-    try { parsed = new URL(url); } catch { parsed = null; }
-    if (!parsed || !/^https?:$/.test(parsed.protocol)) return { ok: false, error: 'bad_url', detail: 'url must be an http(s) URL' };
-    const id = catalogId(parsed.toString());
-    const created = !findFeed(id);
-    if (created) {
-      const label = name || decodeURIComponent(parsed.pathname.split('/').pop() || parsed.host).replace(/\.json$/i, '');
-      settings.save({ collisionFeeds: [...feedList(), { id, url: parsed.toString(), name: label }] });
-    }
-    return { ok: true, created, feed: created ? await refreshFeed(id) : describeFeed(findFeed(id)) };
-  }
-  function unsubscribeFeed(id) {
-    if (!findFeed(id)) return false;
-    settings.save({ collisionFeeds: feedList().filter(f => f.id !== id) });
-    fs.rmSync(file(id, 'collisions'), { force: true });
+  function removeRepo(repository) {
+    const key = repoKey(repository);
+    const before = localList();
+    const after = before.filter(c => repoKey(c.repository) !== key);
+    if (after.length === before.length) return false;
+    writeJson(reposFile, after);
     return true;
   }
-  const feedMap = (f) => new Map((feedCache(f.id)?.entries || []).map(c => [repoKey(c.repository), c]));
 
   // ─── Additional sources: everything that isn't curated ────────────────────
-  // Feeds, then user.json, then the user's own (editor, imports) on top, and
-  // only while Settings allows additional sources. Curated wins: an entry for
-  // a repository the bundled collisions (or, for a standalone github entry,
-  // a port shelf) already have is left out and reported as a conflict.
+  // user.json's github entries, then the user's own repos on top, and only
+  // while Settings allows additional sources. A repository a port shelf
+  // already lists is left out and reported as a conflict.
   const additional = () => additionalAllowed(settings);
   function userLayers() {
-    const out = { map: new Map(), origin: new Map(), conflicts: [] };
+    const out = { map: new Map(), conflicts: [] };
     if (!additional()) return out;
-    const u = userSources.entries();
-    const curated = bundledCollisions();
     const listed = listedRepos();
+    const githubEntry = (g) => ({ ...g, name: g.name || g.repository.split('/')[1] });
     const layers = [
-      ...feedList().map(f => [`feed ${f.name}`, [...feedMap(f).values()]]),
-      ['user.json collisions', u.collisions],
-      ['user.json github', u.github.map(githubAsCollision)],
-      ['your collisions', localList()],
+      ['user.json github', userSources.entries().github.map(githubEntry)],
+      ['your repos', localList()],
     ];
     for (const [from, list] of layers) {
       for (const c of list) {
         const k = repoKey(c?.repository);
         if (!k) continue;
-        if (curated.has(k) || (from === 'user.json github' && listed.has(k))) {
-          out.conflicts.push({ from, key: c.repository, reason: curated.has(k) ? 'the curated collisions have it' : 'a port shelf lists it' });
+        if (listed.has(k)) {
+          if (from === 'user.json github') out.conflicts.push({ from, key: c.repository, reason: 'a port shelf lists it' });
           continue;
         }
         out.map.set(k, c);
-        out.origin.set(k, from);
       }
     }
     return out;
   }
 
   const userConflicts = () => userLayers().conflicts;
-
-  // Saves one (replacing any for the same repository). { ok, entry } or
-  // { ok: false, errors }; a repository the curated collisions have is refused
-  function saveCollision(entry) {
-    const errors = validateCollision(entry);
-    if (errors.length) return { ok: false, errors };
-    const clean = { ...entry, repository: entry.repository.trim() };
-    const key = repoKey(clean.repository);
-    if (bundledCollisions().has(key)) return { ok: false, curated: true, errors: [`${clean.repository} is in the curated collisions, which win over your own`] };
-    writeJson(localFile, [...localList().filter(c => repoKey(c?.repository) !== key), clean]);
-    return { ok: true, entry: clean };
-  }
-  function deleteCollision(repository) {
-    const key = repoKey(repository);
-    const before = localList();
-    const after = before.filter(c => repoKey(c?.repository) !== key);
-    if (after.length === before.length) return false;
-    writeJson(localFile, after);
-    return true;
-  }
-  // ─── Admin mode: the curated collisions, edited in place ──────────────────
-  // Written back as the file's own array, in its order, for a PR
-  const curatedList = () => [...bundledCollisions().values()];
-  function writeCurated(list) {
-    fs.writeFileSync(collisionsFile, JSON.stringify(list, null, 2) + '\n');
-    collisions = null;
-  }
-  function saveCurated(entry) {
-    if (!admin || !collisionsFile) return { ok: false, forbidden: true, errors: ['Admin mode is off'] };
-    const errors = validateCollision(entry);
-    if (errors.length) return { ok: false, errors };
-    const clean = { ...entry, repository: entry.repository.trim() };
-    const key = repoKey(clean.repository);
-    const list = curatedList();
-    const at = list.findIndex(c => repoKey(c.repository) === key);
-    if (at < 0) list.push(clean); else list[at] = clean;
-    writeCurated(list);
-    return { ok: true, created: at < 0, entry: clean };
-  }
-  function deleteCurated(repository) {
-    if (!admin || !collisionsFile) return { ok: false, forbidden: true };
-    const key = repoKey(repository);
-    const list = curatedList();
-    const after = list.filter(c => repoKey(c.repository) !== key);
-    if (after.length === list.length) return { ok: false };
-    writeCurated(after);
-    return { ok: true };
-  }
-
-  const collision = (repository) => {
-    const key = repoKey(repository);
-    const curated = bundledCollisions().get(key);
-    if (curated) return { origin: 'bundled', entry: curated };
-    if (!additional()) return null;
-    const local = localMap().get(key);
-    if (local) return { origin: 'local', entry: local };
-    const u = userSources.entries();
-    const fromFile = u.collisions.find(c => repoKey(c.repository) === key)
-      || (u.github.some(g => repoKey(g.repository) === key) ? githubAsCollision(u.github.find(g => repoKey(g.repository) === key)) : null);
-    if (fromFile) return { origin: 'user.json', entry: fromFile };
-    for (const f of feedList().slice().reverse()) {
-      const e = feedMap(f).get(key);
-      if (e) return { origin: 'feed', feed: { id: f.id, name: f.name, url: f.url }, entry: e };
-    }
-    return null;
-  };
 
   const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : []);
 
@@ -267,42 +129,25 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
     return new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
   }
 
-  // Additional collisions for repositories no port shelf lists, as catalog
-  // entries: the "Your ports" shelf. Empty while additional sources are off.
+  // The user's repos no port shelf lists, as catalog entries: the "Your
+  // ports" shelf. Empty while additional sources are off.
   function localEntries() {
-    const listed = listedRepos();
-    return [...userLayers().map.values()].filter(c => !listed.has(repoKey(c.repository))).map(c => ({
+    return [...userLayers().map.values()].map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
-      ...(c.project ? { project: c.project } : {}), ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
+      ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
+      ...(c.assetPattern ? { assetPattern: c.assetPattern } : {}),
       ...(Array.isArray(c.filesToAdd) ? { filesToAdd: c.filesToAdd } : {}),
-      ...(c.sha1 ? { sha1: c.sha1 } : {}),
+      ...(c.sha1 ? { sha1: String(c.sha1).toLowerCase() } : {}),
     }));
   }
 
-  // Curated collisions with a shelf, for repositories no subscribed shelf
-  // lists, as catalog entries. Hidden ones only show in admin mode.
-  function curatedTiles() {
-    const listed = listedRepos();
-    return [...bundledCollisions().values()].filter(c => typeof c.shelf === 'string' && c.shelf.trim() && c.name
-      && !listed.has(repoKey(c.repository)) && (admin || !c.hidden));
-  }
-  const curatedShelves = () => [...new Map(curatedTiles().map(c => { const sh = curatedShelf(c.shelf.trim()); return [sh.id, sh]; })).values()];
-  function curatedEntries(id) {
-    return curatedTiles().filter(c => curatedShelf(c.shelf.trim()).id === id).map(c => ({
-      name: c.name, repository: c.repository, folderName: c.folderName || '',
-      ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}), ...(Array.isArray(c.tags) ? { tags: c.tags } : {}),
-      ...(c.description ? { description: c.description } : {}),
-    }));
-  }
-
-  // Subscriptions, the curated tiles' shelves, and "Your ports" while it has anything on it
-  const shelves = () => [...subscriptions(), ...curatedShelves(), ...(localEntries().length ? [LOCAL] : [])];
+  // Subscriptions, and "Your ports" while it has anything on it
+  const shelves = () => [...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
   function describe(sub) {
     if (sub.local) return { ...sub, entries: localEntries().length, fetchedAt: null, error: null };
-    if (sub.curated) return { ...sub, entries: curatedEntries(sub.id).length, fetchedAt: null, error: null };
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
@@ -319,7 +164,7 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   async function refresh(id) {
     const sub = find(id);
     if (!sub) return null;
-    if (sub.local || sub.curated) return describe(sub);
+    if (sub.local) return describe(sub);
     const r = await getText(sub.url, { kind: 'catalog', log: netLog });
     const prev = readJson(file(id, 'cache'), null);
     let entries = null;
@@ -353,62 +198,47 @@ function createCatalogs({ dir, settings, collisionsFile = null, userSources = NO
   }
 
   function unsubscribe(id) {
-    if (!find(id) || isVirtual(id)) return false;
+    if (!find(id) || id === LOCAL.id) return false;
     settings.save({ catalogs: subscriptions().filter(c => c.id !== id) });
     for (const kind of ['cache', 'seen']) fs.rmSync(file(id, kind), { force: true });
     return true;
   }
 
   const cachedEntries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
-  const entries = (id) => (id === LOCAL.id ? localEntries() : String(id).startsWith(CURATED_PREFIX) ? curatedEntries(id) : cachedEntries(id));
+  const entries = (id) => (id === LOCAL.id ? localEntries() : cachedEntries(id));
 
   function review(id) {
     if (!find(id)) return null;
-    if (isVirtual(id)) return { new: [], changed: [], removed: [] };
+    if (id === LOCAL.id) return { new: [], changed: [], removed: [] };
     return diffEntries(readJson(file(id, 'seen'), []), entries(id));
   }
 
   function markSeen(id) {
     if (!find(id)) return false;
-    if (isVirtual(id)) return true;
+    if (id === LOCAL.id) return true;
     writeJson(file(id, 'seen'), entries(id));
     return true;
   }
 
   // Normalized items for every subscribed catalog
   function items() {
-    const subs = shelves();
-    if (!subs.length) return [];
-    const layers = userLayers();
-    const joins = new Map([...layers.map, ...bundledCollisions()]);
-    return subs.flatMap(sub => entries(sub.id).map(e => {
-      const k = repoKey(e.repository);
-      const data = joins.get(k) || null;
-      // A hidden curated collision gates its port, wherever it's listed, to admin mode
-      const hidden = !!(data?.hidden && bundledCollisions().has(k));
-      if (hidden && !admin) return null;
-      return {
-        ...(hidden ? { hidden: true } : {}),
-        // not reviewed by us: a "Your ports" entry, or data bound by an additional source
-        userSource:  !!sub.local || (!!data && !bundledCollisions().has(k)),
-        id:          `quiver:${sub.id}:${entryKey(e)}`,
-        title:       e.name || e.repository,
-        source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
-        shelf:       sub.shelf,
-        repository:  e.repository || null,
-        icon:        e.appIconUrl || null,
-        tags:        Array.isArray(e.tags) ? e.tags : [],
-        description: e.description || null,
-        data:        data && itemData(data),
-        entry:       e,
-      };
-    })).filter(Boolean);
+    return shelves().flatMap(sub => entries(sub.id).map(e => ({
+      // not reviewed by us: a "Your ports" entry
+      userSource:  !!sub.local,
+      id:          `quiver:${sub.id}:${entryKey(e)}`,
+      title:       e.name || e.repository,
+      source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
+      shelf:       sub.shelf,
+      repository:  e.repository || null,
+      icon:        e.appIconUrl || null,
+      tags:        Array.isArray(e.tags) ? e.tags : [],
+      description: e.description || null,
+      entry:       e,
+    })));
   }
 
   return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
-    collision, saveCollision, deleteCollision, localCollisions: localList, feeds, subscribeFeed, refreshFeed, unsubscribeFeed,
-    curatedList, saveCurated, deleteCurated, admin,
-    userConflicts, additionalAllowed: additional, isCurated: (repository) => bundledCollisions().has(repoKey(repository)) };
+    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional };
 }
 
-module.exports = { createCatalogs, itemData, parseCatalog, parseCollisions, diffEntries, catalogId, entryKey };
+module.exports = { createCatalogs, parseCatalog, diffEntries, catalogId, entryKey };

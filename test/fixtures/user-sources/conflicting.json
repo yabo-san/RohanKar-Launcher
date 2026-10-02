@@ -1,8 +1,5 @@
 {
   "schemaVersion": 1,
-  "collisions": [
-    { "repository": "BanjoRecomp/BanjoRecomp", "sources": [{ "ia": "my-banjo", "path": "banjo.z64" }] }
-  ],
   "archive": [
     { "identifier": "rk-e2e-halo-ce", "title": "My Halo" },
     { "identifier": "my-demo" }
