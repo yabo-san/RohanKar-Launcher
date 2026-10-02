@@ -7,7 +7,6 @@
  * user.json, a local file named in Settings (docs/USER-SOURCES.md):
  *
  *   { "schemaVersion": 1,
- *     "collisions": [...],  // a GitHub repo + the archive.org data it needs (catalog/collisions.json's shape)
  *     "archive":    [...],  // { identifier, title?, files?: [{ name, sha1? }] }, a standalone archive.org download
  *     "github":     [...] } // { repository, name?, folderName?, assetPattern?, sha1? }, a standalone release binary
  *
@@ -19,10 +18,10 @@
  */
 const fs   = require('fs');
 const path = require('path');
-const { validateCollision, toRegExp } = require('./ports');
+const { toRegExp } = require('./ports');
 
 const SCHEMA_VERSION = 1;
-const SECTIONS = ['collisions', 'archive', 'github'];
+const SECTIONS = ['archive', 'github'];
 const IA_ID = /^[\w.-]+$/;
 const REPO  = /^[\w.-]+\/[\w.-]+$/;
 const SHA1  = /^[0-9a-f]{40}$/i;
@@ -58,17 +57,17 @@ function validateGithub(e) {
   return errs;
 }
 
-const VALIDATE = { collisions: validateCollision, archive: validateArchive, github: validateGithub };
+const VALIDATE = { archive: validateArchive, github: validateGithub };
 const keyOf = (section, e) => (section === 'archive' ? e?.identifier : e?.repository);
 
 // { error } for a file that isn't user.json at all; else { entries, invalid },
 // where invalid lists every bad entry as { section, index, key, errors }
 function validateUserFile(doc) {
-  if (!isObj(doc)) return { error: 'user.json must be an object: { "schemaVersion": 1, "collisions": [], "archive": [], "github": [] }' };
+  if (!isObj(doc)) return { error: 'user.json must be an object: { "schemaVersion": 1, "archive": [], "github": [] }' };
   if (doc.schemaVersion !== SCHEMA_VERSION) return { error: `schemaVersion must be ${SCHEMA_VERSION} (found ${JSON.stringify(doc.schemaVersion ?? null)})` };
   const bad = SECTIONS.filter(s => doc[s] != null && !Array.isArray(doc[s]));
   if (bad.length) return { error: `${bad.join(', ')} must be ${bad.length > 1 ? 'arrays' : 'an array'}` };
-  const entries = { collisions: [], archive: [], github: [] };
+  const entries = { archive: [], github: [] };
   const invalid = [];
   for (const section of SECTIONS) {
     const seen = new Set();
@@ -81,12 +80,17 @@ function validateUserFile(doc) {
       entries[section].push({ ...e, [section === 'archive' ? 'identifier' : 'repository']: key });
     });
   }
+  // An older file's collisions are reported, not read (collisions are parked)
+  if (Array.isArray(doc.collisions)) {
+    doc.collisions.forEach((e, index) => invalid.push({ section: 'collisions', index, key: typeof e?.repository === 'string' ? e.repository : null,
+      errors: ['collisions are no longer supported; list the repo under github instead'] }));
+  }
   return { entries, invalid };
 }
 
 // Reads the file named in Settings. { file, entries, invalid, error }
 function readUserFile(file) {
-  const empty = { collisions: [], archive: [], github: [] };
+  const empty = { archive: [], github: [] };
   if (!file) return { file: null, entries: empty, invalid: [], error: null };
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(file)) return { file, entries: empty, invalid: [], error: 'user.json must be a file on this computer, not a URL' };
   if (!path.isAbsolute(file)) return { file, entries: empty, invalid: [], error: 'user.json must be a full path' };
@@ -112,15 +116,6 @@ function dropCurated(section, list, curated) {
   return { kept, conflicts };
 }
 
-// A github entry as a collision with no data: it defines a port of its own
-const githubAsCollision = (g) => ({
-  repository: g.repository,
-  name: g.name || g.repository.split('/')[1],
-  ...(g.folderName ? { folderName: g.folderName } : {}),
-  ...(g.assetPattern ? { assetPattern: g.assetPattern } : {}),
-  ...(g.sha1 ? { sha1: g.sha1.toLowerCase() } : {}),
-});
-
 // The setting, read the one way everywhere
 const additionalAllowed = (settings) => settings.load().allowAdditionalSources === true;
 
@@ -138,7 +133,7 @@ function createUserSources({ settings, log = () => {} }) {
     return cache;
   }
   // Entries in use: none while additional sources are off
-  const entries = () => (additionalAllowed(settings) ? read().entries : { collisions: [], archive: [], github: [] });
+  const entries = () => (additionalAllowed(settings) ? read().entries : { archive: [], github: [] });
   return { read, entries, enabled: () => additionalAllowed(settings) };
 }
 
@@ -177,6 +172,6 @@ function createPins(file) {
 }
 
 module.exports = {
-  SCHEMA_VERSION, validateUserFile, readUserFile, dropCurated, githubAsCollision, additionalAllowed,
+  SCHEMA_VERSION, validateUserFile, readUserFile, dropCurated, additionalAllowed,
   createUserSources, checkPin, createPins,
 };

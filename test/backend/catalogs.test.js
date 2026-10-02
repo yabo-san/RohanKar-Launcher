@@ -3,14 +3,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { createCatalogs, parseCatalog, parseCollisions, diffEntries, entryKey } = require('../../src/backend/catalogs');
+const { createCatalogs, parseCatalog, diffEntries, entryKey } = require('../../src/backend/catalogs');
 const { createSettings } = require('../../src/backend/settings');
 const { fakeArchive, tmpDir } = require('./helpers');
 
-// Cut from catalog/collisions.json
-const COLLISIONS = JSON.parse(fs.readFileSync(path.join(__dirname, '../../catalog/collisions.json'), 'utf8')).slice(0, 2);
-
-async function setup(t, { collisions = COLLISIONS } = {}) {
+async function setup(t, { userSources } = {}) {
   const catalog = { apps: [
     { name: 'Banjo Recomp', repository: 'BanjoRecomp/BanjoRecomp', appIconUrl: 'https://i/b.png', tags: ['n64'] },
     { name: 'Ship of Harkinian', repository: 'HarbourMasters/Shipwright' },
@@ -22,28 +19,16 @@ async function setup(t, { collisions = COLLISIONS } = {}) {
     },
   });
   const dir = tmpDir(t);
-  const collisionsFile = path.join(dir, 'collisions.json');
-  fs.writeFileSync(collisionsFile, JSON.stringify(collisions));
   const settings = createSettings(path.join(dir, 'settings.json'));
   const netLog = [];
-  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, collisionsFile, netLog: (...a) => netLog.push(a) });
+  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, ...(userSources ? { userSources } : {}), netLog: (...a) => netLog.push(a) });
   return { fake, dir, settings, catalogs, catalog, netLog };
 }
 
-test('items: a collision\'s exe and keepReleaseFolder reach the install', async (t) => {
-  const { fake, catalogs } = await setup(t, { collisions: [{ ...COLLISIONS[0], exe: 'bin/game.exe', keepReleaseFolder: true }, COLLISIONS[1]] });
-  await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
-  const banjo = catalogs.items().find(i => i.title === 'Banjo Recomp');
-  assert.deepEqual([banjo.data.exe, banjo.data.keepReleaseFolder], ['bin/game.exe', true]);
-});
-
-test('parse: apps wrapper or bare array; collisions as array or keyed object', () => {
+test('parse: apps wrapper or bare array', () => {
   assert.equal(parseCatalog('[{"name":"a"},{"x":1},null]').length, 1);
   assert.equal(parseCatalog('{"apps":[{"repository":"a/b"}]}').length, 1);
   assert.throws(() => parseCatalog('{"x":[]}'), /array/);
-  const keyed = parseCollisions(JSON.stringify({ _comment: 'x', 'Owner/Repo': { iaIdentifier: 'i' } }));
-  assert.deepEqual([...keyed.keys()], ['owner/repo']);
-  assert.equal(parseCollisions('[{"repository":"  A/B "},{"name":"no repo"}]').size, 1);
   assert.equal(entryKey({ repository: 'A/B' }), 'a/b');
   assert.equal(entryKey({ name: 'N' }), 'name:N');
 });
@@ -106,7 +91,7 @@ test('a catalog that is not a catalog is an error with no entries', async (t) =>
   assert.ok(down.catalog.error);
 });
 
-test('items: one per entry, joined to collisions on repository only', async (t) => {
+test('items: one per entry, a port binary with no game data', async (t) => {
   const { fake, catalogs } = await setup(t);
   assert.deepEqual(catalogs.items(), []);
   const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
@@ -116,76 +101,61 @@ test('items: one per entry, joined to collisions on repository only', async (t) 
   assert.equal(banjo.id, `quiver:${sub.id}:banjorecomp/banjorecomp`);
   assert.equal(banjo.shelf, 'Nintendo');
   assert.equal(banjo.icon, 'https://i/b.png');
-  assert.equal(banjo.data.iaIdentifier, COLLISIONS[0].iaIdentifier);
-  assert.equal(banjo.data.dataFiles[0].sha1, COLLISIONS[0].dataFiles[0].sha1);
-  assert.equal(items.find(i => i.title === 'Ship of Harkinian').data, null);
+  assert.deepEqual([banjo.userSource, 'data' in banjo], [false, false]);
   assert.equal(catalogs.unsubscribe(sub.id), true);
   assert.equal(catalogs.unsubscribe(sub.id), false);
   assert.deepEqual(catalogs.list(), []);
 });
 
-test('an unreadable collisions file joins nothing', async (t) => {
-  const { fake, dir, settings } = await setup(t);
-  const logs = [];
-  const catalogs = createCatalogs({ dir: path.join(dir, 'c2'), settings, collisionsFile: path.join(dir, 'missing.json'), log: m => logs.push(m) });
-  await catalogs.subscribe({ url: `${fake.base}/nintendo.json` });
-  assert.ok(catalogs.items().every(i => i.data === null));
-  assert.match(logs[0], /collisions unreadable/);
-  const none = createCatalogs({ dir: path.join(dir, 'c3'), settings });
-  assert.ok(none.items().every(i => i.data === null));
-});
-
-test('every collision joins a catalog entry on repository', () => {
-  const read = (f) => JSON.parse(fs.readFileSync(path.join(__dirname, '../../catalog', f), 'utf8'));
-  const catalog = read('catalog.json');
-  const repos = new Set((catalog.apps || catalog).map(e => entryKey({ repository: e.repository })));
-  const orphans = read('collisions.json').filter(c => !repos.has(entryKey({ repository: c.repository })));
-  assert.deepEqual(orphans.map(c => c.repository), []);
-});
-
-test('curated collisions win over your own, which need additional sources and fill a Your ports shelf', async (t) => {
+test('your repos need additional sources and fill a Your ports shelf, unless a shelf lists the repo', async (t) => {
   const { fake, catalogs, settings } = await setup(t);
   const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
-  assert.equal(catalogs.collision('banjorecomp/banjorecomp').origin, 'bundled');
 
-  // A bundled repository can't be overridden: curated wins
-  const mine = { repository: 'BanjoRecomp/BanjoRecomp', base: 'data', binaryTarget: 'bin', sources: [{ ia: 'banjo-full', path: 'Banjo.zip', extract: true }] };
-  const refused = catalogs.saveCollision(mine);
-  assert.equal(refused.ok, false);
-  assert.match(refused.errors[0], /curated collisions/);
-  assert.equal(catalogs.isCurated('banjorecomp/BANJORECOMP'), true);
-  assert.equal(catalogs.items().find(i => i.repository === 'BanjoRecomp/BanjoRecomp').userSource, false);
+  assert.equal(catalogs.addRepo({ repository: 'me/port', name: 'My Port', folderName: 'MyPort', releaseAssetFilter: 'win', sources: [{ ia: 'x' }] }).ok, true);
+  assert.equal(catalogs.addRepo({ repository: 'HarbourMasters/Shipwright', name: 'Mine' }).ok, true);
+  assert.deepEqual(catalogs.localRepos().map(r => r.repository), ['me/port', 'HarbourMasters/Shipwright']);
+  assert.equal(catalogs.list().some(c => c.id === 'local'), false, 'off until additional sources are allowed');
 
-  // Your own for a repo a shelf lists binds its data, but only with additional sources on
-  assert.equal(catalogs.saveCollision({ repository: 'HarbourMasters/Shipwright', sources: [{ ia: 'soh-data', path: 'oot.z64' }] }).ok, true);
-  assert.equal(catalogs.collision('harbourmasters/shipwright'), null);
-  assert.equal(catalogs.items().find(i => i.repository === 'HarbourMasters/Shipwright').data, null);
   settings.save({ allowAdditionalSources: true });
-  assert.equal(catalogs.collision('harbourmasters/shipwright').origin, 'local');
-  const soh = catalogs.items().find(i => i.repository === 'HarbourMasters/Shipwright');
-  assert.deepEqual([soh.data.iaIdentifier, soh.userSource], ['soh-data', true]);
-  assert.equal(catalogs.list().length, 1, 'a repo a catalog lists makes no shelf of its own');
-
-  // A repository no catalog lists becomes a port on "Your ports"
-  assert.equal(catalogs.saveCollision({ repository: 'me/port', name: 'My Port', folderName: 'MyPort', sources: [{ ia: 'my-data', path: 'roms/*', target: 'roms' }] }).ok, true);
   const shelf = catalogs.list().find(c => c.id === 'local');
   assert.deepEqual([shelf.name, shelf.entries, shelf.url], ['Your ports', 1, null]);
   const port = catalogs.items().find(i => i.id === 'quiver:local:me/port');
-  assert.deepEqual([port.title, port.shelf, port.entry.folderName, port.data.sources[0].target], ['My Port', 'Your ports', 'MyPort', 'roms']);
+  assert.deepEqual([port.title, port.shelf, port.entry.folderName, port.entry.releaseAssetFilter, port.userSource], ['My Port', 'Your ports', 'MyPort', 'win', true]);
+  assert.equal('sources' in port.entry, false);
+  const soh = catalogs.items().filter(i => i.repository?.toLowerCase() === 'harbourmasters/shipwright');
+  assert.deepEqual(soh.map(i => [i.shelf, i.userSource]), [['Nintendo', false]], 'a repo a shelf lists stays the shelf\'s');
   assert.deepEqual(catalogs.review('local'), { new: [], changed: [], removed: [] });
   assert.equal(catalogs.markSeen('local'), true);
   assert.equal(catalogs.unsubscribe('local'), false);
   assert.equal((await catalogs.refresh('local')).entries, 1);
 
-  // Bad entries are refused with every problem named; deletes are per repository
-  const bad = catalogs.saveCollision({ repository: 'nope', base: 'up', sources: [{ ia: 'a b', path: '../x', sha1: 'zz', target: '/abs' }] });
-  assert.equal(bad.ok, false);
-  assert.deepEqual(bad.errors, [
-    'repository must be owner/repo', 'base must be "binary" or "data"', 'sources[0].ia must be an archive.org identifier',
-    'sources[0].path must be a file, folder/* or * in the item', 'sources[0].target must be a relative folder', 'sources[0].sha1 must be 40 hex characters',
-  ]);
-  assert.equal(catalogs.deleteCollision('ME/port'), true);
-  assert.equal(catalogs.deleteCollision('me/port'), false);
+  assert.deepEqual(catalogs.addRepo({ repository: 'nope', name: 3 }).errors, ['repository must be owner/repo', 'name must be a string']);
+  assert.equal(catalogs.removeRepo('ME/port'), true);
+  assert.equal(catalogs.removeRepo('me/port'), false);
   assert.equal(catalogs.list().some(c => c.id === 'local'), false);
   assert.equal(catalogs.unsubscribe(sub.id), true);
+});
+
+test('user.json github entries join Your ports; one a shelf lists is a conflict', async (t) => {
+  const github = [{ repository: 'me/tool', assetPattern: '(?i)win64', sha1: 'A'.repeat(40) }, { repository: 'BanjoRecomp/BanjoRecomp' }];
+  const { fake, catalogs, settings } = await setup(t, { userSources: { entries: () => ({ archive: [], github }) } });
+  await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  settings.save({ allowAdditionalSources: true });
+  const tool = catalogs.items().find(i => i.repository === 'me/tool');
+  assert.deepEqual([tool.title, tool.entry.assetPattern, tool.entry.sha1], ['tool', '(?i)win64', 'a'.repeat(40)]);
+  assert.deepEqual(catalogs.userConflicts(), [{ from: 'user.json github', key: 'BanjoRecomp/BanjoRecomp', reason: 'a port shelf lists it' }]);
+});
+
+test('a repos list from before collisions were parked carries over once, repo fields only', (t) => {
+  const dir = tmpDir(t);
+  fs.mkdirSync(path.join(dir, 'catalogs'));
+  fs.writeFileSync(path.join(dir, 'catalogs', 'collisions.local.json'), JSON.stringify([
+    { repository: 'me/port', name: 'My Port', base: 'data', sources: [{ ia: 'x', path: 'y' }] }, { name: 'no repo' },
+  ]));
+  const logs = [];
+  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings: createSettings(path.join(dir, 'settings.json')), log: m => logs.push(m) });
+  assert.deepEqual(catalogs.localRepos(), [{ repository: 'me/port', name: 'My Port' }]);
+  assert.match(logs[0], /carried 1 repo/);
+  catalogs.removeRepo('me/port');
+  assert.deepEqual(catalogs.localRepos(), [], 'not carried over again');
 });

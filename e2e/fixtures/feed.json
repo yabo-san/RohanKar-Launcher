@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "collisions": [
-    { "repository": "friend/feed-port", "name": "Feed Port", "sources": [{ "ia": "rk-e2e-feed-data", "path": "game.bin" }] }
-  ],
-  "uploaders": [
-    { "uploader": "gomes.samuel@gmail.com", "label": "samuel" }
-  ]
-}

@@ -175,7 +175,7 @@ test('defaultHost: OS actions that need Electron say so', async () => {
   assert.equal(typeof defaultHost('darwin').openPath, 'function');
 });
 
-test('createBackend: default options read the bundled overrides and collisions', async (t) => {
+test('createBackend: default options read the bundled overrides', async (t) => {
   const dataDir = tmpDir(t);
   const logs = [];
   const backend = createBackend({ dataDir, overridesUrl: 'http://127.0.0.1:1/overrides.json', log: (m) => logs.push(m) });
