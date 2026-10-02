@@ -53,7 +53,7 @@ async function pool(items, n, fn) {
 }
 
 async function startBackend({ fixtures }, dataDir) {
-  const args = ['--data-dir', dataDir, '--heroes-dir', path.join(ROOT, 'assets', 'heroes')];
+  const args = ['--data-dir', dataDir];
   if (!fixtures) {
     const backend = await run(args, {}, () => {});
     return { backend, close: backend.stop };

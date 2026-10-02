@@ -41,10 +41,10 @@ function getText(url, { kind = 'get', timeoutMs = 30000, log = () => {}, headers
   });
 }
 
-// GET following up to maxRedirects redirects. Calls onResponse(res, req) with
-// the final response, or onError(err) once. Returns a handle whose req is the
-// live request, so a caller can abort it.
-function getFollow(url, { kind = 'get', log = () => {}, timeoutMs = 30000, maxRedirects = 10, onResponse, onError }) {
+// GET following up to maxRedirects redirects, sending `headers` on every hop.
+// Calls onResponse(res, req) with the final response, or onError(err) once.
+// Returns a handle whose req is the live request, so a caller can abort it.
+function getFollow(url, { kind = 'get', log = () => {}, timeoutMs = 30000, maxRedirects = 10, headers: extra = {}, onResponse, onError }) {
   const handle = { req: null, aborted: false };
   let failed = false;
   const fail = (e) => { if (!failed && !handle.aborted) { failed = true; onError(e); } };
@@ -53,7 +53,7 @@ function getFollow(url, { kind = 'get', log = () => {}, timeoutMs = 30000, maxRe
     if (redirects > maxRedirects) return fail(new Error('Too many redirects'));
     let req;
     try {
-      req = getter(target).get(target, { headers: { 'User-Agent': USER_AGENT }, timeout: timeoutMs }, (res) => {
+      req = getter(target).get(target, { headers: { 'User-Agent': USER_AGENT, ...extra }, timeout: timeoutMs }, (res) => {
         if (handle.aborted) { res.resume(); return; }
         const { statusCode, headers } = res;
         log(kind, target, statusCode, headers);

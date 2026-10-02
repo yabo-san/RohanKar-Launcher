@@ -39,7 +39,7 @@ test('CORS preflight, unknown routes, wrong methods, bad bodies', async (t) => {
 });
 
 test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (t) => {
-  const { call, backend, info } = await testApi(t);
+  const { call, info } = await testApi(t);
   const all = await call('GET', '/items');
   assert.equal(all.status, 200);
   assert.equal(all.body.items.length, 6);
@@ -65,13 +65,10 @@ test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (
   assert.equal((await cover.arrayBuffer()).byteLength, JPEG.length);
   assert.equal((await call('GET', '/items/missing-x/cover')).body.error, 'no_image');
 
-  const install = path.join(backend.dataDir, 'hero-game');
-  fs.mkdirSync(install);
-  fs.writeFileSync(path.join(install, 'hero.png'), 'png');
-  backend.library.recordInstall('rk-e2e-halo-ce', install, null);
+  // No pinned hero: the archive.org item's own image
   const hero = await fetch(`${info.url}/items/rk-e2e-halo-ce/hero?token=test-token`);
-  assert.equal(hero.headers.get('content-type'), 'image/png');
-  assert.equal((await call('GET', '/items/rk-e2e-the-sims/hero')).status, 404);
+  assert.equal(hero.headers.get('content-type'), 'image/jpeg');
+  assert.equal((await call('GET', '/items/missing-x/hero')).body.error, 'no_image');
 });
 
 test('items: sources down is a 502 with the per-source errors', async (t) => {
@@ -440,26 +437,6 @@ test('os: standalone answers 501 for window, browser, Steam and updater', async 
   assert.equal((await call('POST', '/os/open-external', { url: 'https://x' })).status, 501);
   assert.equal((await call('POST', '/os/add-to-steam', { appName: 'a', exePath: 'b', startDir: 'c' })).status, 501);
   assert.equal((await call('POST', '/os/updater-install')).status, 501);
-});
-
-test('GET /items/:id/hero?from= picks one source; the bundled hero ships with the app', async (t) => {
-  const { call, backend } = await testApi(t, { heroesDir: path.join(__dirname, 'no-heroes-here') });
-  const install = path.join(backend.dataDir, 'g');
-  fs.mkdirSync(install);
-  fs.writeFileSync(path.join(install, 'hero.jpg'), 'x');
-  backend.library.recordInstall('rk-e2e-halo-ce', install, null);
-  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=install', undefined, { raw: true })).res.headers.get('content-type'), 'image/jpeg');
-  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=override', undefined, { raw: true })).status, 404);
-  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=bundled', undefined, { raw: true })).status, 404);
-  assert.equal((await call('GET', '/items/rk-e2e-halo-ce/hero?from=moon', undefined, { raw: true })).status, 400);
-
-  const heroes = path.join(backend.dataDir, 'heroes');
-  fs.mkdirSync(heroes);
-  fs.writeFileSync(path.join(heroes, 'rk-e2e-the-sims.png'), 'png');
-  const { call: call2 } = await testApi(t, { heroesDir: heroes });
-  assert.equal((await call2('GET', '/items/rk-e2e-the-sims/hero?from=bundled', undefined, { raw: true })).res.headers.get('content-type'), 'image/png');
-  assert.equal((await call2('GET', '/items/rk-e2e-the-sims/hero', undefined, { raw: true })).status, 200, 'the chain ends at the bundled hero');
-  assert.equal((await call2('GET', '/items/..%2Fx/hero?from=bundled', undefined, { raw: true })).status, 404);
 });
 
 test('repos: your own GitHub repos (add, list, replace, remove) make up "Your ports"', async (t) => {

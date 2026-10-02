@@ -68,11 +68,11 @@ test('auto export: names from the last export and loaded catalogs, failures logg
   assert.equal(fs.existsSync(file), false);
 });
 
-test('export art: cached cover, bundled override, hero in the install folder; nothing fetched', async (t) => {
+test('export art: what is already on disk, in the cover and hero order; nothing fetched', async (t) => {
   const { backend, dataDir, fake } = await testBackend(t);
   const install = path.join(dataDir, 'games', 'rk-e2e-halo-ce');
   fs.mkdirSync(install, { recursive: true });
-  fs.writeFileSync(path.join(install, 'hero.png'), 'x');
+  fs.writeFileSync(path.join(install, 'hero.png'), 'x'); // a hero.png in the folder is just a file
   backend.library.recordInstall('rk-e2e-halo-ce', install, null);
   backend.library.add('no-cover');
   fs.writeFileSync(path.join(dataDir, 'thumbcache', 'rk-e2e-halo-ce.jpg'), 'x');
@@ -80,15 +80,15 @@ test('export art: cached cover, bundled override, hero in the install folder; no
   await backend.exportPlaynite(undefined, { loadItems: false });
   const [halo, bare] = readJson(path.join(dataDir, 'playnite-export.json')).games;
   assert.equal(halo.coverPath, path.join(dataDir, 'thumbcache', 'rk-e2e-halo-ce.jpg'));
-  assert.equal(halo.heroPath, path.join(install, 'hero.png'));
+  assert.equal(halo.heroPath, path.join(dataDir, 'thumbcache', 'rk-e2e-halo-ce.jpg'), 'no pinned hero: the archive.org image');
   assert.deepEqual([bare.coverPath, bare.heroPath], [null, null]);
   assert.ok(fake.requests.slice(before).every(r => !r.startsWith('/advancedsearch')), 'no archive.org search');
 
   const art = backend.covers.localArt;
   const overrides = { a: { artUrl: 'assets/covers/none.jpg', hero: 'https://x/h.jpg' }, b: { artUrl: 'https://x/c.jpg' } };
-  assert.deepEqual(art('a', null, overrides), { cover: null, hero: null });
-  assert.deepEqual(art('b', null, overrides), { cover: null, hero: null });
-  assert.deepEqual(art('../x', null, {}), { cover: null, hero: null });
+  assert.deepEqual(art('a', overrides), { cover: null, hero: null });
+  assert.deepEqual(art('b', overrides), { cover: null, hero: null });
+  assert.deepEqual(art('../x', {}), { cover: null, hero: null });
 });
 
 test('launch records when it was played; uninstall keeps the entry', async (t) => {
