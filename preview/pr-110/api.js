@@ -126,10 +126,7 @@ const api = (() => {
     },
     fetchReviews: async ({ identifier }) => (await call('GET', `/items/${enc(identifier)}/reviews`)).body?.reviews || [],
     getThumb:        ({ identifier }) => image(`/items/${enc(identifier)}/cover`),
-    getOverrideHero: ({ identifier }) => image(`/items/${enc(identifier)}/hero`, { from: 'override' }),
-    getInstallHero:  ({ identifier }) => image(`/items/${enc(identifier)}/hero`, { from: 'install' }),
-    // A URL to try as an <img> src: the hero shipped with the app, 404 if none
-    bundledHeroUrl:  (identifier) => url(`/items/${enc(identifier)}/hero`, { from: 'bundled' }),
+    getHero:         ({ identifier }) => image(`/items/${enc(identifier)}/hero`),
 
     // Library
     getLibrary:  async () => (await call('GET', '/library')).body?.library || {},
