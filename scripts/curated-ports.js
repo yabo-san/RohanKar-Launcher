@@ -83,16 +83,17 @@ function parseDoc(html) {
   return [...out.values()];
 }
 
-async function getText(url) {
+// label names the URL in errors; the source list's URL is a secret and never logged
+async function getText(url, label = url) {
   const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`${url}: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`${label}: HTTP ${res.status}`);
   return res.text();
 }
 
 async function main() {
   const check = process.argv.includes('--check');
   if (!DOC_URL) throw new Error('CURATED_PORTS_SOURCE_URL is not set');
-  const docRepos = parseDoc(await getText(DOC_URL));
+  const docRepos = parseDoc(await getText(DOC_URL, 'the source list'));
   if (docRepos.length < 10) throw new Error(`only ${docRepos.length} repositories found in the source list; its layout probably changed`);
 
   const quiver = new Map();

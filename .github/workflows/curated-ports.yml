@@ -1,0 +1,95 @@
+name: Refresh curated ports
+
+# Nightly: rebuilds catalog/curated-ports.json with scripts/curated-ports.js from
+# the source list and Quiver's catalogs. The source list's URL is the
+# CURATED_PORTS_SOURCE_URL secret: it is never written to the repo, and GitHub
+# masks it in the log. Without the secret the job does nothing.
+# If the file changed, it opens or updates the PR "chore: refresh curated ports"
+# from the chore/refresh-curated-ports branch, the way box-art.yml opens its batch
+# PRs. A PR opened with the workflow's token doesn't start CI on its own; push to
+# it or close and reopen it to run the checks.
+#
+# Repo setting required: Actions > General > "Allow GitHub Actions to create
+# and approve pull requests".
+on:
+  schedule:
+    - cron: '23 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: curated-ports
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    env:
+      CURATED_PORTS_SOURCE_URL: ${{ secrets.CURATED_PORTS_SOURCE_URL }}
+      BRANCH: chore/refresh-curated-ports
+    steps:
+      - name: Skip without the source list
+        id: source
+        run: |
+          if [ -z "$CURATED_PORTS_SOURCE_URL" ]; then
+            echo "CURATED_PORTS_SOURCE_URL is not set; nothing to refresh."
+            echo "set=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "set=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.source.outputs.set == 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.source.outputs.set == 'true'
+        with:
+          node-version: '24'
+
+      - name: Rebuild catalog/curated-ports.json
+        if: steps.source.outputs.set == 'true'
+        run: |
+          set -o pipefail
+          node scripts/curated-ports.js | tee summary.txt
+
+      - name: Open or update the PR
+        if: steps.source.outputs.set == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet catalog/curated-ports.json; then
+            echo "catalog/curated-ports.json unchanged; no PR."
+            exit 0
+          fi
+          # Which repositories came and went, for the PR body
+          list() { jq -r '.apps[] | "\(.name) (\(.repository))"' | sort; }
+          git show HEAD:catalog/curated-ports.json | list > before.txt
+          list < catalog/curated-ports.json > after.txt
+          {
+            echo "Nightly refresh of \`catalog/curated-ports.json\` by \`node scripts/curated-ports.js\` ([run](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}))."
+            echo
+            echo "$(cat summary.txt)"
+            echo
+            echo "Added:"; comm -13 before.txt after.txt | sed 's/^/- /'; [ -n "$(comm -13 before.txt after.txt)" ] || echo "- none"
+            echo
+            echo "Removed:"; comm -23 before.txt after.txt | sed 's/^/- /'; [ -n "$(comm -23 before.txt after.txt)" ] || echo "- none"
+            echo
+            echo "Entries that stayed may have changed metadata; see the diff."
+          } > body.md
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git add catalog/curated-ports.json
+          git commit -m "chore: refresh curated ports"
+          # The branch only ever holds this one commit on top of main
+          git push --force origin "$BRANCH"
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --body-file body.md
+            echo "Updated #$pr"
+          else
+            gh pr create --base main --head "$BRANCH" --title "chore: refresh curated ports" --body-file body.md
+          fi

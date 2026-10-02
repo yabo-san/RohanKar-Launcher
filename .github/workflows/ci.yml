@@ -23,6 +23,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
       electron: ${{ steps.filter.outputs.electron }}
+      curated: ${{ steps.filter.outputs.curated }}
       any: ${{ steps.filter.outputs.backend == 'true' || steps.filter.outputs.frontend == 'true' || steps.filter.outputs.electron == 'true' }}
     steps:
       - name: Checkout repository
@@ -47,6 +48,7 @@ jobs:
               - 'src/backend/**'
               - 'test/**'
               - 'scripts/dev.js'
+              - 'scripts/curated-ports.js'
             # The UI in Chromium against the standalone backend on fixtures;
             # no Electron, so a frontend-only PR proves the UI on its own
             frontend:
@@ -56,6 +58,10 @@ jobs:
               - 'e2e/fixture-server.js'
               - 'e2e/fixtures.js'
               - 'e2e/fixtures/**'
+            # What builds catalog/curated-ports.json: --check that the committed file matches
+            curated:
+              - 'scripts/curated-ports.js'
+              - 'catalog/curated-extras.json'
             # The Electron host with the backend it forks: build and packaged smoke
             electron:
               - *shared
@@ -128,6 +134,35 @@ jobs:
         with:
           name: coverage-summary
           path: coverage.md
+
+  # catalog/curated-ports.json is what scripts/curated-ports.js makes of the
+  # source list, Quiver's catalogs and catalog/curated-extras.json. Only when the
+  # script or the extras changed, and only where the CURATED_PORTS_SOURCE_URL
+  # secret is available (not on forks); GitHub masks its value in the log.
+  # Not a required check.
+  curated-ports:
+    name: curated-ports
+    needs: changes
+    if: ${{ needs.changes.outputs.curated == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      CURATED_PORTS_SOURCE_URL: ${{ secrets.CURATED_PORTS_SOURCE_URL }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Check catalog/curated-ports.json is up to date
+        run: |
+          if [ -z "$CURATED_PORTS_SOURCE_URL" ]; then
+            echo "CURATED_PORTS_SOURCE_URL is not available here; skipping the check."
+            exit 0
+          fi
+          node scripts/curated-ports.js --check
 
   # Playwright in headless Chromium against the standalone backend on fixtures
   # (no xvfb, no Electron). Not a required check.
