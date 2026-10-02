@@ -5,7 +5,7 @@
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
  *     pointed at that server for archive.org, overrides.json, uploaders.json,
- *     featured.json and GitHub's releases
+ *     featured.json, curated-ports.json, Quiver's lists and GitHub's releases
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -56,6 +56,9 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--github-api', fixtures.base,
     '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
+    '--curated-ports-url', `${fixtures.base}/curated-ports.json`,
+    // Quiver's four built-in lists, apart from the /quiver/ ones a test subscribes to
+    '--quiver-base', `${fixtures.base}/quiver-community-app-catalog/`,
   ], {}, () => {});
   for (const c of catalogs) {
     await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });

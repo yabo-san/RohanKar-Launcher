@@ -95,6 +95,7 @@ function modal({ title, body, primary, secondary = 'Cancel' }) {
 }
 
 // The badge on anything from an additional source
+const CURATED_BADGE = '<span class="curated-badge" title="On the y4bo curated list: made by people, not vibecoded">Curated</span>';
 const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
 function stripHtml(html) {
@@ -195,22 +196,6 @@ async function loadWall({ refresh = false } = {}) {
 
 // ─── ports and library ───────────────────────────────────────────────────────
 
-// Quiver's four community lists, subscribed on the first run (when settings
-// have no catalogs yet); after that the subscriptions are the user's
-const QUIVER_BASE = 'https://raw.githubusercontent.com/tgeorgiadis/quiver-community-app-catalog/main/community-app-catalog/';
-const QUIVER_CATALOGS = [
-  { shelf: 'Nintendo',    file: 'Nintendo.json' },
-  { shelf: 'PlayStation', file: 'PlayStation.json' },
-  { shelf: 'Xbox',        file: 'Xbox.json' },
-  { shelf: 'Other',       file: 'OtherPlatforms.json' },
-];
-
-async function subscribeDefaultCatalogs() {
-  if (state.settings.catalogs !== undefined) return;
-  // One at a time: each subscription is a settings write
-  for (const c of QUIVER_CATALOGS) await api.subscribeCatalog({ url: QUIVER_BASE + c.file, name: c.shelf, shelf: c.shelf });
-}
-
 // A catalog item from the backend as a port card
 function portFromItem(it, cat) {
   const e = it.entry || {};
@@ -227,13 +212,15 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
+    // the curated list has this repository, whichever shelf lists it
+    curated:            !!it.curated,
+    sourceLabel:        cat.quiver || !cat.builtin ? `Quiver / ${cat.shelf}` : 'y4bo curated list',
     catalogUrl:         cat.url,
   };
 }
 
 async function loadPorts(refresh = false) {
   try {
-    await subscribeDefaultCatalogs();
     let catalogs = await api.getCatalogs();
     if (refresh) catalogs = await Promise.all(catalogs.map(c => api.refreshCatalog(c.id)));
     const lists = await Promise.all(catalogs.map(c => api.getCatalogItems(c.id)));
@@ -244,7 +231,7 @@ async function loadPorts(refresh = false) {
         id: c.id, name: c.shelf, url: c.url, preferredTags: [],
         count: mine.length,
         error: c.entries ? null : c.error,
-        fromCache: !!(c.error && c.entries), fetchedAt: c.fetchedAt,
+        fromCache: !!(c.error && c.entries), fetchedAt: c.fetchedAt, bundled: !!c.bundled,
       };
     });
     state.ports = { shelves, items };
@@ -396,7 +383,7 @@ function portCard(p) {
       <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${p.userSource ? USER_BADGE : ''}
+    ${p.curated ? CURATED_BADGE : ''}${p.userSource ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -754,7 +741,7 @@ function listRow(kind, x, cols, ctx) {
   const n = x._versions?.length || 1;
   const cell = (c) => {
     if (c.id === 'name') {
-      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
+      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + (port && x.curated ? '<span class="lv-badge curated">Curated</span>' : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
       return `<span class="lv-td lv-name" role="cell"><span class="lv-title">${esc(title)}</span>${badges}</span>`;
     }
     const text = c.text(x, ctx);
@@ -819,9 +806,10 @@ function viewShelf(id) {
   if (shelf.error) {
     html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   } else if (shelf.fromCache) {
-    html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
+    const copy = shelf.bundled ? `the ${esc(shelf.name)} catalog that came with the app` : `the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}`;
+    html += `<div class="notice"><div class="grow">Showing ${copy}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   }
-  html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}</div>`;
+  html += `<div class="lib-count">${list.length} ports · Source: ${esc(all[0]?.sourceLabel || shelf.name)}</div>`;
   return html + (list.length ? libraryBody('shelf', list, { card: portCard, kind: 'port', cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
@@ -991,9 +979,13 @@ function viewSettings() {
       <div class="inline"><input type="text" id="setting-download" value="${esc(s.downloadPath || '')}" placeholder="Default: the install folder">
       <button class="btn" data-action="choose-download">Choose…</button></div></div>
     <div class="field actions"><button class="btn primary" id="btn-save-settings" data-action="save-settings">Save</button></div>
-    <div class="field"><label>Catalogs</label>
-      <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : ''}`).join(' · ') : 'Loading…'}
+    <div class="field" id="port-catalogs"><label>Port catalogs</label>
+      <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? (sh.bundled ? ' (bundled copy)' : ' (cached)') : ''}`).join(' · ') : 'Loading…'}
 </div>
+      <label class="switch-row" for="setting-full-quiver">
+        <span><b>Show the full Quiver catalog</b><span class="hint">Off: the curated list only, ports made by people. On: Quiver's four community
+          catalogs too (Nintendo, PlayStation, Xbox, Other), which also list untested ports. Ports you already added stay either way.</span></span>
+        <input type="checkbox" class="switch" id="setting-full-quiver" role="switch" ${s.showFullQuiver ? 'checked' : ''}></label>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
     <div class="field" id="additional"><label class="switch-row" for="setting-additional">
         <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, GitHub repos you add
@@ -1272,7 +1264,7 @@ function portDetail(d) {
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}Source: Quiver / ${esc(p.shelfName)}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}Source: ${esc(p.sourceLabel)}${p.curated ? ` ${CURATED_BADGE}` : ''}</div></div></div>
     <div class="d-body">
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       <div class="actions">
@@ -1446,6 +1438,7 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
+  if (e.target.id === 'setting-full-quiver') return setFullQuiver(e.target.checked);
 });
 
 // ─── Additional sources (Settings) ───────────────────────────────────────────
@@ -1496,6 +1489,14 @@ async function setAdditional(on) {
   if (el) el.innerHTML = additionalHtml();
   toast(on ? 'Additional sources are on. What comes from them is marked Your source · not reviewed.' : 'Additional sources are off. Only the curated list shows; installed games stay on disk.');
   loadWall({ refresh: true });
+  loadPorts();
+}
+
+async function setFullQuiver(on) {
+  const r = await api.saveSettings({ showFullQuiver: on });
+  if (r && r.ok === false) { const box = $('#setting-full-quiver'); if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
+  state.settings = { ...state.settings, showFullQuiver: on };
+  toast(on ? 'Showing the full Quiver catalog.' : 'Showing the curated list only. Ports you added stay in your library.');
   loadPorts();
 }
 

@@ -121,7 +121,8 @@ async function fakeArchive(t, state = {}) {
 }
 
 // A backend on a temp data dir, talking to fakeArchive, with instant retries
-async function testBackend(t, { state, ...opts } = {}) {
+// curated: a curated shelf, served from the fake at /curated-ports.json
+async function testBackend(t, { state, curated = false, ...opts } = {}) {
   const { createBackend } = require('../../src/backend');
   const fake = await fakeArchive(t, state);
   const dataDir = tmpDir(t);
@@ -133,6 +134,9 @@ async function testBackend(t, { state, ...opts } = {}) {
     githubApi: fake.base,
     featuredUrl: `${fake.base}/featured.json`,
     announcementUrl: `${fake.base}/announcement.json`,
+    // No curated shelf unless a test asks for one, so counts stay the fixtures'
+    curatedPortsUrl: curated ? `${fake.base}/curated-ports.json` : null,
+    quiverBase: `${fake.base}/quiver/`,
     sleep: async () => {},
     log: () => {},
     ...opts,

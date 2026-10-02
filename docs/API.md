@@ -177,7 +177,12 @@ for one of those only (`400` for anything else). `404 no_image` when there is no
 
 ### `GET /catalogs`
 
-Subscribed catalogs with entry count, last fetch time and last error.
+The port shelves with entry count, last fetch time and last error. First the built-in ones:
+`curated` (catalog/curated-ports.json on main, `"bundled": true` while only the copy shipped with
+the app is there), then Quiver's four community catalogs while `showFullQuiver` is on (while it's
+off, one stays only for the ports the library holds from it), then the user's subscriptions.
+Built-in shelves never fetched are fetched first. Every item from `/catalogs/:id/items` carries
+`curated: true` when the curated list has its repository.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs
@@ -196,7 +201,7 @@ curl -X POST -d '{"url":"https://raw.githubusercontent.com/…/nintendo.json","s
 
 ### `GET /catalogs/:id`, `DELETE /catalogs/:id`
 
-One subscription; delete unsubscribes and drops its cache (`204`).
+One subscription; delete unsubscribes and drops its cache (`204`). A built-in shelf stays.
 
 ```sh
 curl -X DELETE http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d
@@ -463,7 +468,7 @@ curl http://127.0.0.1:7777/v1/sources
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
-`allowAdditionalSources` must be `true` or `false`; `userSourcesFile` must be a full local path
+`allowAdditionalSources` and `showFullQuiver` must be `true` or `false`; `userSourcesFile` must be a full local path
 (`null` or empty clears it; a URL is `400`).
 
 ```sh

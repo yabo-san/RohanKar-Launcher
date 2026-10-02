@@ -8,7 +8,7 @@ module.exports = [
   { ignores: ['dist/', 'node_modules/', 'test-results/', 'playwright-report/', 'preview-site/'] },
   js.configs.recommended,
   {
-    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'scripts/ui.js', 'scripts/sandbox.js', 'scripts/preview/build.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
+    files: ['src/electron/**/*.js', 'src/backend/**/*.js', 'test/**/*.js', 'scripts/dev.js', 'scripts/ui.js', 'scripts/sandbox.js', 'scripts/curated-ports.js', 'scripts/preview/build.js', 'e2e/**/*.js', 'eslint.config.js', 'playwright.config.js'],
     languageOptions: { sourceType: 'commonjs', globals: globals.node },
   },
   {

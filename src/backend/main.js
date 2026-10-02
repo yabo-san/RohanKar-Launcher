@@ -2,7 +2,8 @@
 /**
  * The backend process: `node src/backend/main.js --data-dir <dir> [--port N]`
  * (--heroes-dir for the app's bundled heroes; tests add --archive-base,
- * --overrides-url, --uploaders-url, --featured-url, --announcement-url and --github-api).
+ * --overrides-url, --uploaders-url, --featured-url, --curated-ports-url,
+ * --quiver-base, --announcement-url and --github-api).
  * Prints one JSON line, { port, token, url }, once listening, so a parent
  * process (or a person) can find it. The token is random per start unless
  * LAUNCHER_TOKEN is set.
@@ -46,6 +47,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['uploaders-url'] ? { uploadersUrl: args['uploaders-url'] } : {}),
     ...(args['github-api'] ? { githubApi: args['github-api'] } : {}),
     ...(args['featured-url'] ? { featuredUrl: args['featured-url'] } : {}),
+    ...(args['curated-ports-url'] ? { curatedPortsUrl: args['curated-ports-url'] } : {}),
+    ...(args['quiver-base'] ? { quiverBase: args['quiver-base'] } : {}),
     ...(args['announcement-url'] ? { announcementUrl: args['announcement-url'] } : {}),
     ...(bridge ? { host: bridge.host } : {}),
     log: (msg) => process.stderr.write(msg + '\n'),

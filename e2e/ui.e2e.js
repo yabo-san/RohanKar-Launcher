@@ -134,6 +134,31 @@ test('a Ports shelf comes from its Quiver list, with no game data on its cards',
   await expect(page.locator('#body .notice')).toContainText("Couldn't fetch the Xbox catalog");
 });
 
+test('The curated shelf comes first and its ports carry a Curated badge, on any shelf', async () => {
+  await expect(page.locator('#nav-shelves .navitem').first()).toContainText('Curated');
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await expect(page.locator('#body .port-card')).toHaveCount(1);
+  await expect(page.locator('#body .port-card .curated-badge')).toHaveText('Curated');
+  await expect(page.locator('#body .lib-count')).toContainText('Source: y4bo curated list');
+
+  await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
+  await expect(page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).locator('.curated-badge')).toHaveCount(1);
+  await expect(page.locator('.port-card', { hasText: 'Mario Kart 64' }).locator('.curated-badge')).toHaveCount(0);
+});
+
+test('Settings > Show the full Quiver catalog: off by default, adds Quiver\'s shelves while on', async () => {
+  await page.locator('#btn-settings').click();
+  const toggle = page.locator('#setting-full-quiver');
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'PlayStation' })).toHaveCount(0);
+  await toggle.click();
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'PlayStation' })).toHaveCount(1);
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'Other' })).toHaveCount(1);
+  await page.locator('#btn-settings').click();
+  await page.locator('#setting-full-quiver').click();
+  await expect(page.locator('#nav-shelves .navitem', { hasText: 'PlayStation' })).toHaveCount(0);
+});
+
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();

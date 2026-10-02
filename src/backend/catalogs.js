@@ -5,6 +5,16 @@
  * demand, cached under catalogs/, and diffed against the copy the user last
  * reviewed. GitHub repos the user adds on their own (and user.json's github
  * entries) that no subscribed catalog lists make up a "Your ports" shelf.
+ *
+ * Two kinds of shelf are built in rather than subscribed:
+ *   - Curated: catalog/curated-ports.json on main (curatedUrl), cached like
+ *     any catalog, with the copy bundled with the app (curatedFile) until a
+ *     fetch succeeds. Always first.
+ *   - Quiver's four community catalogs, while Settings > Sources > "Show the
+ *     full Quiver catalog" is on (off by default). While it's off, a Quiver
+ *     catalog still lists the ports the library holds from it, so nothing
+ *     the user added disappears.
+ * Every item says whether the curated list has its repository.
  */
 const fs     = require('fs');
 const path   = require('path');
@@ -13,6 +23,16 @@ const { getText } = require('./net');
 const { additionalAllowed } = require('./user-sources');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
+const CURATED_ID = 'curated';
+const CURATED_PORTS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/curated-ports.json';
+const QUIVER_BASE = 'https://raw.githubusercontent.com/tgeorgiadis/quiver-community-app-catalog/main/community-app-catalog/';
+const QUIVER_CATALOGS = Object.freeze([
+  { shelf: 'Nintendo',    file: 'Nintendo.json' },
+  { shelf: 'PlayStation', file: 'PlayStation.json' },
+  { shelf: 'Xbox',        file: 'Xbox.json' },
+  { shelf: 'Other',       file: 'OtherPlatforms.json' },
+]);
+const fullQuiver = (settings) => settings.load().showFullQuiver === true;
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 
 const catalogId = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 12);
@@ -44,7 +64,11 @@ function diffEntries(seen, current) {
 const NO_USER = { entries: () => ({ archive: [], github: [] }) };
 
 // userSources: createUserSources(), for user.json
-function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {}, log = () => {} }) {
+// curatedUrl: the curated shelf's catalog (none when null); curatedFile: its bundled copy
+// quiverBase: where Quiver's four catalogs live
+// libraryIds(): ids the library holds, so a hidden Quiver catalog keeps the user's ports
+function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = null, curatedFile = null, quiverBase = QUIVER_BASE,
+  libraryIds = () => new Set(), netLog = () => {}, log = () => {} }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = (id, kind) => path.join(dir, `${id}.${kind}.json`);
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
@@ -122,12 +146,41 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
 
   const userConflicts = () => userLayers().conflicts;
 
-  const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : []);
+  // ─── Built-in shelves: curated, and Quiver's four ─────────────────────────
+  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Curated', shelf: 'Curated', builtin: true }) : null;
+  const QUIVER = QUIVER_CATALOGS.map(c => {
+    const url = quiverBase + c.file;
+    return Object.freeze({ id: catalogId(url), url, name: c.shelf, shelf: c.shelf, builtin: true, quiver: true });
+  });
+  const quiverIds = new Set(QUIVER.map(q => q.id));
+
+  let bundled;
+  function bundledCurated() {
+    if (bundled === undefined) {
+      try { bundled = curatedFile ? parseCatalog(fs.readFileSync(curatedFile, 'utf8')) : null; }
+      catch (e) { log(`[catalogs] bundled curated ports unreadable (${e.message})`); bundled = null; }
+    }
+    return bundled;
+  }
+
+  // Library ids from a Quiver catalog, as repo keys, while the full catalog is off
+  function heldRepos(id) {
+    const prefix = `quiver:${id}:`;
+    return new Set([...libraryIds()].filter(x => x.startsWith(prefix)).map(x => x.slice(prefix.length)));
+  }
+  const builtins = () => {
+    const full = fullQuiver(settings);
+    return [...(CURATED ? [CURATED] : []), ...QUIVER.filter(q => full || heldRepos(q.id).size)];
+  };
+  // The user's own subscriptions: Quiver's four are built in, whatever settings.catalogs says
+  const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : [])
+    .filter(c => c && !quiverIds.has(c.id) && c.id !== CURATED_ID);
 
   // Repositories the port shelves list
   function listedRepos() {
-    return new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
+    return new Set([...builtins(), ...subscriptions()].flatMap(sub => entries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
   }
+  const curatedRepos = () => new Set(CURATED ? entries(CURATED_ID).map(e => repoKey(e.repository)).filter(Boolean) : []);
 
   // The user's repos no port shelf lists, as catalog entries: the "Your
   // ports" shelf. Empty while additional sources are off.
@@ -142,8 +195,8 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     }));
   }
 
-  // Subscriptions, and "Your ports" while it has anything on it
-  const shelves = () => [...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
+  // Curated first, then Quiver's (while shown), subscriptions, and "Your ports" while it has anything on it
+  const shelves = () => [...builtins(), ...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
   function describe(sub) {
@@ -151,9 +204,11 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
-      entries:   cache ? cache.entries.length : 0,
+      entries:   entries(sub.id).length,
       fetchedAt: cache?.fetchedAt ?? null,
       error:     cache?.error ?? null,
+      // the curated shelf before any fetch has succeeded: the copy bundled with the app
+      ...(sub.id === CURATED_ID && !cache?.fetchedAt ? { bundled: true } : {}),
     };
   }
 
@@ -176,8 +231,16 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     }
     writeJson(file(id, 'cache'), entries
       ? { fetchedAt: Date.now(), entries, error: null }
-      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], error });
+      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? cachedEntries(id), error });
+    // A built-in shelf's first copy counts as reviewed, as a subscription's does
+    if (sub.builtin && !fs.existsSync(file(id, 'seen'))) writeJson(file(id, 'seen'), cachedEntries(id));
     return describe(sub);
+  }
+
+  // Fetches the built-in shelves that have never been fetched: a first run,
+  // or the full Quiver catalog just turned on
+  async function warm() {
+    await Promise.all(builtins().filter(b => !fs.existsSync(file(b.id, 'cache'))).map(b => refresh(b.id)));
   }
 
   // Adds a subscription (idempotent per URL) and fetches it. The first copy
@@ -198,18 +261,27 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
   }
 
   function unsubscribe(id) {
-    if (!find(id) || id === LOCAL.id) return false;
+    if (!find(id) || id === LOCAL.id || find(id).builtin) return false;
     settings.save({ catalogs: subscriptions().filter(c => c.id !== id) });
     for (const kind of ['cache', 'seen']) fs.rmSync(file(id, kind), { force: true });
     return true;
   }
 
-  const cachedEntries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
-  const entries = (id) => (id === LOCAL.id ? localEntries() : cachedEntries(id));
+  // The curated shelf falls back to the bundled copy until a fetch has succeeded
+  const cachedEntries = (id) => readJson(file(id, 'cache'), null)?.entries
+    ?? (id === CURATED_ID ? bundledCurated() : null) ?? [];
+  function entries(id) {
+    if (id === LOCAL.id) return localEntries();
+    if (quiverIds.has(id) && !fullQuiver(settings)) {
+      const held = heldRepos(id);
+      return cachedEntries(id).filter(e => held.has(entryKey(e)));
+    }
+    return cachedEntries(id);
+  }
 
   function review(id) {
     if (!find(id)) return null;
-    if (id === LOCAL.id) return { new: [], changed: [], removed: [] };
+    if (id === LOCAL.id || !fs.existsSync(file(id, 'seen'))) return { new: [], changed: [], removed: [] };
     return diffEntries(readJson(file(id, 'seen'), []), entries(id));
   }
 
@@ -222,9 +294,11 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
 
   // Normalized items for every subscribed catalog
   function items() {
+    const curated = curatedRepos();
     return shelves().flatMap(sub => entries(sub.id).map(e => ({
       // not reviewed by us: a "Your ports" entry
       userSource:  !!sub.local,
+      curated:     curated.has(repoKey(e.repository)),
       id:          `quiver:${sub.id}:${entryKey(e)}`,
       title:       e.name || e.repository,
       source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
@@ -237,8 +311,10 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     })));
   }
 
-  return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
-    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional };
+  return { list, get, subscribe, unsubscribe, refresh, warm, entries, review, markSeen, items,
+    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional,
+    fullQuiver: () => fullQuiver(settings) };
 }
 
-module.exports = { createCatalogs, parseCatalog, diffEntries, catalogId, entryKey };
+module.exports = { createCatalogs, parseCatalog, diffEntries, catalogId, entryKey,
+  CURATED_ID, CURATED_PORTS_URL, QUIVER_BASE, QUIVER_CATALOGS };

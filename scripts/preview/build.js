@@ -37,17 +37,6 @@ function parseArgs(argv) {
   return out;
 }
 
-// The Quiver lists new/app.js subscribes to on a first run, read from it so
-// the two can't drift
-function quiverLists() {
-  const src  = fs.readFileSync(path.join(FRONTEND, 'new', 'app.js'), 'utf8');
-  const base = /const QUIVER_BASE = '([^']+)'/.exec(src)?.[1];
-  const block = /const QUIVER_CATALOGS = \[([\s\S]*?)\];/.exec(src)?.[1] || '';
-  const lists = [...block.matchAll(/shelf:\s*'([^']+)',\s*file:\s*'([^']+)'/g)].map(m => ({ shelf: m[1], file: m[2] }));
-  if (!base || !lists.length) throw new Error('QUIVER_BASE / QUIVER_CATALOGS not found in src/frontend/new/app.js');
-  return { base, lists };
-}
-
 // The request as preview.js keys it: path under /v1, sorted query, no token
 // or refresh
 function key(p, query = {}) {
@@ -67,7 +56,7 @@ async function startBackend({ fixtures }, dataDir) {
   const args = ['--data-dir', dataDir, '--heroes-dir', path.join(ROOT, 'assets', 'heroes')];
   if (!fixtures) {
     const backend = await run(args, {}, () => {});
-    return { backend, catalogUrl: (base, file) => base + file, close: backend.stop };
+    return { backend, close: backend.stop };
   }
   const { startFixtures } = require('../../e2e/fixture-server');
   const f = await startFixtures();
@@ -77,8 +66,11 @@ async function startBackend({ fixtures }, dataDir) {
     '--uploaders-url', `${f.base}/uploaders.json`,
     '--github-api', f.base,
     '--featured-url', `${f.base}/featured.json`,
+    // Not in the fixtures, so the curated shelf is the bundled copy, as on an offline first run
+    '--curated-ports-url', `${f.base}/catalog/curated-ports.json`,
+    '--quiver-base', `${f.base}/quiver/`,
   ], {}, () => {});
-  return { backend, catalogUrl: (_, file) => `${f.base}/quiver/${file}`, close: async () => { await backend.stop(); await f.close(); } };
+  return { backend, close: async () => { await backend.stop(); await f.close(); } };
 }
 
 // A made-up library for the fixtures preview: two wall games installed (one
@@ -101,8 +93,10 @@ function seedLibrary(backend, wallItems) {
   if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
 }
 
-// What the UIs load that depends on Allow additional sources
+// What the UIs load that depends on Allow additional sources, and on Show
+// the full Quiver catalog
 const ADDITIONAL_PREFIX = 'ON ';
+const QUIVER_PREFIX = 'QUIVER ';
 
 async function build(opts) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-preview-'));
@@ -113,7 +107,7 @@ async function build(opts) {
     settings = { userSourcesFile: userFile };
   }
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings));
-  const { backend, catalogUrl, close } = await startBackend(opts, dataDir);
+  const { backend, close } = await startBackend(opts, dataDir);
 
   fs.rmSync(opts.out, { recursive: true, force: true });
   fs.cpSync(FRONTEND, opts.out, { recursive: true });
@@ -135,11 +129,8 @@ async function build(opts) {
   }
 
   try {
-    const { base, lists } = quiverLists();
-    for (const c of lists) {
-      try { await backend.backend.catalogs.subscribe({ url: catalogUrl(base, c.file), name: c.shelf, shelf: c.shelf }); }
-      catch (e) { console.warn(`catalog ${c.shelf}: ${e.message}`); }
-    }
+    // The curated shelf, fetched as the app does on a first run
+    await backend.backend.catalogs.warm();
 
     const health = await save('/health');
     await save('/settings');
@@ -166,6 +157,12 @@ async function build(opts) {
     };
     const catalogs = await shelves('');
 
+    // The same with the full Quiver catalog shown, for the Settings switch
+    backend.backend.settings.save({ showFullQuiver: true });
+    await backend.backend.catalogs.warm();
+    const quiver = await shelves(QUIVER_PREFIX);
+    backend.backend.settings.save({ showFullQuiver: false });
+
     // The same with additional sources on (user.json), for the toggle
     let more = [];
     if (opts.fixtures) {
@@ -173,6 +170,9 @@ async function build(opts) {
       more = (await save('/items', { shelf: 'wall' }, { prefix: ADDITIONAL_PREFIX }))?.items || [];
       await save('/user-sources', {}, { prefix: ADDITIONAL_PREFIX });
       await shelves(ADDITIONAL_PREFIX);
+      backend.backend.settings.save({ showFullQuiver: true });
+      await shelves(ADDITIONAL_PREFIX + QUIVER_PREFIX);
+      backend.backend.settings.save({ showFullQuiver: false });
     }
 
     // Covers and file lists: each version of each wall item
@@ -192,6 +192,7 @@ async function build(opts) {
       repo: process.env.GITHUB_REPOSITORY || '',
       items: wall?.items?.length || 0,
       ports: catalogs.reduce((s, c) => s + (c.entries || 0), 0),
+      quiverPorts: quiver.reduce((s, c) => s + (c.entries || 0), 0),
       sourceErrors: wall?.errors?.length || 0,
       // preview.js reads the JSON feeds the app fetches at launch (featured,
       // overrides, announcement) from here when the page is viewed, so edits on
@@ -222,4 +223,4 @@ if (require.main === module) {
   build(parseArgs(process.argv.slice(2))).catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, key, quiverLists, seedLibrary, ADDITIONAL_PREFIX };
+module.exports = { build, key, seedLibrary, ADDITIONAL_PREFIX, QUIVER_PREFIX };

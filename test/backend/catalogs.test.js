@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { createCatalogs, parseCatalog, diffEntries, entryKey } = require('../../src/backend/catalogs');
+const { createCatalogs, parseCatalog, diffEntries, entryKey, catalogId } = require('../../src/backend/catalogs');
 const { createSettings } = require('../../src/backend/settings');
 const { fakeArchive, tmpDir } = require('./helpers');
 
@@ -158,4 +158,94 @@ test('a repos list from before collisions were parked carries over once, repo fi
   assert.match(logs[0], /carried 1 repo/);
   catalogs.removeRepo('me/port');
   assert.deepEqual(catalogs.localRepos(), [], 'not carried over again');
+});
+
+// The curated shelf and Quiver's four on a fake GitHub: curated.json on main,
+// the bundled copy on disk, Quiver's lists under /quiver/
+async function builtins(t, { bundledApps = [{ name: 'Bundled', repository: 'a/bundled', tags: ['source only'] }] } = {}) {
+  const ctx = await setup(t);
+  const curated = { apps: [{ name: 'Banjo Recomp', repository: 'BanjoRecomp/BanjoRecomp' }, { name: 'Zelda', repository: 'z/zelda' }] };
+  ctx.fake.routes['/curated.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(curated)); };
+  ctx.fake.routes['/quiver/Nintendo.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(ctx.catalog)); };
+  const curatedFile = path.join(ctx.dir, 'bundled-curated.json');
+  fs.writeFileSync(curatedFile, JSON.stringify({ apps: bundledApps }));
+  const library = new Set();
+  const make = () => createCatalogs({
+    dir: path.join(ctx.dir, 'catalogs'), settings: ctx.settings,
+    curatedUrl: `${ctx.fake.base}/curated.json`, curatedFile, quiverBase: `${ctx.fake.base}/quiver/`, libraryIds: () => library,
+  });
+  return { ...ctx, curated, curatedFile, library, make, catalogs: make() };
+}
+
+test('curated: the first shelf, from the bundled copy until a fetch lands, then cached', async (t) => {
+  const { catalogs, fake, curated } = await builtins(t);
+  const first = catalogs.list();
+  assert.deepEqual(first.map(c => [c.id, c.shelf, c.entries, c.builtin]), [['curated', 'Curated', 1, true]]);
+  assert.deepEqual(catalogs.items().map(i => [i.title, i.curated]), [['Bundled', true]]);
+  assert.equal(catalogs.unsubscribe('curated'), false, 'built in');
+
+  assert.equal(first[0].bundled, true);
+  await catalogs.warm();
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Zelda']);
+  assert.equal(catalogs.list()[0].bundled, undefined, 'a fetched copy');
+  assert.deepEqual(catalogs.review('curated'), { new: [], changed: [], removed: [] }, 'the first copy counts as reviewed');
+
+  curated.apps.push({ name: 'New', repository: 'n/new' });
+  let fetches = 0;
+  const route = fake.routes['/curated.json'];
+  fake.routes['/curated.json'] = (req, res) => { fetches++; route(req, res); };
+  await catalogs.warm();
+  assert.equal(fetches, 0, 'warm only fetches shelves never fetched');
+  await catalogs.refresh('curated');
+  assert.deepEqual(catalogs.review('curated').new.map(e => e.name), ['New']);
+
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(503); res.end(); };
+  const failed = await catalogs.refresh('curated');
+  assert.deepEqual([failed.entries, failed.error], [3, 'HTTP 503'], 'a failed fetch keeps the cached copy');
+});
+
+test('curated: offline on a first run, the bundled copy stands and is cached with the error', async (t) => {
+  const { catalogs, fake } = await builtins(t);
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(404); res.end(); };
+  await catalogs.warm();
+  const [shelf] = catalogs.list();
+  assert.deepEqual([shelf.entries, shelf.error, shelf.bundled], [1, 'HTTP 404', true]);
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Bundled']);
+});
+
+test('curated: an unreadable bundled copy is an empty shelf, logged', async (t) => {
+  const { dir, settings } = await setup(t);
+  const logs = [];
+  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, curatedUrl: 'http://127.0.0.1:1/c.json', curatedFile: path.join(dir, 'missing.json'), log: m => logs.push(m) });
+  assert.equal(catalogs.list()[0].entries, 0);
+  assert.match(logs[0], /bundled curated ports unreadable/);
+});
+
+test('full Quiver catalog: off by default, built in when on, and a held port stays while off', async (t) => {
+  const { catalogs, settings, fake, library } = await builtins(t);
+  const nintendoId = catalogId(`${fake.base}/quiver/Nintendo.json`);
+  // An install from before: Quiver's lists subscribed in settings
+  settings.save({ catalogs: [{ id: nintendoId, url: `${fake.base}/quiver/Nintendo.json`, name: 'Nintendo', shelf: 'Nintendo' }] });
+  assert.deepEqual(catalogs.list().map(c => c.id), ['curated'], 'hidden while the setting is off');
+  assert.equal(catalogs.fullQuiver(), false);
+
+  settings.save({ showFullQuiver: true });
+  assert.deepEqual(catalogs.list().map(c => c.shelf), ['Curated', 'Nintendo', 'PlayStation', 'Xbox', 'Other']);
+  await catalogs.warm();
+  const items = catalogs.items();
+  assert.deepEqual(items.filter(i => i.shelf === 'Nintendo').map(i => [i.title, i.curated]),
+    [['Banjo Recomp', true], ['Ship of Harkinian', false]], 'curated means the curated list has the repo, whatever the shelf');
+  assert.equal(catalogs.list().find(c => c.shelf === 'Xbox').error, 'HTTP 404');
+  assert.equal(catalogs.unsubscribe(nintendoId), false, 'built in');
+
+  settings.save({ showFullQuiver: false });
+  library.add(`quiver:${nintendoId}:harbourmasters/shipwright`);
+  assert.deepEqual(catalogs.list().map(c => [c.shelf, c.entries]), [['Curated', 2], ['Nintendo', 1]]);
+  assert.deepEqual(catalogs.items().filter(i => i.shelf === 'Nintendo').map(i => i.title), ['Ship of Harkinian']);
+});
+
+test('a subscription that is not one of Quiver\'s four shows whatever the setting', async (t) => {
+  const { catalogs, fake } = await builtins(t);
+  await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Mine' });
+  assert.deepEqual(catalogs.list().map(c => c.shelf), ['Curated', 'Mine']);
 });

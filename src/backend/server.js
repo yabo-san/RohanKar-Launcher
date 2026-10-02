@@ -151,7 +151,7 @@ function createApi(backend) {
     return c;
   };
 
-  route('GET', '/catalogs', () => ({ body: { catalogs: catalogs.list() } }));
+  route('GET', '/catalogs', async () => { await catalogs.warm(); return { body: { catalogs: catalogs.list() } }; });
   route('POST', '/catalogs', async ({ body }) => {
     const { url, name, shelf } = requireObject(body);
     const r = await catalogs.subscribe({ url: requireString(url, 'url'), name, shelf });
@@ -383,8 +383,8 @@ function createApi(backend) {
   route('GET', '/settings', () => ({ body: settings.load() }));
   route('PUT', '/settings', ({ body }) => {
     const s = requireObject(body);
-    if ('allowAdditionalSources' in s && typeof s.allowAdditionalSources !== 'boolean') {
-      throw new HttpError(400, 'bad_request', 'allowAdditionalSources must be true or false');
+    for (const k of ['allowAdditionalSources', 'showFullQuiver']) {
+      if (k in s && typeof s[k] !== 'boolean') throw new HttpError(400, 'bad_request', `${k} must be true or false`);
     }
     if ('userSourcesFile' in s && s.userSourcesFile !== null) {
       const f = s.userSourcesFile;

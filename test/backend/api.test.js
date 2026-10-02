@@ -281,12 +281,27 @@ test('installs: start, progress over SSE, get, list, cancel, errors', async (t) 
   assert.equal((await call('DELETE', '/installs/nope')).status, 404);
 });
 
+test('GET /catalogs: the curated shelf first, fetched on the first call, its items marked curated', async (t) => {
+  const state = { routes: {
+    '/curated-ports.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify({ apps: [{ name: 'Zelda', repository: 'z/zelda' }] })); },
+  } };
+  const { call, backend } = await testApi(t, { state, curated: true });
+  const [shelf] = (await call('GET', '/catalogs')).body.catalogs;
+  assert.deepEqual([shelf.id, shelf.shelf, shelf.entries, shelf.error], ['curated', 'Curated', 1, null]);
+  const { items } = (await call('GET', '/catalogs/curated/items')).body;
+  assert.deepEqual(items.map(i => [i.title, i.curated, i.userSource]), [['Zelda', true, false]]);
+  assert.equal((await call('DELETE', '/catalogs/curated')).status, 204);
+  assert.equal(backend.catalogs.list()[0].id, 'curated', 'a built-in shelf stays');
+});
+
 test('settings and Playnite export', async (t) => {
   const { call, backend } = await testApi(t);
   assert.deepEqual((await call('GET', '/settings')).body, {});
   assert.deepEqual((await call('PUT', '/settings', { betaUpdates: true })).body, { betaUpdates: true });
   assert.deepEqual((await call('PUT', '/settings', { checkForUpdates: false })).body, { betaUpdates: true, checkForUpdates: false });
   assert.equal((await call('PUT', '/settings', [1])).status, 400);
+  assert.equal((await call('PUT', '/settings', { showFullQuiver: 'yes' })).status, 400);
+  assert.equal((await call('PUT', '/settings', { showFullQuiver: true })).body.showFullQuiver, true);
 
   backend.library.add('solo');
   const r = await call('POST', '/export/playnite', {});

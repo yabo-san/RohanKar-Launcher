@@ -1,0 +1,14 @@
+{
+  "name": "y4bo curated ports",
+  "description": "Fixture: the curated shelf, one port Quiver's Nintendo list also has",
+  "version": 1,
+  "apps": [
+    {
+      "name": "Banjo-Kazooie",
+      "project": "Banjo: Recompiled",
+      "repository": "BanjoRecomp/BanjoRecomp",
+      "folderName": "BanjoKazooie-BanjoRecompiled",
+      "tags": ["recomp", "n64", "recomp port", "curated"]
+    }
+  ]
+}
