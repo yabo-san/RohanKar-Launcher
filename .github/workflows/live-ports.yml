@@ -38,8 +38,10 @@ on:
 permissions:
   contents: read
 
+# Job names must not clash with ci.yml's required `check` and `build`
 jobs:
-  check:
+  live-check:
+    name: live ports (first 4 KB)
     if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'check' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -57,7 +59,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/live-port.js $REPOS --summary "$GITHUB_STEP_SUMMARY"
 
-  install:
+  live-install:
+    name: live ports (full installs)
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'install' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
