@@ -188,25 +188,10 @@ const api = (() => {
       return r.ok ? { ok: true, files: r.body.files, folders: r.body.folders || [] } : { ...failure(r), files: [], folders: [] };
     },
 
-    // Collisions (docs/COLLISIONS.md): a port's GitHub release bound to archive.org data
-    getCollision: async (repo) => { const r = await call('GET', `/collisions/${enc(repo)}`); return r.ok ? r.body : null; },
-    saveCollision: async (repo, entry) => { const r = await call('PUT', `/collisions/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
-    deleteCollision: async (repo) => { const r = await call('DELETE', `/collisions/${enc(repo)}`); return r.ok || r.status === 404 ? { ok: true } : failure(r); },
-    exportCollisions: async () => (await call('GET', '/collisions/export')).body,
-    previewCollision: async (sources) => { const r = await call('POST', '/collisions/preview', { sources }); return r.ok ? r.body.sources : null; },
-    getCollisionFeeds: async () => (await call('GET', '/collision-feeds')).body?.feeds || [],
-
-    // Admin mode (docs/ADMIN.md): the curated collisions, edited in place
-    getCuratedCollisions: async () => { const r = await call('GET', '/admin/collisions'); return r.ok ? r.body : null; },
-    saveCuratedCollision: async (repo, entry) => { const r = await call('PUT', `/admin/collisions/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
-    deleteCuratedCollision: async (repo) => { const r = await call('DELETE', `/admin/collisions/${enc(repo)}`); return r.ok ? { ok: true } : failure(r); },
-    getReleases: async (repo, pattern) => { const r = await call('GET', `/admin/releases/${enc(repo)}`, undefined, pattern ? { pattern } : undefined); return r.ok ? { ok: true, ...r.body } : failure(r); },
-    searchArchive: async (q) => { const r = await call('GET', '/admin/ia-search', undefined, { q }); return r.ok ? { ok: true, items: r.body.items } : { ...failure(r), items: [] }; },
-    addCollisionFeed: async ({ url, name }) => { const r = await call('POST', '/collision-feeds', { url, name }); return r.ok ? { ok: true, feed: r.body } : failure(r); },
-    refreshCollisionFeed: async (id) => (await call('POST', `/collision-feeds/${enc(id)}/refresh`)).body,
-    removeCollisionFeed: (id) => call('DELETE', `/collision-feeds/${enc(id)}`),
-    importFeed: async (text) => { const r = await call('POST', '/feed/import', { text }); return r.ok ? { ok: true, ...r.body } : failure(r); },
-    trustUploader: async ({ uploader, label }) => { const r = await call('POST', '/sources/trust', { uploader, label }); return r.ok ? { ok: true, sources: r.body.sources } : failure(r); },
+    // Your repos: GitHub repos the user adds on their own ("Your ports")
+    getRepos: async () => (await call('GET', '/repos')).body?.repos || [],
+    saveRepo: async (repo, entry) => { const r = await call('PUT', `/repos/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
+    removeRepo: (repo) => call('DELETE', `/repos/${enc(repo)}`),
 
     // Catalogs (Quiver lists) and what changed in them
     getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],
