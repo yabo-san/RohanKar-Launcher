@@ -14,6 +14,7 @@ const state = {
   query: '',
   settings: {},
   sources: [],
+  curatedSources: [],   // GET /sources defaults: the curated uploaders
   library: {},          // archive.org installs from library.db, keyed by identifier
   versions: [],         // every archive.org item from every enabled uploader
   games: [],            // one entry per title, with _versions
@@ -1047,7 +1048,7 @@ function viewSettings() {
   return `<div class="form">
     <div class="field"><label for="setting-sources">Uploaders</label>
       <div class="hint">One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.
-        Uploaders that aren't on our curated list load only while additional sources are allowed.</div>
+        Uploaders that aren't on our curated list load only while additional sources are allowed, and adding one asks first.</div>
       <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources))}</textarea></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
@@ -1853,6 +1854,13 @@ document.addEventListener('touchmove', userScroll, { capture: true, passive: tru
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
   if (!sources.length) return toast('Add at least one uploader.');
+  // Asks first whenever the list gains an uploader we don't list
+  const added = newUncurated(sources, state.sources, state.curatedSources);
+  if (added.length && !(await modal({
+    title: added.length === 1 ? 'An uploader we don\'t list' : 'Uploaders we don\'t list',
+    body: uncuratedWarning(added, state.settings.allowAdditionalSources),
+    primary: 'I understand',
+  }))) return;
   const patch = { sources, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
   await api.saveSettings(patch);
   const changed = formatSources(sources) !== formatSources(state.sources);
@@ -2181,7 +2189,7 @@ applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
   document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
-  state.sources = (await api.getSources()).sources;
+  ({ sources: state.sources, defaults: state.curatedSources } = await api.getSources());
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
