@@ -43,9 +43,7 @@
 
   async function saved(k) {
     const { responses } = await loadManifest();
-    const { allowAdditionalSources: on, showFullQuiver: full } = state.settings;
-    const entry = (on && full && responses[`ON QUIVER ${k}`]) || (on && responses[`ON ${k}`])
-      || (full && responses[`QUIVER ${k}`]) || responses[k];
+    const entry = (state.settings.allowAdditionalSources && responses[`ON ${k}`]) || responses[k];
     if (!entry) return null;
     const res = await realFetch(DATA + entry.file);
     return new Response(await res.blob(), { status: entry.status, headers: { 'Content-Type': entry.type } });

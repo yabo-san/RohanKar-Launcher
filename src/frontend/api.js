@@ -170,12 +170,6 @@ const api = (() => {
       return r.ok ? { ok: true } : failure(r);
     },
 
-    // A Quiver folder (apps.json + Apps/): the plan, or with apply the import
-    importQuiver: async ({ dir, apply = false }) => {
-      const r = await call('POST', '/library/import/quiver', { dir, apply });
-      return r.ok ? { ok: true, ...r.body } : failure(r);
-    },
-
     // Library rows for items that aren't installed (catalog ports)
     addToLibrary:      ({ id, source }) => call('POST', '/library', { id, source }),
     removeFromLibrary: async ({ id }) => {
@@ -193,12 +187,8 @@ const api = (() => {
     saveRepo: async (repo, entry) => { const r = await call('PUT', `/repos/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
     removeRepo: (repo) => call('DELETE', `/repos/${enc(repo)}`),
 
-    // Catalogs (Quiver lists) and what changed in them
+    // The port shelves (the curated catalog, Your ports) and what changed in them
     getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],
-    subscribeCatalog: async ({ url, name, shelf }) => {
-      const r = await call('POST', '/catalogs', { url, name, shelf });
-      return r.ok ? r.body : null;
-    },
     refreshCatalog:  async (id) => (await call('POST', `/catalogs/${enc(id)}/refresh`)).body,
     getCatalogItems: async (id) => (await call('GET', `/catalogs/${enc(id)}/items`)).body?.items || [],
     reviewCatalog:   async (id) => (await call('GET', `/catalogs/${enc(id)}/review`)).body || { new: [], changed: [], removed: [] },

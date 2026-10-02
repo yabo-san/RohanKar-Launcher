@@ -4,15 +4,15 @@
  *
  *   node scripts/preview/build.js [--out preview-site] [--fixtures]
  *
- * Starts the standalone backend, subscribes it to the same Quiver lists the
- * new UI subscribes to on a first run, and saves every GET the UIs make at
+ * Starts the standalone backend, fetches the curated port shelf as the app
+ * does on a first run, and saves every GET the UIs make at
  * start (items, covers, catalogs, library, settings...) under
  * <out>/preview-data/, with manifest.json mapping each request to its file.
  * src/frontend is copied next to it, and both pages load preview.js before
  * api.js: it answers the API from those files, so no backend is needed.
  *
- * By default the backend reads the live sources (archive.org, the Quiver
- * lists, the catalogs on main), as the app does. --fixtures uses the e2e
+ * By default the backend reads the live sources (archive.org, the catalogs
+ * on main), as the app does. --fixtures uses the e2e
  * fixtures instead (no network), and gives the preview a small made-up
  * library (seedLibrary) so the Library page has something on it, and
  * e2e/fixtures/user.json as the user's own sources: what the UIs load is
@@ -68,7 +68,6 @@ async function startBackend({ fixtures }, dataDir) {
     '--featured-url', `${f.base}/featured.json`,
     // Not in the fixtures, so the curated shelf is the bundled copy, as on an offline first run
     '--curated-ports-url', `${f.base}/catalog/curated-ports.json`,
-    '--quiver-base', `${f.base}/quiver/`,
   ], {}, () => {});
   return { backend, close: async () => { await backend.stop(); await f.close(); } };
 }
@@ -93,10 +92,8 @@ function seedLibrary(backend, wallItems) {
   if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
 }
 
-// What the UIs load that depends on Allow additional sources, and on Show
-// the full Quiver catalog
+// What the UIs load that depends on Allow additional sources
 const ADDITIONAL_PREFIX = 'ON ';
-const QUIVER_PREFIX = 'QUIVER ';
 
 async function build(opts) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-preview-'));
@@ -157,12 +154,6 @@ async function build(opts) {
     };
     const catalogs = await shelves('');
 
-    // The same with the full Quiver catalog shown, for the Settings switch
-    backend.backend.settings.save({ showFullQuiver: true });
-    await backend.backend.catalogs.warm();
-    const quiver = await shelves(QUIVER_PREFIX);
-    backend.backend.settings.save({ showFullQuiver: false });
-
     // The same with additional sources on (user.json), for the toggle
     let more = [];
     if (opts.fixtures) {
@@ -170,9 +161,6 @@ async function build(opts) {
       more = (await save('/items', { shelf: 'wall' }, { prefix: ADDITIONAL_PREFIX }))?.items || [];
       await save('/user-sources', {}, { prefix: ADDITIONAL_PREFIX });
       await shelves(ADDITIONAL_PREFIX);
-      backend.backend.settings.save({ showFullQuiver: true });
-      await shelves(ADDITIONAL_PREFIX + QUIVER_PREFIX);
-      backend.backend.settings.save({ showFullQuiver: false });
     }
 
     // Covers and file lists: each version of each wall item
@@ -192,7 +180,6 @@ async function build(opts) {
       repo: process.env.GITHUB_REPOSITORY || '',
       items: wall?.items?.length || 0,
       ports: catalogs.reduce((s, c) => s + (c.entries || 0), 0),
-      quiverPorts: quiver.reduce((s, c) => s + (c.entries || 0), 0),
       sourceErrors: wall?.errors?.length || 0,
       // preview.js reads the JSON feeds the app fetches at launch (featured,
       // overrides, announcement) from here when the page is viewed, so edits on
@@ -223,4 +210,4 @@ if (require.main === module) {
   build(parseArgs(process.argv.slice(2))).catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, key, seedLibrary, ADDITIONAL_PREFIX, QUIVER_PREFIX };
+module.exports = { build, key, seedLibrary, ADDITIONAL_PREFIX };

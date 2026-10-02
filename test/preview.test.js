@@ -24,11 +24,10 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
     assert.ok(responses[k], k);
     assert.ok(fs.existsSync(path.join(out, 'preview-data', responses[k].file)), k);
   }
-  // The curated shelf by default; Quiver's four saved again for the Settings switch
+  // The curated shelf, and nothing else
   const shelvesOf = (k) => JSON.parse(fs.readFileSync(path.join(out, 'preview-data', responses[k].file), 'utf8')).catalogs.map(c => c.shelf);
   assert.deepEqual(shelvesOf('GET /catalogs'), ['Curated']);
-  assert.deepEqual(shelvesOf('QUIVER GET /catalogs'), ['Curated', 'Nintendo', 'PlayStation', 'Xbox', 'Other']);
-  assert.ok(shelvesOf('ON QUIVER GET /catalogs').includes('Nintendo'));
+  assert.equal(Object.keys(responses).some(k => k.startsWith('QUIVER ')), false);
   assert.ok(Object.keys(responses).some(k => /^GET \/items\/[^/]+\/cover$/.test(k)));
 
   // Saved again with Allow additional sources on: user.json's entries, badged

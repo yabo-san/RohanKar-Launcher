@@ -1,7 +1,7 @@
 # User-added sources
 
 The launcher's default is the curated list only: the archive.org uploaders in
-`catalog/uploaders.json`, plus the Quiver community catalogs as port shelves. Anything else is an **additional source**, and needs Settings >
+`catalog/uploaders.json`, plus the curated port shelf (`catalog/curated-ports.json`). Anything else is an **additional source**, and needs Settings >
 **Allow additional sources**, which is off by default.
 
 Turning it on shows a warning every time it goes from off to on:
@@ -19,7 +19,7 @@ confirmation: everything from additional sources is hidden, and installed files 
 | Source | Where it's added |
 | --- | --- |
 | `user.json` | Settings > Allow additional sources > user.json (a file path) |
-| Your own GitHub repos | Add a GitHub repo, the Quiver import's repos no catalog lists |
+| Your own GitHub repos | Add a GitHub repo |
 | Uploaders not in `catalog/uploaders.json` | Settings > Uploaders |
 
 Every card from one of these carries a **Your source · not reviewed** badge: a wall game whose

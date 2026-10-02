@@ -1,6 +1,6 @@
 {
   "name": "y4bo curated ports",
-  "description": "Fixture: the curated shelf: a port Quiver's Nintendo list also has, a source-only decomp, a work-in-progress recomp, an engine and a GitLab port",
+  "description": "Fixture: the curated shelf, cut from the real list: ports with releases, a source-only decomp, a work-in-progress recomp, an engine and a GitLab port",
   "version": 1,
   "apps": [
     {
@@ -13,6 +13,39 @@
         "n64",
         "recomp port",
         "curated"
+      ],
+      "filesToAdd": [
+        "portable.txt"
+      ]
+    },
+    {
+      "name": "Mario Kart 64",
+      "project": "Mario Kart 64: Recompiled",
+      "repository": "sonicdcer/MarioKart64Recomp",
+      "folderName": "MarioKart64-MarioKart64Recompiled",
+      "tags": [
+        "recomp",
+        "n64"
+      ]
+    },
+    {
+      "name": "AeroGauge",
+      "project": "AeroGauge: Recompiled",
+      "repository": "alondero/aerogauge-recomp",
+      "folderName": "AeroGauge-AeroGaugeRecompiled",
+      "tags": [
+        "recomp",
+        "n64"
+      ]
+    },
+    {
+      "name": "Perfect Dark",
+      "project": "Perfect Dark PC Port",
+      "repository": "perfect-dark-pc-port/perfect_dark",
+      "folderName": "PerfectDark-PerfectDarkPCPort",
+      "tags": [
+        "decomp",
+        "n64"
       ]
     },
     {

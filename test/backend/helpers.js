@@ -137,7 +137,6 @@ async function testBackend(t, { state, curated = false, ...opts } = {}) {
     announcementUrl: `${fake.base}/announcement.json`,
     // No curated shelf unless a test asks for one, so counts stay the fixtures'
     curatedPortsUrl: curated ? `${fake.base}/curated-ports.json` : null,
-    quiverBase: `${fake.base}/quiver/`,
     sleep: async () => {},
     log: () => {},
     ...opts,

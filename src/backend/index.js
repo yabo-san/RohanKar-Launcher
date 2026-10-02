@@ -65,7 +65,6 @@ function createBackend({
   gitlabApi = GITLAB_API,
   featuredUrl = FEATURED_URL,
   curatedPortsUrl = CURATED_PORTS_URL,
-  quiverBase,
   announcementUrl = ANNOUNCEMENT_URL,
   playniteExportDelayMs = 250,
   host = {},
@@ -154,7 +153,7 @@ function createBackend({
   const catalogs = createCatalogs({
     dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
     curatedUrl: curatedPortsUrl, curatedFile: path.join(appDir, 'catalog', 'curated-ports.json'),
-    ...(quiverBase ? { quiverBase } : {}), libraryIds: () => new Set(Object.keys(library.all())),
+    libraryIds: () => new Set(Object.keys(library.all())),
   });
   const items    = createItems({ archive, settings, catalogs, library, getOverrides, userSources, getDefaultSources, emit, log });
 
