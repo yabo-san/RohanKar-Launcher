@@ -1,11 +1,18 @@
 name: Live ports
 
-# A check against the real GitHub and archive.org (scripts/live-port.js), which
-# the fixture tests can only imitate: for a curated port and a curated
-# uploader it finds the file the app would install and downloads only its
-# first 4 KB. Not a required check: a GitHub or archive.org outage can turn it
-# red without anything in this repo being wrong.
+# Checks against the real GitHub, GitLab and archive.org (scripts/live-port.js),
+# which the fixture tests can only imitate. Never a required check: a GitHub or
+# archive.org outage can turn it red without anything in this repo being wrong.
+#
+# check (nightly, on PRs that touch the catalogs or the download code, or by
+# hand): every curated port's release asset and one item per turned-on
+# archive.org uploader, downloading only the first 4 KB of each.
+# install (by hand only, before a release): full installs of the brief's
+# Acceptance ports with the app's own install engine. No game data.
+# Both write a results table to the job summary.
 on:
+  schedule:
+    - cron: '0 4 * * *'
   pull_request:
     branches: [main]
     paths:
@@ -19,11 +26,13 @@ on:
       - '.github/workflows/live-ports.yml'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'check: first 4 KB of every curated port and uploader. install: full installs of the Acceptance ports'
+        type: choice
+        options: [check, install]
+        default: check
       repos:
-        description: 'Repositories from catalog/curated-ports.json, space separated (default: Perfect Dark)'
-        required: false
-      uploaders:
-        description: 'archive.org uploader emails, space separated (default: the first uploader the app turns on)'
+        description: 'Only these repositories from catalog/curated-ports.json, space separated (default: all for check, the Acceptance ports for install)'
         required: false
 
 permissions:
@@ -31,8 +40,9 @@ permissions:
 
 jobs:
   check:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'check' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,10 +50,25 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Reach GitHub and archive.org, land the first 4 KB of each
+      - name: First 4 KB of every curated port and uploader
         env:
           REPOS: ${{ inputs.repos }}
-          UPLOADERS: ${{ inputs.uploaders }}
           # Only so GitHub's API doesn't rate limit the runner's shared IP
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/live-port.js $REPOS $(for u in $UPLOADERS; do printf -- '--uploader %s ' "$u"; done)
+        run: node scripts/live-port.js $REPOS --summary "$GITHUB_STEP_SUMMARY"
+
+  install:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'install' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install the Acceptance ports for real
+        env:
+          REPOS: ${{ inputs.repos }}
+        run: node scripts/live-port.js --install $REPOS --summary "$GITHUB_STEP_SUMMARY"
