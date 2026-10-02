@@ -539,7 +539,13 @@ function settleRow(row) {
   if (!edges.length) return;
   const max = row.scrollWidth - row.clientWidth;
   const target = Math.min(max, edges.reduce((a, b) => Math.abs(b - row.scrollLeft) < Math.abs(a - row.scrollLeft) ? b : a));
-  row.scrollTo({ left: target, behavior: motionOk() ? 'smooth' : 'auto' });
+  if (!motionOk()) { row.scrollLeft = target; return; }
+  // CSS snapping fights a smooth scroll and can leave it a few pixels short, so it's off until this one ends
+  row.classList.add('settling');
+  const done = () => { row.classList.remove('settling'); row.removeEventListener('scrollend', done); clearTimeout(timer); };
+  const timer = setTimeout(done, 600);
+  row.addEventListener('scrollend', done);
+  row.scrollTo({ left: target, behavior: 'smooth' });
 }
 document.addEventListener('dragstart', (e) => { if (e.target.closest?.('#body .row')) e.preventDefault(); });
 document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('row')) syncRowNav(e.target); }, true);
