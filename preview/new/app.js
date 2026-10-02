@@ -2,7 +2,7 @@
 /**
  * y4bo launcher, new UI (docs/PRODUCT.md, docs/USER-LOOP.md).
  * Draws what the backend's /v1 API serves (through ../api.js): the
- * archive.org game wall from the curated uploaders, Quiver's port shelves,
+ * archive.org game wall from the curated uploaders, the curated port shelf,
  * the library, and the review of what
  * changed. ../sources.js supplies getTitle and the Settings text helpers.
  * The classic UI (../index.html) is one click away in Settings.
@@ -21,8 +21,7 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
-  quiverImport: null,
-  manualForm: null,     // { name, folder } while adding a manual app from the Library   // { plan, busy, result } while importing a Quiver library
+  manualForm: null,     // { name, folder } while adding a manual app from the Library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   libSearch: '',        // the search box in a library header (Cider's library pages)
@@ -95,6 +94,13 @@ function modal({ title, body, primary, secondary = 'Cancel' }) {
 }
 
 // The badge on anything from an additional source
+const CURATED_BADGE = '<span class="curated-badge" title="On the y4bo curated list: made by people, not vibecoded">Curated</span>';
+// A port's state from its tags (core's portTraits), as small badges on cards and details
+const ROLE_LABEL = { engine: 'Engine', launcher: 'Launcher' };
+const portBadges = (p) => (p.curated ? CURATED_BADGE : '')
+  + (p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
+  + (p.workInProgress ? '<span class="state-badge wip" title="Not finished yet; installs if a release exists">Work in progress</span>' : '')
+  + (p.role ? `<span class="state-badge role" title="A plain app: bring your own game data">${ROLE_LABEL[p.role]}</span>` : '');
 const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
 function stripHtml(html) {
@@ -195,22 +201,6 @@ async function loadWall({ refresh = false } = {}) {
 
 // ─── ports and library ───────────────────────────────────────────────────────
 
-// Quiver's four community lists, subscribed on the first run (when settings
-// have no catalogs yet); after that the subscriptions are the user's
-const QUIVER_BASE = 'https://raw.githubusercontent.com/tgeorgiadis/quiver-community-app-catalog/main/community-app-catalog/';
-const QUIVER_CATALOGS = [
-  { shelf: 'Nintendo',    file: 'Nintendo.json' },
-  { shelf: 'PlayStation', file: 'PlayStation.json' },
-  { shelf: 'Xbox',        file: 'Xbox.json' },
-  { shelf: 'Other',       file: 'OtherPlatforms.json' },
-];
-
-async function subscribeDefaultCatalogs() {
-  if (state.settings.catalogs !== undefined) return;
-  // One at a time: each subscription is a settings write
-  for (const c of QUIVER_CATALOGS) await api.subscribeCatalog({ url: QUIVER_BASE + c.file, name: c.shelf, shelf: c.shelf });
-}
-
 // A catalog item from the backend as a port card
 function portFromItem(it, cat) {
   const e = it.entry || {};
@@ -227,13 +217,21 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
+    // the curated list has this repository, whichever shelf lists it
+    curated:            !!it.curated,
+    sourceOnly:         !!it.sourceOnly,
+    workInProgress:     !!it.workInProgress,
+    role:               it.role || null,
+    description:        it.description || '',
+    repositoryUrl:      it.repositoryUrl || null,
+    host:               it.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub',
+    sourceLabel:        cat.curated ? 'y4bo curated list' : cat.shelf,
     catalogUrl:         cat.url,
   };
 }
 
 async function loadPorts(refresh = false) {
   try {
-    await subscribeDefaultCatalogs();
     let catalogs = await api.getCatalogs();
     if (refresh) catalogs = await Promise.all(catalogs.map(c => api.refreshCatalog(c.id)));
     const lists = await Promise.all(catalogs.map(c => api.getCatalogItems(c.id)));
@@ -244,7 +242,7 @@ async function loadPorts(refresh = false) {
         id: c.id, name: c.shelf, url: c.url, preferredTags: [],
         count: mine.length,
         error: c.entries ? null : c.error,
-        fromCache: !!(c.error && c.entries), fetchedAt: c.fetchedAt,
+        fromCache: !!(c.error && c.entries), fetchedAt: c.fetchedAt, bundled: !!c.bundled,
       };
     });
     state.ports = { shelves, items };
@@ -393,10 +391,10 @@ function portCard(p) {
     : `<div class="noart">${esc(p.name)}</div>`;
   return `<button class="card port-card" data-open="port" data-id="${esc(p.id)}" title="${esc(p.name)}">
     <div class="art icon" style="background:${tint(p.repository)}">${art}
-      <span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span><span class="menu-btn" data-card-menu aria-label="More"></span></div>
+      ${p.sourceOnly ? '' : `<span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span>`}<span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${p.userSource ? USER_BADGE : ''}
+    ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.userSource ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -726,7 +724,7 @@ function listRow(kind, x, cols, ctx) {
   const n = x._versions?.length || 1;
   const cell = (c) => {
     if (c.id === 'name') {
-      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
+      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + (port && x.curated ? '<span class="lv-badge curated">Curated</span>' : '') + (port && x.sourceOnly ? '<span class="lv-badge">Source only</span>' : '') + (port && x.workInProgress ? '<span class="lv-badge wip">Work in progress</span>' : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
       return `<span class="lv-td lv-name" role="cell"><span class="lv-title">${esc(title)}</span>${badges}</span>`;
     }
     const text = c.text(x, ctx);
@@ -791,9 +789,10 @@ function viewShelf(id) {
   if (shelf.error) {
     html += `<div class="notice warn"><div class="grow">Couldn't fetch the ${esc(shelf.name)} catalog (${esc(shelf.error)}).</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   } else if (shelf.fromCache) {
-    html += `<div class="notice"><div class="grow">Showing the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
+    const copy = shelf.bundled ? `the ${esc(shelf.name)} catalog that came with the app` : `the cached ${esc(shelf.name)} catalog from ${esc(fmtDate(shelf.fetchedAt))}`;
+    html += `<div class="notice"><div class="grow">Showing ${copy}; GitHub wasn't reachable.</div><button class="md-btn" data-action="refresh-ports">Retry</button></div>`;
   }
-  html += `<div class="lib-count">${list.length} ports · Source: Quiver / ${esc(shelf.name)}</div>`;
+  html += `<div class="lib-count">${list.length} ports · Source: ${esc(all[0]?.sourceLabel || shelf.name)}</div>`;
   return html + (list.length ? libraryBody('shelf', list, { card: portCard, kind: 'port', cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
@@ -990,8 +989,8 @@ function viewSettings() {
       <div class="inline"><input type="text" id="setting-download" value="${esc(s.downloadPath || '')}" placeholder="Default: the install folder">
       <button class="btn" data-action="choose-download">Choose…</button></div></div>
     <div class="field actions"><button class="btn primary" id="btn-save-settings" data-action="save-settings">Save</button></div>
-    <div class="field"><label>Catalogs</label>
-      <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? ' (cached)' : ''}`).join(' · ') : 'Loading…'}
+    <div class="field" id="port-catalogs"><label>Port shelf</label>
+      <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? (sh.bundled ? ' (bundled copy)' : ' (cached)') : ''}`).join(' · ') : 'Loading…'}
 </div>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
     <div class="field" id="additional"><label class="switch-row" for="setting-additional">
@@ -999,62 +998,11 @@ function viewSettings() {
           and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
         <input type="checkbox" class="switch" id="setting-additional" role="switch" ${s.allowAdditionalSources ? 'checked' : ''}></label>
       <div id="additional-body">${additionalHtml()}</div></div>
-    <div class="field" id="quiver-import"><label>Quiver library</label>
-      <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
-      <div class="import-body">${quiverImportHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
       <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
     <div class="field"><div class="hint" id="app-version"></div></div>
   </div>`;
-}
-
-const IMPORT_KIND = { port: 'catalog port', new: 'new on Your ports', manual: 'your folder' };
-
-function quiverImportHtml() {
-  const q = state.quiverImport;
-  if (!q?.plan) return `<button class="btn" data-action="quiver-import-choose"${q?.busy ? ' disabled' : ''}>Import from Quiver…</button>`;
-  const { plan, result } = q;
-  if (result) {
-    const said = [[result.adopted, 'adopted'], [result.added, 'added'], [result.ports, 'new on Your ports'], [result.unchanged, 'already here']]
-      .filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join(', ');
-    const hidden = result.needAdditionalSources
-      ? ` ${result.needAdditionalSources} of your ports come from repos no catalog lists: they show on Your ports once additional sources are allowed.` : '';
-    return `<div class="hint import-done">Imported from ${esc(plan.root)}: ${esc(said || 'nothing to change')}.${esc(hidden)}</div>
-      <button class="btn" data-action="quiver-import-cancel">Done</button>`;
-  }
-  const todo = plan.apps.filter(a => !a.alreadyInstalled && !(a.inLibrary && !a.installed));
-  const rows = plan.apps.map(a => `<li><b>${esc(a.name)}</b>
-    <span>${esc(IMPORT_KIND[a.kind])} · ${a.alreadyInstalled || (a.inLibrary && !a.installed) ? 'already here' : a.installed ? `installed${a.version ? ` ${esc(a.version)}` : ''}` : 'not installed'}</span></li>`).join('');
-  const skipped = plan.skipped.map(x => `<li><b>${esc(x.name)}</b><span>skipped: ${esc(x.reason)}</span></li>`).join('');
-  return `<div class="hint">${plan.apps.length} apps in ${esc(plan.root)}</div>
-    <ul class="import-list">${rows}${skipped}</ul>
-    <div class="inline">
-      <button class="btn primary" data-action="quiver-import-apply"${q.busy || !todo.length ? ' disabled' : ''}>${todo.length ? `Import ${todo.length}` : 'Nothing new'}</button>
-      <button class="btn" data-action="quiver-import-cancel">Cancel</button></div>`;
-}
-
-// render() keeps the settings form as typed, so this redraws only the field
-function renderQuiverImport() {
-  const el = $('#quiver-import .import-body');
-  if (el) el.innerHTML = quiverImportHtml();
-}
-
-async function quiverImport(apply) {
-  const q = state.quiverImport || {};
-  const dir = apply ? q.plan.root : await api.chooseFolder();
-  if (!dir) return;
-  state.quiverImport = { ...q, busy: true };
-  renderQuiverImport();
-  const r = await api.importQuiver({ dir, apply });
-  if (!r.ok) {
-    state.quiverImport = apply ? { ...q, busy: false } : null;
-    renderQuiverImport();
-    return toast(`Couldn't import: ${r.error}`);
-  }
-  state.quiverImport = { plan: r, result: r.result || null, busy: false };
-  if (apply) await loadPorts();
-  renderQuiverImport();
 }
 
 function viewSearch(q) {
@@ -1242,7 +1190,7 @@ function gameDetail(d) {
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
-const PORT_STEPS = { binary: 'the build from GitHub' };
+const PORT_STEPS = { binary: 'the release build' };
 function portActions(p) {
   const dl = state.downloads.get(p.id);
   if (dl) {
@@ -1252,6 +1200,10 @@ function portActions(p) {
   if (state.library[p.id]?.install_dir) {
     return `<button class="btn primary" id="btn-play" data-action="play">Play</button>
       <button class="btn" data-action="open-folder">Open folder</button>`;
+  }
+  if (p.sourceOnly) {
+    return `<span class="source-only-note">Source only, no download</span>
+      <button class="btn primary" data-href="${esc(p.repositoryUrl)}">Open repository</button>`;
   }
   return `<button class="btn primary" id="btn-install-port" data-action="install">Install</button>`;
 }
@@ -1265,25 +1217,27 @@ function portProgress(p) {
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
-  const data = `<b>Binary:</b> GitHub release from ${esc(p.repository)}`;
+  const data = p.sourceOnly ? '<b>Binary:</b> none, the project publishes its source only' : `<b>Binary:</b> ${p.host} release from ${esc(p.repository)}`;
   const icon = p.iconUrl ? `<img src="${esc(p.iconUrl)}" alt="">` : '';
   return `<div class="d-hero"><div class="bg" style="background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}"></div>
       <div class="cover icon" style="background:${tint(p.repository)}">${icon}</div>
       <button class="x" data-close aria-label="Close">&#10005;</button>
-      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}Source: Quiver / ${esc(p.shelfName)}</div></div></div>
+      <div class="titles"><h2>${esc(p.name)}</h2><div class="by">${p.project ? `${esc(p.project)} · ` : ''}Source: ${esc(p.sourceLabel)}</div>
+        ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}</div></div>
     <div class="d-body">
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       <div class="actions">
-        <button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>
+        ${p.sourceOnly && !added ? '' : `<button class="btn ${added ? '' : 'primary'}" data-toggle-port="${esc(p.id)}">${added ? 'Remove from library' : 'Add to library'}</button>`}
         ${portActions(p)}
-        <button class="btn" data-href="https://github.com/${esc(p.repository)}">Repository</button>
+        ${p.sourceOnly ? '' : `<button class="btn" data-href="${esc(p.repositoryUrl)}">Repository</button>`}
       </div>
+      ${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
       ${portProgress(p)}
       ${exePicker(d)}
       <div class="srcline">${data}</div>
       ${p.tags.length ? `<div class="h3">Tags</div><div class="tags">${p.tags.map(t => `<span>${esc(t)}</span>`).join('')}</div>` : ''}
       <dl class="kv">
-        <dt>Repository</dt><dd><a data-href="https://github.com/${esc(p.repository)}">${esc(p.repository)}</a></dd>
+        <dt>Repository</dt><dd><a data-href="${esc(p.repositoryUrl)}">${esc(p.repository)}</a></dd>
         <dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>
         ${p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : ''}
         ${p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : ''}
@@ -1520,7 +1474,7 @@ const itemInstalled = (x, ctx) => (ctx.kind === 'port' ? !!state.library[x.id]?.
 const gameTarget = (g) => installedVersion(g) || g;
 const targetOf = (x, ctx) => (ctx.kind === 'port' ? portTarget(x) : gameTarget(x));
 const idle = (x, ctx) => !itemDl(x, ctx);
-const linkOf = (x, ctx) => (ctx.kind === 'port' ? `https://github.com/${x.repository}` : x._manual ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
+const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : x._manual ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
 
 const ROW_ACTIONS = [
   // play: get it, run it, find it on disk
@@ -1529,12 +1483,12 @@ const ROW_ACTIONS = [
   { id: 'launch', label: 'Launch', icon: 'play', group: 'play', kinds: ['port'],
     when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), run: (p) => launchPort(p) },
   { id: 'install', label: (x, ctx) => (ctx.kind === 'port' ? 'Download' : 'Install'), icon: 'download', group: 'play',
-    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual,
+    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual && !x.sourceOnly,
     run: (x, ctx) => (ctx.kind === 'port' ? installPort(x) : installGame(x)) },
   { id: 'cancel', label: 'Cancel Download', icon: 'close', group: 'play', when: (x, ctx) => !!itemDl(x, ctx),
     run: async (x, ctx) => { const dl = itemDl(x, ctx); if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId }); } },
   { id: 'locate', label: 'Locate Existing Install…', icon: 'folder', group: 'play', kinds: ['port'],
-    when: (p, ctx) => !itemInstalled(p, ctx) && idle(p, ctx), run: (p) => locateInstall(p) },
+    when: (p, ctx) => !itemInstalled(p, ctx) && idle(p, ctx) && !p.sourceOnly, run: (p) => locateInstall(p) },
   { id: 'open-folder', label: 'Open Folder', icon: 'folder', group: 'play',
     when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx), run: (x, ctx) => api.openGameLocation({ identifier: targetOf(x, ctx).identifier }) },
   { id: 'launch-options', label: 'Launch Options', icon: 'settings', group: 'play', kinds: ['port'],
@@ -1555,6 +1509,7 @@ const ROW_ACTIONS = [
       render();
     } },
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
+    when: (p) => !p.sourceOnly || inPortLibrary(p),
     run: (p) => togglePort(p.id) },
   { id: 'details', label: 'Properties', icon: 'info', group: 'manage',
     run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
@@ -1565,7 +1520,7 @@ const ROW_ACTIONS = [
   { id: 'shelf', label: 'Go to Shelf', icon: 'wall', group: 'goto', kinds: ['port'],
     when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
   { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
-    run: (p) => api.openExternal(`https://github.com/${p.repository}`) },
+    run: (p) => api.openExternal(p.repositoryUrl) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
     when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
@@ -1803,9 +1758,6 @@ async function onAction(action, el) {
       await reloadLibrary();
       return render();
     }
-    case 'quiver-import-choose': return quiverImport(false);
-    case 'quiver-import-apply': return quiverImport(true);
-    case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
     case 'legacy-ui':
