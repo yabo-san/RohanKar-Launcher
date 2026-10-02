@@ -1,39 +1,49 @@
 name: Live ports
 
-# A real port install against the real GitHub (scripts/live-port.js), which
-# the fixture tests can only imitate. Not a required check: an upstream
-# release or a GitHub outage can turn it red without anything in this repo
-# being wrong.
+# A check against the real GitHub and archive.org (scripts/live-port.js), which
+# the fixture tests can only imitate: for a curated port and a curated
+# uploader it finds the file the app would install and downloads only its
+# first 4 KB. Not a required check: a GitHub or archive.org outage can turn it
+# red without anything in this repo being wrong.
 on:
   pull_request:
     branches: [main]
     paths:
       - 'catalog/curated-ports.json'
+      - 'catalog/uploaders.json'
       - 'scripts/live-port.js'
+      - 'src/backend/archive.js'
       - 'src/backend/installs.js'
+      - 'src/backend/net.js'
       - 'src/backend/ports.js'
       - '.github/workflows/live-ports.yml'
   workflow_dispatch:
     inputs:
       repos:
-        description: 'Repositories from catalog/curated-ports.json, space separated (default: the script''s list)'
+        description: 'Repositories from catalog/curated-ports.json, space separated (default: Perfect Dark)'
+        required: false
+      uploaders:
+        description: 'archive.org uploader emails, space separated (default: the first uploader the app turns on)'
         required: false
 
 permissions:
   contents: read
 
 jobs:
-  install:
+  check:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
-      - name: Install the ports for real
+      - run: npm ci --ignore-scripts
+      - name: Reach GitHub and archive.org, land the first 4 KB of each
         env:
           REPOS: ${{ inputs.repos }}
-        run: node scripts/live-port.js $REPOS
+          UPLOADERS: ${{ inputs.uploaders }}
+          # Only so GitHub's API doesn't rate limit the runner's shared IP
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/live-port.js $REPOS $(for u in $UPLOADERS; do printf -- '--uploader %s ' "$u"; done)
