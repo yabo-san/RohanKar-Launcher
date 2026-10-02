@@ -4,8 +4,8 @@ name: Release
 # worked out from conventional commit messages (feat:, fix:, feat!: ...).
 # Merging that PR tags the version and opens a draft release; the Windows
 # installer is then built, smoke tested and attached to it, and the release is
-# published as a pre-release. Nobody sees a release without its installer, and
-# a build that fails the smoke test stays a draft.
+# published as the latest release. Nobody sees a release without its installer,
+# and a build that fails the smoke test stays a draft.
 # Last, a PR against gh-pages moves the beta update channel to the new version;
 # stable only moves by a hand-made PR (see README, Releases).
 on:
@@ -101,13 +101,15 @@ jobs:
             dist/latest.yml \
             --clobber
 
-      # Pre-release, never "latest": stable is the gh-pages channel, moved by hand
-      - name: Publish as a pre-release
+      # A full release marked latest, so it tops the Releases page and
+      # /releases/latest. The in-app update channels live on gh-pages and are
+      # moved by PR (beta below, stable by hand), so this offers no update.
+      - name: Publish as the latest release
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
-        run: gh release edit "$TAG" --draft=false --prerelease --latest=false
+        run: gh release edit "$TAG" --draft=false --prerelease=false --latest
 
       - name: Keep latest.yml for the beta channel PR
         uses: actions/upload-artifact@v4
@@ -155,4 +157,4 @@ jobs:
           git push -u origin "$BRANCH"
           gh pr create --base gh-pages --head "$BRANCH" \
             --title "chore: beta channel to $TAG" \
-            --body "Points beta/latest.yml at $TAG, published as a pre-release once its installer passed the smoke test. Merge to offer it to beta users. Stable stays where it is until a promotion PR copies beta/latest.yml to stable/latest.yml."
+            --body "Points beta/latest.yml at $TAG, published as the latest release once its installer passed the smoke test. Merge to offer it to beta users. Stable stays where it is until a promotion PR copies beta/latest.yml to stable/latest.yml."

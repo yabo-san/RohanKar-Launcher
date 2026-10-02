@@ -309,7 +309,7 @@ async function setupAutoUpdater() {
 }  
 
 // The frontend's Install button opens the GitHub release page.
-// Fork releases are GitHub pre-releases, which /releases/latest skips, so link the tag.
+// Link the offered version's tag; /releases/latest may already be a newer build.
 function updaterInstall() {
   const page = availableVersion ? `tag/v${availableVersion}` : 'latest';
   shell.openExternal(`https://github.com/${RELEASES_REPO}/releases/${page}`);

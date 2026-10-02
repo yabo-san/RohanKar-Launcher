@@ -94,14 +94,13 @@ checks for updates against a `latest.yml` on the `gh-pages` branch, served at
 1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
    open on `main`. Merging it tags the version, builds the Windows installer
    onto a draft release, runs the packaged smoke test against it, and
-   publishes the release as a pre-release. It then opens a PR against
+   publishes it as the latest GitHub release. It then opens a PR against
    `gh-pages` that moves `beta/latest.yml` to the new version; merge that beta
    PR. A build that fails the smoke test stays a draft and no beta PR opens.
 2. **Merge a promotion PR.** When a beta has proven itself, open a PR against
-   `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`, and mark
-   that release as the latest one
-   (`gh release edit vX --prerelease=false --latest -R yabo-san/RohanKar-Launcher`)
-   so the README's stable link points at it. Stable never moves automatically.
+   `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`. Stable
+   never moves automatically, even though the newest build is always the
+   latest release on GitHub.
 
 To roll a channel back, revert the `gh-pages` PR that moved it. Installed
 copies stop being offered the bad version on their next check. Copies that
