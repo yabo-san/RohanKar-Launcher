@@ -9,7 +9,10 @@
 // records which section of the doc it sits under, and adds the must-haves from
 // catalog/curated-extras.json. Display metadata (name, folder, icon URL hosted in the port's
 // own repo, release asset filter, tags) comes from catalog/curated-metadata.json, which we own;
-// entries without it get a minimal entry built from the list.
+// entries without it get a minimal entry built from the list. A metadata entry may set only some
+// fields (say, just releaseAssetFilter), and its "section" replaces the section the list files the
+// repository under, e.g. "source only" for a port the list calls a port but that publishes no
+// release.
 //
 //   node scripts/curated-ports.js            fetch the list, write the file
 //   node scripts/curated-ports.js --check    exit 1 if the file on disk is out of date
@@ -86,18 +89,13 @@ async function getText(url) {
   return res.text();
 }
 
-async function main() {
-  const check = process.argv.includes('--check');
-  if (!DOC_URL) throw new Error('CURATED_PORTS_SOURCE_URL is not set');
-  const docRepos = parseDoc(await getText(DOC_URL));
-  if (docRepos.length < 10) throw new Error(`only ${docRepos.length} repositories found in the source list; its layout probably changed`);
-
+// The catalog from the list's repositories (parseDoc), the extras and the metadata (by repository)
+function build(docRepos, extras, metadata) {
   const known = new Map();
-  for (const [repository, m] of Object.entries(JSON.parse(fs.readFileSync(METADATA, 'utf8')).ports || {})) {
+  for (const [repository, m] of Object.entries(metadata || {})) {
     known.set(repoKey(m.repositorySource === 'gitlab' ? 'gitlab' : 'github', repository), { ...m, repository });
   }
 
-  const extras = JSON.parse(fs.readFileSync(EXTRAS, 'utf8')).apps || [];
   // An extra can replace a doc entry, e.g. a fork that ships builds for a source-only decomp:
   //   { "repository": "someone/sm64-builds", "replaces": "n64decomp/sm64", ... }
   const replaced = new Set(extras.filter((x) => x.replaces).map((x) => repoKey(x.replacesSource === 'gitlab' ? 'gitlab' : 'github', x.replaces)));
@@ -114,21 +112,36 @@ async function main() {
     seen.add(key);
     const q = known.get(key);
     const x = w.extra || {};
-    const base = q ? { ...q } : {
-      name: w.docName || w.repository.split('/').pop(),
+    const { section = w.section, ...meta } = q || {};
+    const name = w.docName || w.repository.split('/').pop();
+    // Full metadata as it is; metadata that sets only some fields (no name) on top of the minimal entry
+    const base = q?.name ? meta : {
+      name,
       repository: w.repository,
-      folderName: x.folderName || (w.docName || w.repository.split('/').pop()).replace(/[^A-Za-z0-9]+/g, ''),
+      folderName: x.folderName || name.replace(/[^A-Za-z0-9]+/g, ''),
       ...(x.releaseAssetFilter ? { releaseAssetFilter: x.releaseAssetFilter } : {}),
       ...(x.appIconUrl ? { appIconUrl: x.appIconUrl } : {}),
       tags: [],
+      ...meta,
     };
     if (x.note) base.description = x.note;
     if (w.source === 'gitlab') base.repositorySource = 'gitlab';
-    base.tags = [...new Set([...(base.tags || []), w.section, w.from === 'doc' ? 'curated' : 'owner pick'])];
+    base.tags = [...new Set([...(base.tags || []), section, w.from === 'doc' ? 'curated' : 'owner pick'])];
     delete base.mods;
     apps.push(base);
   }
   apps.sort((a, b) => a.name.localeCompare(b.name));
+  const withMeta = apps.filter((a) => known.has(repoKey(a.repositorySource === 'gitlab' ? 'gitlab' : 'github', a.repository))).length;
+  return { apps, withMeta };
+}
+
+async function main() {
+  const check = process.argv.includes('--check');
+  if (!DOC_URL) throw new Error('CURATED_PORTS_SOURCE_URL is not set');
+  const docRepos = parseDoc(await getText(DOC_URL));
+  if (docRepos.length < 10) throw new Error(`only ${docRepos.length} repositories found in the source list; its layout probably changed`);
+  const extras = JSON.parse(fs.readFileSync(EXTRAS, 'utf8')).apps || [];
+  const { apps, withMeta } = build(docRepos, extras, JSON.parse(fs.readFileSync(METADATA, 'utf8')).ports);
 
   const catalog = {
     name: 'y4bo curated ports',
@@ -137,7 +150,6 @@ async function main() {
     apps,
   };
   const text = JSON.stringify(catalog, null, 2) + '\n';
-  const withMeta = apps.filter((a) => known.has(repoKey(a.repositorySource === 'gitlab' ? 'gitlab' : 'github', a.repository))).length;
   const summary = `${apps.length} ports (${docRepos.length} from the list, ${extras.length} extras; ${withMeta} with metadata)`;
 
   if (check) {
@@ -150,4 +162,6 @@ async function main() {
   console.log(`wrote catalog/curated-ports.json: ${summary}`);
 }
 
-main().catch((e) => { console.error(e.message); process.exit(1); });
+if (require.main === module) main().catch((e) => { console.error(e.message); process.exit(1); });
+
+module.exports = { build, parseDoc };

@@ -84,6 +84,12 @@
         "portable.txt"
       ]
     },
+    "MorsGames/sm64plus": {
+      "releaseAssetFilter": "sm64plus"
+    },
+    "NoRain211/doaxbv-re": {
+      "releaseAssetFilter": "doaxbv-"
+    },
     "perfect-dark-pc-port/perfect_dark": {
       "name": "Perfect Dark",
       "folderName": "PerfectDark-PerfectDarkPCPort",
@@ -143,7 +149,8 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "section": "source only"
     },
     "RSDKModding/RSDKv3-Decompilation": {
       "name": "Sonic CD (2011)",
@@ -157,6 +164,12 @@
         "decompilation"
       ]
     },
+    "SAT-R/sa2": {
+      "section": "source only"
+    },
+    "sm64-port/sm64-port": {
+      "section": "source only"
+    },
     "snesrev/smw": {
       "name": "Super Mario World",
       "folderName": "SuperMarioWorld-SnesrevSmw",
@@ -168,7 +181,11 @@
         "nintendo",
         "super nintendo entertainment system",
         "decompilation"
-      ]
+      ],
+      "releaseAssetFilter": "smw_"
+    },
+    "snesrev/zelda3": {
+      "releaseAssetFilter": "zelda3_"
     },
     "sonicdcer/Starfox64Recomp": {
       "name": "Star Fox 64",
@@ -186,6 +203,9 @@
         "portable.txt"
       ],
       "repositorySource": "gitlab"
+    },
+    "sonicnext-dev/MarathonRecomp": {
+      "section": "source only"
     },
     "yell0wsuit/cuttherope-dx": {
       "name": "Cut the Rope",
@@ -226,7 +246,8 @@
         "xbox",
         "xbox 360",
         "recompilation"
-      ]
+      ],
+      "releaseAssetFilter": "win-amd64.zip"
     }
   }
 }
