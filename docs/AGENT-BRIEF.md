@@ -45,9 +45,10 @@ through our one Playnite extension. Keep it small. Every feature is something th
   `catalog/uploaders.json` and builds their own copy; `docs/BUILD-YOUR-OWN.md` explains how.
 - **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
   Drop its `collisions` section. Validation and "curated wins on conflict" stay.
-- **The curated port list's source URL never appears in the repo,** commits, PRs or logs. It comes
-  from `CURATED_PORTS_SOURCE_URL` (env var locally, repo secret in CI). Never write that URL, its
-  document ID or its author anywhere.
+- **`catalog/curated-ports.json` is a one-time pass, refreshed by hand only.** The owner re-runs
+  `scripts/curated-ports.js` locally when they want; no workflow, schedule or CI check runs it.
+  Its source URL comes from `CURATED_PORTS_SOURCE_URL` in the owner's shell and never appears in
+  the repo, commits, PRs or logs. Never write that URL, its document ID or its author anywhere.
 
 ## User data
 
@@ -80,11 +81,9 @@ through our one Playnite extension. Keep it small. Every feature is something th
    `releaseAssetFilter`. Fixture of GitLab's response; no network in tests.
 6. **Art:** drop the `hero.png` special case. Cover and banner order: `overrides.json` artUrl,
    else the archive.org item's own image, else `catalog/art.json`.
-7. **Nightly refresh** of `catalog/curated-ports.json` with the secret; open or update a PR
-   "chore: refresh curated ports"; skip quietly when the secret is missing.
-8. **README**: replace it with exactly the text in "README" below; move Development and Releases
+7. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
-9. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
+8. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
    community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
    community-supported. PRs that add sources, catalog entries or asset filters for other
    platforms are welcome."
