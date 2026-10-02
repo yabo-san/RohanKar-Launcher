@@ -6,6 +6,9 @@
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
  *     three exes)
+ *   - GitLab, for Star Fox 64: Recompiled: /projects/sonicdcer%2FStarfox64Recomp/releases is
+ *     test/fixtures/gitlab's copy of the real response, its links pointing here; the Windows
+ *     link is a zip with no extension, as on GitLab
  *   - /featured.json is fixtures/featured.json: a wall game (with a pinned
  *     banner), a port and a pick not on the wall; /art.json is
  *     fixtures/art.json, whose banner for the wall game the pin overrides
@@ -22,6 +25,8 @@ const path = require('path');
 const SEARCH   = require('./fixtures/search.json');
 const TINY_ZIP = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
 const { makeZip } = require('../test/backend/helpers');
+// Star Fox 64: Recompiled's Windows link: a zip, served without an extension
+const SF64_BUILD = makeZip({ 'Starfox64Recompiled.exe': 'MZ', 'assets/.keep': '' });
 // Laid out like the real release: one folder, three exes, a data folder
 const PD_BUILD = makeZip({
   'pd-x86_64-windows/pd.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.pal.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.jpn.x86_64.exe': 'MZ',
@@ -50,6 +55,13 @@ function answer(url, base = '') {
     ] }]), 'application/json');
   }
   if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
+
+  if (url.pathname === '/projects/sonicdcer%2FStarfox64Recomp/releases') {
+    const releases = require('../test/fixtures/gitlab/starfox64recomp-releases.json').map(r => ({ ...r, assets: { ...r.assets,
+      links: r.assets.links.map(l => ({ ...l, direct_asset_url: l.direct_asset_url.replace('https://gitlab.com', base) })) } }));
+    return reply(200, JSON.stringify(releases), 'application/json');
+  }
+  if (url.pathname.startsWith('/sonicdcer/Starfox64Recomp/-/package_files/')) return reply(200, SF64_BUILD, 'application/zip');
 
   if (url.pathname === '/announcement.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'announcement.json')), 'application/json');

@@ -1190,7 +1190,7 @@ function gameDetail(d) {
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
-const PORT_STEPS = { binary: 'the build from GitHub' };
+const PORT_STEPS = { binary: 'the release build' };
 function portActions(p) {
   const dl = state.downloads.get(p.id);
   if (dl) {

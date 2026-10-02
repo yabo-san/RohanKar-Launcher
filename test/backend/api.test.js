@@ -8,7 +8,7 @@ const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
 const http = require('http');
-const { testApi, JPEG } = require('./helpers');
+const { testApi, JPEG, makeZip } = require('./helpers');
 const { run, parseArgs } = require('../../src/backend/main');
 
 test('token: required on every request, as a Bearer header or ?token=', async (t) => {
@@ -282,6 +282,44 @@ test('GET /catalogs: the curated shelf first, fetched on the first call, its ite
   const { items } = (await call('GET', '/catalogs/curated/items')).body;
   assert.deepEqual(items.map(i => [i.title, i.curated, i.userSource]), [['Zelda', true, false]]);
   assert.equal(backend.catalogs.list()[0].id, 'curated');
+});
+
+// The acceptance test for GitLab releases: Star Fox 64: Recompiled, as the
+// curated catalog lists it, installs from the shelf. GitLab answers from a
+// fixture of its releases API; its Windows link holds a zip with no extension.
+test('Star Fox 64: Recompiled installs from the curated shelf, from GitLab\'s releases', async (t) => {
+  const curated = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'catalog', 'curated-ports.json'), 'utf8'));
+  const releases = require('../fixtures/gitlab/starfox64recomp-releases.json');
+  const zip = makeZip({ 'Starfox64Recompiled.exe': 'MZ', 'assets/.keep': '' });
+  const state = { routes: {} };
+  const asFake = (base) => JSON.stringify(releases.map(r => ({ ...r, assets: { ...r.assets,
+    links: r.assets.links.map(l => ({ ...l, direct_asset_url: l.direct_asset_url.replace('https://gitlab.com', base) })) } })));
+  const { call, backend, fake } = await testApi(t, { state, curated: true });
+  state.routes['/curated-ports.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(curated)); };
+  state.routes['/projects/sonicdcer%2FStarfox64Recomp/releases'] = (req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(asFake(fake.base)); };
+  state.routes['/sonicdcer/Starfox64Recomp/-/package_files/333158626/download'] = (req, res) => {
+    res.writeHead(200, { 'content-type': 'application/zip', 'content-length': zip.length });
+    res.end(zip);
+  };
+  backend.settings.save({ installPath: path.join(backend.dataDir, 'games') });
+
+  await call('GET', '/catalogs');
+  const { items } = (await call('GET', '/catalogs/curated/items')).body;
+  const sf = items.find(i => i.repository === 'sonicdcer/Starfox64Recomp');
+  assert.deepEqual([sf.title, sf.repositorySource, sf.repositoryUrl], ['Star Fox 64', 'gitlab', 'https://gitlab.com/sonicdcer/Starfox64Recomp']);
+  const r = await call('POST', '/installs', { id: sf.id });
+  assert.equal(r.status, 202);
+  await backend.installs.wait(r.body.installs[0].id);
+  const job = backend.installs.get(r.body.installs[0].id);
+  assert.deepEqual([job.status, job.error, job.file], ['done', null, 'Starfox64Recompiled-v1.0.3-Windows-RelWithDebInfo']);
+  assert.ok(fs.existsSync(path.join(job.installDir, 'Starfox64Recompiled.exe')));
+  assert.equal(job.exePath, path.join(job.installDir, 'Starfox64Recompiled.exe'));
+  assert.equal(backend.library.get(sf.id).install_dir, job.installDir);
+
+  state.routes['/projects/sonicdcer%2FStarfox64Recomp/releases'] = (req, res) => { res.writeHead(404); res.end('{"message":"404 Project Not Found"}'); };
+  const again = await call('POST', '/installs', { id: sf.id });
+  await backend.installs.wait(again.body.installs[0].id);
+  assert.equal(backend.installs.get(again.body.installs[0].id).error, "Couldn't read the releases of sonicdcer/Starfox64Recomp (HTTP 404)");
 });
 
 test('settings and Playnite export', async (t) => {

@@ -145,8 +145,8 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
 test('The port shelf is the curated list: every card Curated, no game data, no other shelf', async () => {
   await expect(page.locator('#nav-shelves .navitem')).toHaveCount(1);
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
-  await expect(page.locator('#body .port-card')).toHaveCount(7);
-  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(7);
+  await expect(page.locator('#body .port-card')).toHaveCount(8);
+  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(8);
   await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
   await expect(page.locator('#body .lib-count')).toContainText('Source: y4bo curated list');
   await page.locator('#btn-settings').click();
@@ -265,6 +265,20 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await menu.locator('[data-menu="details"]').click();
   await expect(menu).toBeHidden();
   await expect(page.locator('#detail')).toContainText('Mario Kart 64');
+  await page.keyboard.press('Escape');
+});
+
+test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab release', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
+  const detail = page.locator('#detail-panel');
+  await expect(detail.locator('.srcline')).toHaveText('Binary: GitLab release from sonicdcer/Starfox64Recomp');
+  await detail.locator('#btn-install-port').click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const dir = path.join(stack.dataDir, 'games', 'StarFox64-StarFox64Recompiled');
+  expect(fs.existsSync(path.join(dir, 'Starfox64Recompiled.exe'))).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'portable.txt'))).toBe(true);
+  await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
 

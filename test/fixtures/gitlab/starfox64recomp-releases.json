@@ -1,0 +1,78 @@
+[
+  {
+    "name": "Starfox 64: Recompiled 1.0.3",
+    "tag_name": "v1.0.3",
+    "description": "Trimmed for the fixture.",
+    "created_at": "2026-08-11T17:33:24.749Z",
+    "released_at": "2025-12-30T03:00:00.000Z",
+    "upcoming_release": false,
+    "commit_path": "/sonicdcer/Starfox64Recomp/-/commit/061d4c8050c07bcac09a4074657ec4e49a1504b9",
+    "tag_path": "/sonicdcer/Starfox64Recomp/-/tags/v1.0.3",
+    "assets": {
+      "count": 9,
+      "sources": [
+        {
+          "format": "zip",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/archive/v1.0.3/Starfox64Recomp-v1.0.3.zip"
+        },
+        {
+          "format": "tar.gz",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/archive/v1.0.3/Starfox64Recomp-v1.0.3.tar.gz"
+        },
+        {
+          "format": "tar.bz2",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/archive/v1.0.3/Starfox64Recomp-v1.0.3.tar.bz2"
+        },
+        {
+          "format": "tar",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/archive/v1.0.3/Starfox64Recomp-v1.0.3.tar"
+        }
+      ],
+      "links": [
+        {
+          "id": 12384132,
+          "name": "Starfox64Recompiled-v1.0.3-Flatpak-X64-Release",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158799/download",
+          "direct_asset_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158799/download",
+          "link_type": "package"
+        },
+        {
+          "id": 12384131,
+          "name": "Starfox64Recompiled-v1.0.3-Linux-ARM64-Release",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158774/download",
+          "direct_asset_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158774/download",
+          "link_type": "package"
+        },
+        {
+          "id": 12384130,
+          "name": "Starfox64Recompiled-v1.0.3-Linux-X64-Release",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158722/download",
+          "direct_asset_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158722/download",
+          "link_type": "package"
+        },
+        {
+          "id": 12384129,
+          "name": "Starfox64Recompiled-v1.0.3-macOS-Release",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158674/download",
+          "direct_asset_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158674/download",
+          "link_type": "package"
+        },
+        {
+          "id": 12384128,
+          "name": "Starfox64Recompiled-v1.0.3-Windows-RelWithDebInfo",
+          "url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158626/download",
+          "direct_asset_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/package_files/333158626/download",
+          "link_type": "package"
+        }
+      ]
+    },
+    "_links": {
+      "closed_issues_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/issues?release_tag=v1.0.3&scope=all&state=closed",
+      "closed_merge_requests_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/merge_requests?release_tag=v1.0.3&scope=all&state=closed",
+      "merged_merge_requests_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/merge_requests?release_tag=v1.0.3&scope=all&state=merged",
+      "opened_issues_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/issues?release_tag=v1.0.3&scope=all&state=opened",
+      "opened_merge_requests_url": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/merge_requests?release_tag=v1.0.3&scope=all&state=opened",
+      "self": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/releases/v1.0.3"
+    }
+  }
+]

@@ -2,7 +2,7 @@
 /**
  * The backend process: `node src/backend/main.js --data-dir <dir> [--port N]`
  * (tests add --archive-base, --overrides-url, --uploaders-url, --featured-url, --curated-ports-url,
- * --announcement-url and --github-api).
+ * --announcement-url, --github-api and --gitlab-api).
  * Prints one JSON line, { port, token, url }, once listening, so a parent
  * process (or a person) can find it. The token is random per start unless
  * LAUNCHER_TOKEN is set.
@@ -44,6 +44,7 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['overrides-url'] ? { overridesUrl: args['overrides-url'] } : {}),
     ...(args['uploaders-url'] ? { uploadersUrl: args['uploaders-url'] } : {}),
     ...(args['github-api'] ? { githubApi: args['github-api'] } : {}),
+    ...(args['gitlab-api'] ? { gitlabApi: args['gitlab-api'] } : {}),
     ...(args['featured-url'] ? { featuredUrl: args['featured-url'] } : {}),
     ...(args['curated-ports-url'] ? { curatedPortsUrl: args['curated-ports-url'] } : {}),
     ...(args['announcement-url'] ? { announcementUrl: args['announcement-url'] } : {}),
