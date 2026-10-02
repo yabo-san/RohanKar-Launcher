@@ -95,7 +95,7 @@ curl http://127.0.0.1:7777/v1/health
 
 ### `GET /featured`
 
-The hand-picked games and ports that lead the New page, in display order, from
+The hand-picked games and ports that lead the Home page, in display order, from
 `catalog/featured.json` (the copy on main at launch, the bundled one if that fails). Each pick names
 an archive.org item by `identifier` or a port by `repository` (lowercase `owner/repo`); `blurb`, when
 set, replaces the item's own description on its card. `banner` is the pick's SteamGridDB hero on
