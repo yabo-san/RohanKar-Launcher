@@ -100,8 +100,8 @@ The hand-picked games and ports that lead the Home page, in display order, from
 an archive.org item by `identifier` or a port by `repository` (lowercase `owner/repo`); `blurb`, when
 set, replaces the item's own description on its card. `banner` is the pick's SteamGridDB hero on
 its CDN (`https://cdn2.steamgriddb.com/hero/…`): a `banner` pinned on the pick in featured.json,
-else its entry in `catalog/banners.json` (fetched from main next to featured.json, the bundled copy
-if that fails), else `null`; anything that isn't a SteamGridDB CDN URL over https (a page link
+else the `banner` on its entry in `catalog/art.json` (fetched from main next to featured.json, the
+bundled copy if that fails), else `null`; anything that isn't a SteamGridDB CDN URL over https (a page link
 included) is dropped. See catalog/README.md, Home banners. A pick that isn't on the wall is skipped
 by the page.
 

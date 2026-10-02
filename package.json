@@ -36,7 +36,7 @@
       "overrides.json",
       "catalog/uploaders.json",
       "catalog/featured.json",
-      "catalog/banners.json"
+      "catalog/art.json"
     ],
     "extraResources": [
       {

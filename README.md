@@ -139,7 +139,7 @@ once, every response the UIs ask for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
 favorites, Add/Remove and settings work (kept for the tab); installs and
 launching answer 501. The JSON feeds the app reads from main at launch
-(`catalog/featured.json` and `catalog/banners.json`, `overrides.json`,
+(`catalog/featured.json` and `catalog/art.json`, `overrides.json`,
 `announcement.json`) are fetched
 live when the page is opened, so an edit on main shows on the next reload
 (raw.githubusercontent.com caches for up to 5 minutes); the saved copy answers

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """Home banners: one SteamGridDB hero per pick in catalog/featured.json,
-written to catalog/banners.json (keyed by archive.org identifier, or
-lowercase owner/repo for a port), for every source alike: archive.org uploads
-and GitHub ports.
+written as the `banner` field of the pick's entry in catalog/art.json (keyed
+by archive.org identifier, or lowercase owner/repo for a port), for every
+source alike: archive.org uploads and GitHub ports.
 
 Rules (K):
 - Pins win and are never overwritten: a `banner` on a featured.json pick, or
-  an entry in banners.json with "source": "pinned". A pinned SteamGridDB page
+  a `banner` in art.json with "source": "pinned". A pinned SteamGridDB page
   link (www.steamgriddb.com/hero/<id>) is resolved to its CDN URL here; the
   launcher only uses CDN URLs.
 - Otherwise ("source": "auto"): the pick's game on SteamGridDB (matched as
@@ -15,12 +15,13 @@ Rules (K):
   static heroes (1920x620 or 3840x1240). The first hero by an artist in
   catalog/favorite-artists.json, in that file's priority order (no_logo first
   within an artist), wins, marked "favorite": true. With none, the top-voted
-  hero, marked "favorite": false. With no hero at all the entry is dropped
-  and the launcher shows a plain banner until one exists.
+  hero, marked "favorite": false. With no hero at all the banner is dropped
+  and the launcher shows a plain banner until one exists. The rest of the
+  art.json entry (covers) is never touched.
 - Never a port's square icon or a portrait cover.
 - Also writes banners.md (previews, for the PR body and the job summary).
 
-Usage: STEAMGRIDDB_API_KEY=... python3 banners.py [--featured ...] [--banners ...]
+Usage: STEAMGRIDDB_API_KEY=... python3 banners.py [--featured ...] [--art ...]
 """
 import argparse, json, re, sys, urllib.parse
 from pathlib import Path
@@ -74,21 +75,34 @@ def _pinned_from_link(link, resolve, old):
     return entry
 
 
-def plan(picks, banners, heroes_for, resolve, rank, names=None):
-    """The new banners.json and a report row per pick.
+def _set_banner(art, key, entry):
+    """art with key's banner set to entry (None drops it, and an entry left
+    with nothing else goes too). The rest of the entry stays as it was."""
+    item = {k: v for k, v in (art.get(key) or {}).items() if k != "banner"} if isinstance(art.get(key), dict) else {}
+    if entry:
+        item["banner"] = entry
+    if item:
+        art[key] = item
+    else:
+        art.pop(key, None)
 
-    picks: featured.json's picks; banners: the current banners.json;
+
+def plan(picks, art, heroes_for, resolve, rank, names=None):
+    """The new art.json (banners set) and a report row per pick.
+
+    picks: featured.json's picks; art: the current art.json;
     heroes_for(pick, key) -> (sgdb game or None, [hero, ...]);
     resolve(hero_id) -> {url, artist} or None; rank: steam64 -> priority.
     """
     names = names or {}
-    out = dict(banners)
+    out = dict(art)
     report = []
     for pick in picks:
         key = pick_key(pick)
         if not key:
             continue
-        old = banners.get(key) if isinstance(banners.get(key), dict) else None
+        old = (art.get(key) or {}).get("banner") if isinstance(art.get(key), dict) else None
+        old = old if isinstance(old, dict) else None
         pin = (pick.get("banner") or "").strip()
         if not pin and (old or {}).get("source") == "pinned" and CDN.match(old.get("url") or ""):
             report.append((key, "pinned", old))  # untouched
@@ -97,7 +111,7 @@ def plan(picks, banners, heroes_for, resolve, rank, names=None):
             link = pin or (old.get("url") or "").strip()
             entry = _pinned_from_link(link, resolve, old)
             if entry:
-                out[key] = entry
+                _set_banner(out, key, entry)
                 report.append((key, "pinned", entry))
             else:
                 # An unusable pin still wins: leave whatever is there alone
@@ -106,7 +120,7 @@ def plan(picks, banners, heroes_for, resolve, rank, names=None):
         game, heroes = heroes_for(pick, key)
         hero, favorite = choose_hero(heroes, rank)
         if not hero:
-            out.pop(key, None)
+            _set_banner(out, key, None)
             report.append((key, "no hero yet" if game else "no SteamGridDB game", None))
             continue
         au = hero.get("author") or {}
@@ -115,14 +129,14 @@ def plan(picks, banners, heroes_for, resolve, rank, names=None):
                  "favorite": favorite}
         if game:
             entry["sgdb"] = {"id": game["id"], "name": game["name"]}
-        out[key] = entry
+        _set_banner(out, key, entry)
         report.append((key, "favorite artist" if favorite else "top voted (no favorite artist)", entry))
     return out, report
 
 
-def _sorted(banners):
-    comments = {k: v for k, v in banners.items() if k.startswith("_")}
-    return {**comments, **dict(sorted((k, v) for k, v in banners.items() if not k.startswith("_")))}
+def _sorted(art):
+    comments = {k: v for k, v in art.items() if k.startswith("_")}
+    return {**comments, **dict(sorted((k, v) for k, v in art.items() if not k.startswith("_")))}
 
 
 def main():
@@ -130,7 +144,6 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--featured", type=Path, default=sgdb.ROOT / "catalog" / "featured.json")
-    ap.add_argument("--banners", type=Path, default=sgdb.ROOT / "catalog" / "banners.json")
     ap.add_argument("--art", type=Path, default=sgdb.ROOT / "catalog" / "art.json")
     ap.add_argument("--catalog", type=Path, default=sgdb.ROOT / "catalog" / "catalog.json")
     ap.add_argument("--artists", type=Path, default=sgdb.ROOT / "catalog" / "favorite-artists.json")
@@ -141,7 +154,6 @@ def main():
 
     rank, names = sgdb.load_artists(args.artists)
     picks = json.loads(args.featured.read_text(encoding="utf-8"))["picks"]
-    banners = json.loads(args.banners.read_text(encoding="utf-8")) if args.banners.exists() else {}
     art = json.loads(args.art.read_text(encoding="utf-8")) if args.art.exists() else {}
     ports = {str(a.get("repository", "")).lower(): a["name"]
              for a in json.loads(args.catalog.read_text(encoding="utf-8")).get("apps", []) if a.get("repository")}
@@ -164,11 +176,11 @@ def main():
         res = sgdb.sgdb(f"/heroes/game/{game['id']}?dimensions=1920x620,3840x1240&types=static") or {}
         return game, res.get("data") or []
 
-    new, report = plan(picks, banners, heroes_for, lambda hid: sgdb.lookup("hero", hid), rank, names)
-    args.banners.write_text(json.dumps(_sorted(new), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    new, report = plan(picks, art, heroes_for, lambda hid: sgdb.lookup("hero", hid), rank, names)
+    args.art.write_text(json.dumps(_sorted(new), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
     with args.report.open("w", encoding="utf-8") as f:
-        f.write("## Home banners (catalog/banners.json)\n\n| pick | banner | how |\n| --- | --- | --- |\n")
+        f.write("## Home banners (catalog/art.json)\n\n| pick | banner | how |\n| --- | --- | --- |\n")
         for key, how, entry in report:
             img = f'<img src="{entry["url"]}" width="320"><br>{entry.get("artist") or ""}' if entry else ""
             f.write(f"| `{key}` | {img} | {how} |\n")
