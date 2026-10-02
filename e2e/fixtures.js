@@ -3,8 +3,6 @@
  * archive.org as the e2e tests see it, from fixtures/search.json:
  *   - advancedsearch.php?q=uploader:<id> ... returns that uploader's docs
  *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip
- *   - Quiver's lists (…/quiver-community-app-catalog/…/<file>, or /quiver/<file>) come
- *     from fixtures/quiver/; a list with no fixture is a 404
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
  *     three exes)
@@ -41,11 +39,6 @@ function answer(url, base = '') {
     const page = Number(url.searchParams.get('page')) || 1;
     const json = { response: { numFound: docs.length, start: (page - 1) * rows, docs: docs.slice((page - 1) * rows, page * rows) } };
     return reply(200, JSON.stringify(json), 'application/json');
-  }
-
-  if (url.pathname.startsWith('/quiver/') || url.pathname.includes('/quiver-community-app-catalog/')) {
-    const fixture = path.join(__dirname, 'fixtures', 'quiver', path.basename(url.pathname));
-    return fs.existsSync(fixture) ? reply(200, fs.readFileSync(fixture), 'application/json') : reply(404, 'no fixture', 'text/plain');
   }
 
   if (url.pathname === '/repos/perfect-dark-pc-port/perfect_dark/releases') {

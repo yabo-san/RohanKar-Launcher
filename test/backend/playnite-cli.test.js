@@ -44,14 +44,15 @@ test('every library change rewrites playnite-export.json, batched; flush writes 
 
 test('auto export: names from the last export and loaded catalogs, failures logged, nothing after close', async (t) => {
   const logs = [];
-  const { backend, dataDir, fake } = await testBackend(t, { playniteExportDelayMs: 5, log: (m) => logs.push(m) });
+  const state = { routes: { '/curated-ports.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'X/SM64' }])); } } };
+  const { backend, dataDir } = await testBackend(t, { state, curated: true, playniteExportDelayMs: 5, log: (m) => logs.push(m) });
   const file = path.join(dataDir, 'playnite-export.json');
-  fake.routes['/n.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'X/SM64' }])); };
-  const { catalog } = await backend.catalogs.subscribe({ url: `${fake.base}/n.json`, name: 'Nintendo' });
+  await backend.catalogs.warm();
+  const catalog = backend.catalogs.get('curated');
   backend.library.add(`quiver:${catalog.id}:x/sm64`, catalog.url);
   await backend.flushPlayniteExport();
   const [port] = readJson(file).games;
-  assert.deepEqual([port.id, port.name, port.platform], ['quiver:x/sm64', 'SM64 PC', 'Nintendo']);
+  assert.deepEqual([port.id, port.name, port.platform], ['quiver:x/sm64', 'SM64 PC', 'Other']);
 
   // A failed write is logged, not thrown
   fs.rmSync(file);

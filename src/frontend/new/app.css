@@ -240,10 +240,6 @@ button { font: inherit; color: inherit; }
 .field textarea:focus, .field input:focus { border-color: var(--key); }
 .inline { display: flex; gap: 8px; }
 .inline input { flex: 1; }
-.import-list { list-style: none; margin: 0 0 10px; padding: 0; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--rad-ctl); background: var(--fill); }
-.import-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; font-size: 13px; }
-.import-list li + li { border-top: 1px solid var(--border); }
-.import-list li span { color: var(--text2); white-space: nowrap; }
 
 /* ---- toast ---- */
 .toast {

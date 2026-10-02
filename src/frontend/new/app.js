@@ -2,7 +2,7 @@
 /**
  * y4bo launcher, new UI (docs/PRODUCT.md, docs/USER-LOOP.md).
  * Draws what the backend's /v1 API serves (through ../api.js): the
- * archive.org game wall from the curated uploaders, Quiver's port shelves,
+ * archive.org game wall from the curated uploaders, the curated port shelf,
  * the library, and the review of what
  * changed. ../sources.js supplies getTitle and the Settings text helpers.
  * The classic UI (../index.html) is one click away in Settings.
@@ -21,8 +21,7 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
-  quiverImport: null,
-  manualForm: null,     // { name, folder } while adding a manual app from the Library   // { plan, busy, result } while importing a Quiver library
+  manualForm: null,     // { name, folder } while adding a manual app from the Library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   libSearch: '',        // the search box in a library header (Cider's library pages)
@@ -226,7 +225,7 @@ function portFromItem(it, cat) {
     description:        it.description || '',
     repositoryUrl:      it.repositoryUrl || null,
     host:               it.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub',
-    sourceLabel:        cat.quiver || !cat.builtin ? `Quiver / ${cat.shelf}` : 'y4bo curated list',
+    sourceLabel:        cat.curated ? 'y4bo curated list' : cat.shelf,
     catalogUrl:         cat.url,
   };
 }
@@ -991,75 +990,20 @@ function viewSettings() {
       <div class="inline"><input type="text" id="setting-download" value="${esc(s.downloadPath || '')}" placeholder="Default: the install folder">
       <button class="btn" data-action="choose-download">Choose…</button></div></div>
     <div class="field actions"><button class="btn primary" id="btn-save-settings" data-action="save-settings">Save</button></div>
-    <div class="field" id="port-catalogs"><label>Port catalogs</label>
+    <div class="field" id="port-catalogs"><label>Port shelf</label>
       <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? (sh.bundled ? ' (bundled copy)' : ' (cached)') : ''}`).join(' · ') : 'Loading…'}
 </div>
-      <label class="switch-row" for="setting-full-quiver">
-        <span><b>Show the full Quiver catalog</b><span class="hint">Off: the curated list only, ports made by people. On: Quiver's four community
-          catalogs too (Nintendo, PlayStation, Xbox, Other), which also list untested ports. Ports you already added stay either way.</span></span>
-        <input type="checkbox" class="switch" id="setting-full-quiver" role="switch" ${s.showFullQuiver ? 'checked' : ''}></label>
       <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
     <div class="field" id="additional"><label class="switch-row" for="setting-additional">
         <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, GitHub repos you add
           and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
         <input type="checkbox" class="switch" id="setting-additional" role="switch" ${s.allowAdditionalSources ? 'checked' : ''}></label>
       <div id="additional-body">${additionalHtml()}</div></div>
-    <div class="field" id="quiver-import"><label>Quiver library</label>
-      <div class="hint">Bring over what Quiver Launcher already has: pick the folder with its apps.json. Installed apps are adopted where they are, nothing is downloaded again.</div>
-      <div class="import-body">${quiverImportHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
       <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
     <div class="field"><div class="hint" id="app-version"></div></div>
   </div>`;
-}
-
-const IMPORT_KIND = { port: 'catalog port', new: 'new on Your ports', manual: 'your folder' };
-
-function quiverImportHtml() {
-  const q = state.quiverImport;
-  if (!q?.plan) return `<button class="btn" data-action="quiver-import-choose"${q?.busy ? ' disabled' : ''}>Import from Quiver…</button>`;
-  const { plan, result } = q;
-  if (result) {
-    const said = [[result.adopted, 'adopted'], [result.added, 'added'], [result.ports, 'new on Your ports'], [result.unchanged, 'already here']]
-      .filter(([n]) => n).map(([n, what]) => `${n} ${what}`).join(', ');
-    const hidden = result.needAdditionalSources
-      ? ` ${result.needAdditionalSources} of your ports come from repos no catalog lists: they show on Your ports once additional sources are allowed.` : '';
-    return `<div class="hint import-done">Imported from ${esc(plan.root)}: ${esc(said || 'nothing to change')}.${esc(hidden)}</div>
-      <button class="btn" data-action="quiver-import-cancel">Done</button>`;
-  }
-  const todo = plan.apps.filter(a => !a.alreadyInstalled && !(a.inLibrary && !a.installed));
-  const rows = plan.apps.map(a => `<li><b>${esc(a.name)}</b>
-    <span>${esc(IMPORT_KIND[a.kind])} · ${a.alreadyInstalled || (a.inLibrary && !a.installed) ? 'already here' : a.installed ? `installed${a.version ? ` ${esc(a.version)}` : ''}` : 'not installed'}</span></li>`).join('');
-  const skipped = plan.skipped.map(x => `<li><b>${esc(x.name)}</b><span>skipped: ${esc(x.reason)}</span></li>`).join('');
-  return `<div class="hint">${plan.apps.length} apps in ${esc(plan.root)}</div>
-    <ul class="import-list">${rows}${skipped}</ul>
-    <div class="inline">
-      <button class="btn primary" data-action="quiver-import-apply"${q.busy || !todo.length ? ' disabled' : ''}>${todo.length ? `Import ${todo.length}` : 'Nothing new'}</button>
-      <button class="btn" data-action="quiver-import-cancel">Cancel</button></div>`;
-}
-
-// render() keeps the settings form as typed, so this redraws only the field
-function renderQuiverImport() {
-  const el = $('#quiver-import .import-body');
-  if (el) el.innerHTML = quiverImportHtml();
-}
-
-async function quiverImport(apply) {
-  const q = state.quiverImport || {};
-  const dir = apply ? q.plan.root : await api.chooseFolder();
-  if (!dir) return;
-  state.quiverImport = { ...q, busy: true };
-  renderQuiverImport();
-  const r = await api.importQuiver({ dir, apply });
-  if (!r.ok) {
-    state.quiverImport = apply ? { ...q, busy: false } : null;
-    renderQuiverImport();
-    return toast(`Couldn't import: ${r.error}`);
-  }
-  state.quiverImport = { plan: r, result: r.result || null, busy: false };
-  if (apply) await loadPorts();
-  renderQuiverImport();
 }
 
 function viewSearch(q) {
@@ -1456,7 +1400,6 @@ document.addEventListener('input', (e) => {
 });
 document.addEventListener('change', (e) => {
   if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
-  if (e.target.id === 'setting-full-quiver') return setFullQuiver(e.target.checked);
 });
 
 // ─── Additional sources (Settings) ───────────────────────────────────────────
@@ -1507,14 +1450,6 @@ async function setAdditional(on) {
   if (el) el.innerHTML = additionalHtml();
   toast(on ? 'Additional sources are on. What comes from them is marked Your source · not reviewed.' : 'Additional sources are off. Only the curated list shows; installed games stay on disk.');
   loadWall({ refresh: true });
-  loadPorts();
-}
-
-async function setFullQuiver(on) {
-  const r = await api.saveSettings({ showFullQuiver: on });
-  if (r && r.ok === false) { const box = $('#setting-full-quiver'); if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
-  state.settings = { ...state.settings, showFullQuiver: on };
-  toast(on ? 'Showing the full Quiver catalog.' : 'Showing the curated list only. Ports you added stay in your library.');
   loadPorts();
 }
 
@@ -1825,9 +1760,6 @@ async function onAction(action, el) {
       await reloadLibrary();
       return render();
     }
-    case 'quiver-import-choose': return quiverImport(false);
-    case 'quiver-import-apply': return quiverImport(true);
-    case 'quiver-import-cancel': state.quiverImport = null; return renderQuiverImport();
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
     case 'legacy-ui':
