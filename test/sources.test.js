@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSources, formatSources, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
+const { parseSources, formatSources, newUncurated, uncuratedWarning, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 
 test('parseSources: uploader with label', () => {
@@ -160,4 +160,21 @@ test('sourcesFromCatalog: missing or malformed catalog', () => {
 test('sourcesFromCatalog: the bundled catalog turns on exactly the three launcher uploaders', () => {
   const on = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
   assert.deepEqual(on.map(s => s.label).sort(), ['hailstormttv', 'r4zel1ght', 'rohanjackson071']);
+});
+
+test('newUncurated: only uploaders neither curated nor already saved, any case', () => {
+  const curated = [{ uploader: 'a@x.com' }, { uploader: 'b@x.com' }];
+  const prev = [{ uploader: 'a@x.com' }, { uploader: 'mine@x.com' }];
+  const next = parseSources('A@x.com\n# b@x.com\nMINE@x.com\nnew@x.com, New\n# off@x.com');
+  assert.deepEqual(newUncurated(next, prev, curated), ['new@x.com', 'off@x.com']);
+  assert.deepEqual(newUncurated(prev, prev, curated), []);
+  assert.deepEqual(newUncurated(next), next.map(s => s.uploader));
+});
+
+test('uncuratedWarning: one or several, and whether they load yet', () => {
+  assert.equal(uncuratedWarning(['n@x.com'], true),
+    'Warning: we do not monitor n@x.com. It is not on our curated list. Make sure you trust this uploader before you add it.');
+  assert.equal(uncuratedWarning(['n@x.com', 'm@x.com'], false),
+    'Warning: we do not monitor n@x.com, m@x.com. They are not on our curated list. Make sure you trust these uploaders before you add them.'
+    + ' They load only while additional sources are allowed.');
 });

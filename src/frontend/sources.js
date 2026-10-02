@@ -28,6 +28,22 @@ function formatSources(list) {
   return list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`).join('\n');
 }
 
+// Uploaders in `next` that are neither on the curated list nor already saved:
+// the ones Settings warns about before saving
+function newUncurated(next, prev = [], curated = []) {
+  const key = (s) => String(s.uploader).toLowerCase();
+  const known = new Set([...curated, ...prev].map(key));
+  return next.filter(s => !known.has(key(s))).map(s => s.uploader);
+}
+
+// The text of that warning, shared by both interfaces
+function uncuratedWarning(uploaders, additionalOn) {
+  const one = uploaders.length === 1;
+  return `Warning: we do not monitor ${uploaders.join(', ')}. ${one ? 'It is' : 'They are'} not on our curated list. `
+    + `Make sure you trust ${one ? 'this uploader' : 'these uploaders'} before you add ${one ? 'it' : 'them'}.`
+    + (additionalOn ? '' : ` ${one ? 'It loads' : 'They load'} only while additional sources are allowed.`);
+}
+
 // The version to show for a grouped entry: the installed one if any, else the entry itself
 function preferredVersion(game, library) {
   const versions = game._versions || [game];
@@ -40,5 +56,5 @@ function versionLabel(v) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getTitle, parseSources, formatSources, preferredVersion, versionLabel };
+  module.exports = { getTitle, parseSources, formatSources, newUncurated, uncuratedWarning, preferredVersion, versionLabel };
 }

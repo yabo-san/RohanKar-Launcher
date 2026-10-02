@@ -20,7 +20,7 @@ confirmation: everything from additional sources is hidden, and installed files 
 | --- | --- |
 | `user.json` | Settings > Allow additional sources > user.json (a file path) |
 | Your own GitHub repos | Add a GitHub repo |
-| Uploaders not in `catalog/uploaders.json` | Settings > Uploaders |
+| Uploaders not in `catalog/uploaders.json` | Settings > Uploaders (saving one we don't list shows the warning above first) |
 
 Every card from one of these carries a **Your source · not reviewed** badge: a wall game whose
 every upload is from an additional source, and a port on Your ports. Curated cards never carry it. A single upload from an

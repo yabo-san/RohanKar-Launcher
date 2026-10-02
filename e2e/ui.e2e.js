@@ -645,6 +645,37 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await expect(toggle).toBeChecked();
 });
 
+test('Settings > Uploaders: saving one we don\'t list asks first, every time it is new', async () => {
+  const modal = page.locator('#modal');
+  const box = page.locator('#setting-sources');
+  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).sources;
+  await page.locator('#btn-settings').click();
+  const before = await box.inputValue();
+  await box.fill(before + '\n# stranger@example.invalid, Stranger');
+
+  // Cancel saves nothing
+  await page.locator('#btn-save-settings').click();
+  await expect(modal.locator('.modal-title')).toHaveText('An uploader we don\'t list');
+  await expect(modal.locator('.modal-content')).toHaveText('Warning: we do not monitor stranger@example.invalid. It is not on our curated list. Make sure you trust this uploader before you add it.');
+  await modal.locator('.md-btn', { hasText: 'Cancel' }).click();
+  await expect(modal).toHaveCount(0);
+  expect((saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(false);
+
+  // I understand saves it; saving again doesn't ask
+  await page.locator('#btn-save-settings').click();
+  await modal.locator('.md-btn-primary').click();
+  await expect.poll(() => (saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(true);
+  await page.locator('#btn-save-settings').click();
+  await expect(page.locator('#toast')).toContainText('Settings saved.');
+  await expect(modal).toHaveCount(0);
+
+  // Removing it doesn't ask either
+  await box.fill(before);
+  await page.locator('#btn-save-settings').click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(() => saved().some(s => s.uploader === 'stranger@example.invalid')).toBe(false);
+});
+
 test('Add a GitHub repo: it lands on Your ports, and can be removed', async () => {
   await page.locator('#nav-add-repo').click();
   await expect(page.locator('#heading')).toHaveText('Add a GitHub repo');
