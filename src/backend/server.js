@@ -136,12 +136,7 @@ function createApi(backend) {
     return { file: p, type: IMAGE_TYPES[path.extname(p).toLowerCase()] || 'application/octet-stream' };
   };
   route('GET', '/items/:id/cover', async ({ params }) => image(await covers.thumb(params.id)));
-  route('GET', '/items/:id/hero', async ({ params, query }) => {
-    if (query.from && !['override', 'install', 'bundled'].includes(query.from)) {
-      throw new HttpError(400, 'bad_request', 'from must be override, install or bundled');
-    }
-    return image(await covers.hero(params.id, library.get(params.id)?.install_dir, query.from || null));
-  });
+  route('GET', '/items/:id/hero', async ({ params }) => image(await covers.hero(params.id)));
 
   // ─── Catalogs ─────────────────────────────────────────────────────────────
 

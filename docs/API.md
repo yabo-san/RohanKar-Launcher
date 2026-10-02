@@ -100,8 +100,8 @@ The hand-picked games and ports that lead the Home page, in display order, from
 an archive.org item by `identifier` or a port by `repository` (lowercase `owner/repo`); `blurb`, when
 set, replaces the item's own description on its card. `banner` is the pick's SteamGridDB hero on
 its CDN (`https://cdn2.steamgriddb.com/hero/…`): a `banner` pinned on the pick in featured.json,
-else its entry in `catalog/banners.json` (fetched from main next to featured.json, the bundled copy
-if that fails), else `null`; anything that isn't a SteamGridDB CDN URL over https (a page link
+else the `banner` on its entry in `catalog/art.json` (fetched from main next to featured.json, the
+bundled copy if that fails), else `null`; anything that isn't a SteamGridDB CDN URL over https (a page link
 included) is dropped. See catalog/README.md, Home banners. A pick that isn't on the wall is skipped
 by the page.
 
@@ -169,14 +169,15 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/reviews
 
 ### `GET /items/:id/cover`, `GET /items/:id/hero`
 
-Image bytes from the covers cache. The cover is the `overrides.json` art if set, else the
-archive.org thumbnail, each downloaded once. The hero is the override hero, else a `hero.*` in the
-install folder, else the `<id>.png` shipped with the app. `?from=override|install|bundled` asks
-for one of those only (`400` for anything else). `404 no_image` when there is none.
+Image bytes from the covers cache, each downloaded once. Both follow one order: the image pinned
+in `overrides.json` (`artUrl` for the cover, `hero` for the hero), else the archive.org item's own
+image, else SteamGridDB art from `catalog/art.json` (the hero takes the item's picked `banner`,
+else its first curated hero; the cover its first curated grid). A pin never falls through: a
+pinned image that won't download shows none. `404 no_image` when there is none.
 
 ```html
 <img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/cover?token=…">
-<img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/hero?from=bundled&token=…">
+<img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/hero?token=…">
 ```
 
 ### `GET /catalogs`

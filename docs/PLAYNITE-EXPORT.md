@@ -43,8 +43,8 @@ file; it never opens `library.db`.
 | `workingDir` | string\|null | Folder to run `exe` in (its folder, else `installDir`). |
 | `version` | string\|null | Installed version, when the source has one. Null for now. |
 | `updateAvailable` | bool | A newer upload of the same title exists than the one installed. |
-| `coverPath` | string\|null | Cover image on disk (overrides.json art, else the cached thumbnail). Null when there is none yet. |
-| `heroPath` | string\|null | Hero banner on disk (overrides.json hero, else `hero.png` in the install folder). |
+| `coverPath` | string\|null | Cover image on disk, in the cover order (overrides.json artUrl, else the archive.org image, else catalog/art.json). Null when none is downloaded yet. |
+| `heroPath` | string\|null | Hero banner on disk, in the same order (overrides.json hero, else the archive.org image, else catalog/art.json). Null when none is downloaded yet. |
 | `tags` | string[] | The entry's collections. |
 | `lastPlayed` | string\|null | ISO time of the last launch from the launcher. |
 | `playtimeSeconds` | number | Playtime the launcher recorded. |

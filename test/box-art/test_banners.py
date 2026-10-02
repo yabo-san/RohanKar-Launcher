@@ -52,34 +52,44 @@ class ChooseHero(unittest.TestCase):
         self.assertEqual(choose_hero([{"id": 1, "url": ""}], RANK), (None, False))
 
 
+COVERS = {"title": "Game A", "sgdb": {"id": 10, "name": "Game A"}, "grids": [{"id": 1}], "heroes": []}
+
+
 class Plan(unittest.TestCase):
-    def test_auto_entries(self):
+    def test_auto_banners_go_on_the_art_json_entry(self):
         picks = [{"identifier": "a"}, {"identifier": "b"}, {"repository": "Owner/Port"}, {"identifier": "zzz"}]
-        out, report = plan(picks, {"_comment": "x", "owner/port": {"url": CDN.format("old"), "source": "auto"}},
-                           heroes_for, resolve, RANK, NAMES)
-        self.assertEqual(out["a"], {"url": CDN.format("h4"), "source": "auto", "hero": 4, "artist": "Mr. Mania",
-                                    "steam64": "111", "favorite": True, "sgdb": {"id": 10, "name": "Game A"}})
-        self.assertEqual((out["b"]["hero"], out["b"]["favorite"], out["b"]["artist"]), (6, False, "user888"))
-        self.assertNotIn("owner/port", out)  # no hero any more: dropped, the launcher shows a plain banner
-        self.assertNotIn("zzz", out)  # no SteamGridDB game
+        art = {"_comment": "x", "a": COVERS, "owner/port": {"banner": {"url": CDN.format("old"), "source": "auto"}},
+               "zzz": {**COVERS, "banner": {"url": CDN.format("gone"), "source": "auto"}}}
+        out, report = plan(picks, art, heroes_for, resolve, RANK, NAMES)
+        self.assertEqual(out["a"], {**COVERS, "banner": {
+            "url": CDN.format("h4"), "source": "auto", "hero": 4, "artist": "Mr. Mania",
+            "steam64": "111", "favorite": True, "sgdb": {"id": 10, "name": "Game A"}}})  # covers untouched
+        b = out["b"]["banner"]
+        self.assertEqual((b["hero"], b["favorite"], b["artist"]), (6, False, "user888"))
+        self.assertEqual(list(out["b"]), ["banner"])  # a pick with no covers gets a banner-only entry
+        self.assertNotIn("owner/port", out)  # no hero any more: dropped, and nothing else was there
+        self.assertEqual(out["zzz"], COVERS)  # no SteamGridDB game: banner dropped, covers kept
         self.assertEqual(out["_comment"], "x")
+        self.assertIsNot(out["a"], art["a"])
+        self.assertNotIn("banner", art["a"])  # input not mutated
         self.assertEqual([r[1] for r in report], ["favorite artist", "top voted (no favorite artist)", "no hero yet", "no SteamGridDB game"])
 
     def test_pins_win_and_are_never_overwritten(self):
         pinned = {"url": CDN.format("mine"), "source": "pinned", "note": "K's pick"}
         picks = [{"identifier": "a"}, {"identifier": "b", "banner": CDN.format("featured")}]
-        out, _ = plan(picks, {"a": pinned, "b": {"url": CDN.format("h6"), "source": "auto"}}, heroes_for, resolve, RANK, NAMES)
-        self.assertEqual(out["a"], pinned)  # banners.json pin untouched, favourite artist or not
-        self.assertEqual(out["b"], {"url": CDN.format("featured"), "source": "pinned"})  # featured.json pin beats auto
+        art = {"a": {**COVERS, "banner": pinned}, "b": {"banner": {"url": CDN.format("h6"), "source": "auto"}}}
+        out, _ = plan(picks, art, heroes_for, resolve, RANK, NAMES)
+        self.assertEqual(out["a"], {**COVERS, "banner": pinned})  # art.json pin untouched, favourite artist or not
+        self.assertEqual(out["b"]["banner"], {"url": CDN.format("featured"), "source": "pinned"})  # featured.json pin beats auto
 
     def test_pinned_page_links_resolve_to_cdn(self):
         picks = [{"identifier": "a", "banner": "https://www.steamgriddb.com/hero/42"}, {"identifier": "b"}, {"identifier": "c"}]
-        banners = {"b": {"url": "https://www.steamgriddb.com/hero/43", "source": "pinned"},
-                   "c": {"url": "https://www.steamgriddb.com/hero/404", "source": "pinned"}}
-        out, report = plan(picks, banners, heroes_for, resolve, RANK, NAMES)
-        self.assertEqual(out["a"], {"url": CDN.format("page42"), "source": "pinned", "hero": 42, "artist": "Pinner"})
-        self.assertEqual(out["b"], {"url": CDN.format("page43"), "source": "pinned", "hero": 43, "artist": "Pinner"})
-        self.assertEqual(out["c"], banners["c"])  # unresolved: left alone, never replaced by an auto pick
+        art = {"b": {"banner": {"url": "https://www.steamgriddb.com/hero/43", "source": "pinned"}},
+               "c": {"banner": {"url": "https://www.steamgriddb.com/hero/404", "source": "pinned"}}}
+        out, report = plan(picks, art, heroes_for, resolve, RANK, NAMES)
+        self.assertEqual(out["a"]["banner"], {"url": CDN.format("page42"), "source": "pinned", "hero": 42, "artist": "Pinner"})
+        self.assertEqual(out["b"]["banner"], {"url": CDN.format("page43"), "source": "pinned", "hero": 43, "artist": "Pinner"})
+        self.assertEqual(out["c"], art["c"])  # unresolved: left alone, never replaced by an auto pick
         self.assertIn("not resolved", report[2][1])
 
     def test_keys(self):

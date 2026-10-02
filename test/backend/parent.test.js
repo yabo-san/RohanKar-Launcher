@@ -33,7 +33,7 @@ async function startChild(t, port) {
   const fake = await fakeArchive(t);
   const dataDir = tmpDir(t);
   const srv = await run(['--data-dir', dataDir, '--archive-base', fake.base,
-    '--overrides-url', `${fake.base}/o.json`, '--uploaders-url', `${fake.base}/u.json`, '--heroes-dir', dataDir],
+    '--overrides-url', `${fake.base}/o.json`, '--uploaders-url', `${fake.base}/u.json`],
   { LAUNCHER_TOKEN: 'tok' }, () => {}, { parent: port });
   t.after(() => srv.stop());
   const call = async (method, p, body) => {
