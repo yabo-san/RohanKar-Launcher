@@ -13,7 +13,6 @@ const path   = require('path');
 const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
-const quiverImport = require('./quiver-import');
 const { createManualApp } = require('./manual');
 const { sourcesFromSettings } = require('./sources');
 const { withNewer } = require('./updates');
@@ -151,15 +150,8 @@ function createApi(backend) {
     return c;
   };
 
-  route('GET', '/catalogs', () => ({ body: { catalogs: catalogs.list() } }));
-  route('POST', '/catalogs', async ({ body }) => {
-    const { url, name, shelf } = requireObject(body);
-    const r = await catalogs.subscribe({ url: requireString(url, 'url'), name, shelf });
-    if (!r.ok) throw new HttpError(400, r.error, r.detail);
-    return { status: r.created ? 201 : 200, body: r.catalog };
-  });
+  route('GET', '/catalogs', async () => { await catalogs.warm(); return { body: { catalogs: catalogs.list() } }; });
   route('GET', '/catalogs/:id', ({ params }) => ({ body: catalog(params.id) }));
-  route('DELETE', '/catalogs/:id', ({ params }) => { catalog(params.id); catalogs.unsubscribe(params.id); return { status: 204 }; });
   route('POST', '/catalogs/:id/refresh', async ({ params }) => { catalog(params.id); return { body: await catalogs.refresh(params.id) }; });
   // One catalog's entries as items, with library state; doesn't wait on archive.org
   route('GET', '/catalogs/:id/items', ({ params }) => {
@@ -287,18 +279,6 @@ function createApi(backend) {
       throw new HttpError(status, r.code, r.error);
     }
     return { status: 201, body: library.get(r.id) };
-  });
-
-  // A Quiver library (apps.json + Apps/): what an import would do, or, with
-  // apply, the import itself. Nothing is downloaded.
-  route('POST', '/library/import/quiver', ({ body }) => {
-    const { dir, apply } = requireObject(body);
-    const read = quiverImport.readQuiverLibrary(requireString(dir, 'dir'), { findExes: disk.findExes });
-    if (read.error) throw new HttpError(400, 'not_quiver', read.error);
-    const plan = quiverImport.planImport(read, { items: catalogs.items(), rows: library.all() });
-    if (!apply) return { body: plan };
-    if (!library.available) needDb({ ok: false });
-    return { body: { ...plan, result: quiverImport.applyImport(plan, { library, catalogs }) } };
   });
 
   // ─── Collections ──────────────────────────────────────────────────────────

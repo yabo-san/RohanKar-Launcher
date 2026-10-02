@@ -8,11 +8,8 @@ supersedes upstream RohanKar and Quiver.
 - **Sources:** our curated archive.org uploaders, plus any uploader the user adds. The default view
   is a wall of everything they have posted: one card per title, a version picker when two
   uploaders have the same game.
-- **Ports:** Quiver's community catalogs as port shelves (Nintendo, PlayStation, Xbox, Other), plus
-  any catalog URL or GitHub repo the user adds. A port installs its release binary only; game data
-  is the user's job.
-- **Quiver users:** import a Quiver library (`apps.json` plus its `Apps/` folder) and keep every
-  install, nothing downloaded again.
+- **Ports:** one curated shelf (`catalog/curated-ports.json`), plus any GitHub repo the user adds.
+  A port installs its release binary only; game data is the user's job.
 - **Playnite:** `playnite-export.json` (and `--export-playnite`) feeds our one Playnite extension.
 - **Curation:** `overrides.json`, `catalog/art.json` (SteamGridDB) and the dupe handling (separate
   cards where a shared title would merge uploads).
@@ -33,7 +30,7 @@ on disk instead of re-downloading them.
 | feed | what it is | who curates |
 | --- | --- | --- |
 | `catalog/uploaders.json` | archive.org uploader accounts to search | this repo |
-| Quiver catalogs | `apps.json` files of ports, by console | `tgeorgiadis/quiver-community-app-catalog`, by PR |
+| `catalog/curated-ports.json` | the port shelf, in Quiver's catalog format | this repo, refreshed by hand |
 | `overrides.json`, `catalog/art.json` | titles, covers and banners | this repo |
 
 All of them are files, fetched at launch and cached. The logic lives in the backend

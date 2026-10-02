@@ -1,9 +1,0 @@
-{
-  "AppsPath": "",
-  "GitHubApiToken": "",
-  "GitLabApiToken": "",
-  "CatalogSources": [],
-  "LibraryNameStyle": "Name",
-  "BackgroundUpdateCheckInterval": "Daily",
-  "LauncherMusicEnabled": false
-}

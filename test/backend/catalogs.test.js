@@ -7,22 +7,27 @@ const { createCatalogs, parseCatalog, diffEntries, entryKey } = require('../../s
 const { createSettings } = require('../../src/backend/settings');
 const { fakeArchive, tmpDir } = require('./helpers');
 
-async function setup(t, { userSources } = {}) {
+// The curated shelf on a fake GitHub (curated.json on main), its bundled copy
+// on disk, and the library's ids for old subscriptions
+async function setup(t, { userSources, bundledApps = [{ name: 'Bundled', repository: 'a/bundled', tags: ['source only'] }] } = {}) {
   const catalog = { apps: [
     { name: 'Banjo Recomp', repository: 'BanjoRecomp/BanjoRecomp', appIconUrl: 'https://i/b.png', tags: ['n64'] },
     { name: 'Ship of Harkinian', repository: 'HarbourMasters/Shipwright' },
   ] };
   const fake = await fakeArchive(t, {
-    routes: {
-      '/nintendo.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); },
-      '/broken.json':   (req, res) => { res.writeHead(200); res.end('{"nope": 1}'); },
-    },
+    routes: { '/curated.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); } },
   });
   const dir = tmpDir(t);
   const settings = createSettings(path.join(dir, 'settings.json'));
+  const curatedFile = path.join(dir, 'bundled-curated.json');
+  fs.writeFileSync(curatedFile, JSON.stringify({ apps: bundledApps }));
+  const library = new Set();
   const netLog = [];
-  const catalogs = createCatalogs({ dir: path.join(dir, 'catalogs'), settings, ...(userSources ? { userSources } : {}), netLog: (...a) => netLog.push(a) });
-  return { fake, dir, settings, catalogs, catalog, netLog };
+  const catalogs = createCatalogs({
+    dir: path.join(dir, 'catalogs'), settings, ...(userSources ? { userSources } : {}),
+    curatedUrl: `${fake.base}/curated.json`, curatedFile, libraryIds: () => library, netLog: (...a) => netLog.push(a),
+  });
+  return { fake, dir, settings, catalogs, catalog, library, netLog };
 }
 
 test('parse: apps wrapper or bare array', () => {
@@ -42,74 +47,92 @@ test('diffEntries: new, changed, removed by repository', () => {
   assert.deepEqual(d.removed.map(e => e.name), ['gone']);
 });
 
-test('subscribe: fetches, caches, logs, and is idempotent per URL', async (t) => {
-  const { fake, catalogs, settings, netLog } = await setup(t);
-  const url = `${fake.base}/nintendo.json`;
-  const r = await catalogs.subscribe({ url, shelf: 'Nintendo' });
-  assert.equal(r.created, true);
-  assert.equal(r.catalog.entries, 2);
-  assert.equal(r.catalog.name, 'nintendo');
-  assert.equal(r.catalog.shelf, 'Nintendo');
-  assert.equal(netLog[0][0], 'catalog');
-  const again = await catalogs.subscribe({ url });
-  assert.equal(again.created, false);
-  assert.equal(settings.load().catalogs.length, 1);
-  assert.deepEqual(catalogs.review(r.catalog.id), { new: [], changed: [], removed: [] });
-  assert.equal((await catalogs.subscribe({ url: 'ftp://x/y.json' })).error, 'bad_url');
-  assert.equal((await catalogs.subscribe({ url: 'not a url' })).error, 'bad_url');
-});
+test('curated: the only shelf, from the bundled copy until a fetch lands, then cached', async (t) => {
+  const { catalogs, fake, catalog, netLog } = await setup(t);
+  const first = catalogs.list();
+  assert.deepEqual(first.map(c => [c.id, c.shelf, c.entries, c.bundled]), [['curated', 'Curated', 1, true]]);
+  assert.deepEqual(catalogs.items().map(i => [i.title, i.curated]), [['Bundled', true]]);
+  assert.deepEqual(catalogs.review('curated'), { new: [], changed: [], removed: [] }, 'nothing to review before a fetch');
 
-test('refresh and review: changes since last seen; a failed fetch keeps the last copy', async (t) => {
-  const { fake, catalogs, catalog } = await setup(t);
-  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  await catalogs.warm();
+  assert.equal(netLog[0][0], 'catalog');
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian']);
+  assert.equal(catalogs.list()[0].bundled, undefined, 'a fetched copy');
+  assert.deepEqual(catalogs.review('curated'), { new: [], changed: [], removed: [] }, 'the first copy counts as reviewed');
+
+  let fetches = 0;
+  fake.routes['/curated.json'] = (req, res) => { fetches++; res.writeHead(200); res.end(JSON.stringify(catalog)); };
+  await catalogs.warm();
+  assert.equal(fetches, 0, 'warm only fetches a shelf never fetched');
+
   catalog.apps[0].tags = ['n64', 'recomp'];
   catalog.apps.pop();
   catalog.apps.push({ name: '2Ship2Harkinian', repository: 'HarbourMasters/2ship2harkinian' });
-  await catalogs.refresh(sub.id);
-  const review = catalogs.review(sub.id);
+  await catalogs.refresh('curated');
+  const review = catalogs.review('curated');
   assert.deepEqual([review.new.length, review.changed.length, review.removed.length], [1, 1, 1]);
-  assert.equal(catalogs.markSeen(sub.id), true);
-  assert.deepEqual(catalogs.review(sub.id), { new: [], changed: [], removed: [] });
+  assert.equal(catalogs.markSeen('curated'), true);
+  assert.deepEqual(catalogs.review('curated'), { new: [], changed: [], removed: [] });
 
-  fake.routes['/nintendo.json'] = (req, res) => { res.writeHead(503); res.end(); };
-  const failed = await catalogs.refresh(sub.id);
-  assert.equal(failed.error, 'HTTP 503');
-  assert.equal(failed.entries, 2);
-  assert.equal(catalogs.list()[0].error, 'HTTP 503');
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(503); res.end(); };
+  const failed = await catalogs.refresh('curated');
+  assert.deepEqual([failed.entries, failed.error], [2, 'HTTP 503'], 'a failed fetch keeps the cached copy');
   assert.equal(await catalogs.refresh('nope'), null);
   assert.equal(catalogs.review('nope'), null);
   assert.equal(catalogs.markSeen('nope'), false);
-  assert.equal(catalogs.get('nope'), null);
 });
 
-test('a catalog that is not a catalog is an error with no entries', async (t) => {
-  const { fake, catalogs } = await setup(t);
-  const r = await catalogs.subscribe({ url: `${fake.base}/broken.json` });
-  assert.match(r.catalog.error, /array/);
-  assert.equal(r.catalog.entries, 0);
-  const down = await catalogs.subscribe({ url: 'http://127.0.0.1:1/x.json' });
-  assert.ok(down.catalog.error);
+test('curated: offline on a first run, the bundled copy stands and is cached with the error', async (t) => {
+  const { catalogs, fake } = await setup(t);
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(404); res.end(); };
+  await catalogs.warm();
+  const [shelf] = catalogs.list();
+  assert.deepEqual([shelf.entries, shelf.error, shelf.bundled], [1, 'HTTP 404', true]);
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Bundled']);
 });
 
-test('items: one per entry, a port binary with no game data', async (t) => {
-  const { fake, catalogs } = await setup(t);
-  assert.deepEqual(catalogs.items(), []);
-  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
-  const items = catalogs.items();
-  assert.equal(items.length, 2);
-  const banjo = items.find(i => i.title === 'Banjo Recomp');
-  assert.equal(banjo.id, `quiver:${sub.id}:banjorecomp/banjorecomp`);
-  assert.equal(banjo.shelf, 'Nintendo');
-  assert.equal(banjo.icon, 'https://i/b.png');
-  assert.deepEqual([banjo.userSource, 'data' in banjo], [false, false]);
-  assert.equal(catalogs.unsubscribe(sub.id), true);
-  assert.equal(catalogs.unsubscribe(sub.id), false);
-  assert.deepEqual(catalogs.list(), []);
+test('curated: a catalog that is not a catalog is an error, and an unreadable bundled copy an empty shelf', async (t) => {
+  const { catalogs, fake } = await setup(t);
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(200); res.end('{"nope": 1}'); };
+  assert.match((await catalogs.refresh('curated')).error, /array/);
+
+  const { dir, settings } = await setup(t);
+  const logs = [];
+  const none = createCatalogs({ dir: path.join(dir, 'c2'), settings, curatedUrl: 'http://127.0.0.1:1/c.json', curatedFile: path.join(dir, 'missing.json'), log: m => logs.push(m) });
+  assert.equal(none.list()[0].entries, 0);
+  assert.match(logs[0], /bundled curated ports unreadable/);
+  assert.deepEqual(createCatalogs({ dir: path.join(dir, 'c3'), settings }).list(), [], 'no curated shelf without a URL');
 });
 
-test('your repos need additional sources and fill a Your ports shelf, unless a shelf lists the repo', async (t) => {
-  const { fake, catalogs, settings } = await setup(t);
-  const { catalog: sub } = await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+test('items: one per entry, a port binary with no game data, marked curated', async (t) => {
+  const { catalogs } = await setup(t);
+  await catalogs.warm();
+  const banjo = catalogs.items().find(i => i.title === 'Banjo Recomp');
+  assert.equal(banjo.id, 'quiver:curated:banjorecomp/banjorecomp');
+  assert.deepEqual([banjo.shelf, banjo.icon, banjo.userSource, banjo.curated, 'data' in banjo], ['Curated', 'https://i/b.png', false, true, false]);
+});
+
+test('an old subscription is never fetched and lists only the ports the library holds from it', async (t) => {
+  const { catalogs, settings, dir, library } = await setup(t);
+  // An install from before the shelf became curated-only: Quiver's Nintendo list, subscribed and cached
+  settings.save({ catalogs: [{ id: 'oldnintendo', url: 'https://quiver/Nintendo.json', name: 'Nintendo', shelf: 'Nintendo' }] });
+  fs.writeFileSync(path.join(dir, 'catalogs', 'oldnintendo.cache.json'), JSON.stringify({ fetchedAt: 1, entries: [
+    { name: 'Mario Kart 64', repository: 'harbourmasters/mk64' }, { name: 'Untested', repository: 'ai/port' },
+  ], error: null }));
+  assert.deepEqual(catalogs.list().map(c => c.id), ['curated'], 'nothing held: not a shelf');
+
+  library.add('quiver:oldnintendo:harbourmasters/mk64');
+  assert.deepEqual(catalogs.list().map(c => [c.shelf, c.entries, c.legacy]), [['Curated', 1, undefined], ['Nintendo', 1, true]]);
+  const mk = catalogs.items().find(i => i.shelf === 'Nintendo');
+  assert.deepEqual([mk.id, mk.title, mk.curated], ['quiver:oldnintendo:harbourmasters/mk64', 'Mario Kart 64', false]);
+  assert.equal((await catalogs.refresh('oldnintendo')).fetchedAt, 1, 'not fetched');
+  assert.deepEqual(catalogs.review('oldnintendo'), { new: [], changed: [], removed: [] });
+  assert.equal(catalogs.markSeen('oldnintendo'), true);
+});
+
+test('your repos need additional sources and fill a Your ports shelf, unless the curated shelf lists the repo', async (t) => {
+  const { catalogs, settings } = await setup(t);
+  await catalogs.warm();
 
   assert.equal(catalogs.addRepo({ repository: 'me/port', name: 'My Port', folderName: 'MyPort', releaseAssetFilter: 'win', sources: [{ ia: 'x' }] }).ok, true);
   assert.equal(catalogs.addRepo({ repository: 'HarbourMasters/Shipwright', name: 'Mine' }).ok, true);
@@ -120,26 +143,24 @@ test('your repos need additional sources and fill a Your ports shelf, unless a s
   const shelf = catalogs.list().find(c => c.id === 'local');
   assert.deepEqual([shelf.name, shelf.entries, shelf.url], ['Your ports', 1, null]);
   const port = catalogs.items().find(i => i.id === 'quiver:local:me/port');
-  assert.deepEqual([port.title, port.shelf, port.entry.folderName, port.entry.releaseAssetFilter, port.userSource], ['My Port', 'Your ports', 'MyPort', 'win', true]);
+  assert.deepEqual([port.title, port.shelf, port.entry.folderName, port.entry.releaseAssetFilter, port.userSource, port.curated], ['My Port', 'Your ports', 'MyPort', 'win', true, false]);
   assert.equal('sources' in port.entry, false);
   const soh = catalogs.items().filter(i => i.repository?.toLowerCase() === 'harbourmasters/shipwright');
-  assert.deepEqual(soh.map(i => [i.shelf, i.userSource]), [['Nintendo', false]], 'a repo a shelf lists stays the shelf\'s');
+  assert.deepEqual(soh.map(i => [i.shelf, i.userSource]), [['Curated', false]], 'a repo the curated shelf lists stays the shelf\'s');
   assert.deepEqual(catalogs.review('local'), { new: [], changed: [], removed: [] });
   assert.equal(catalogs.markSeen('local'), true);
-  assert.equal(catalogs.unsubscribe('local'), false);
   assert.equal((await catalogs.refresh('local')).entries, 1);
 
   assert.deepEqual(catalogs.addRepo({ repository: 'nope', name: 3 }).errors, ['repository must be owner/repo', 'name must be a string']);
   assert.equal(catalogs.removeRepo('ME/port'), true);
   assert.equal(catalogs.removeRepo('me/port'), false);
   assert.equal(catalogs.list().some(c => c.id === 'local'), false);
-  assert.equal(catalogs.unsubscribe(sub.id), true);
 });
 
-test('user.json github entries join Your ports; one a shelf lists is a conflict', async (t) => {
+test('user.json github entries join Your ports; one the curated shelf lists is a conflict', async (t) => {
   const github = [{ repository: 'me/tool', assetPattern: '(?i)win64', sha1: 'A'.repeat(40) }, { repository: 'BanjoRecomp/BanjoRecomp' }];
-  const { fake, catalogs, settings } = await setup(t, { userSources: { entries: () => ({ archive: [], github }) } });
-  await catalogs.subscribe({ url: `${fake.base}/nintendo.json`, name: 'Nintendo' });
+  const { catalogs, settings } = await setup(t, { userSources: { entries: () => ({ archive: [], github }) } });
+  await catalogs.warm();
   settings.save({ allowAdditionalSources: true });
   const tool = catalogs.items().find(i => i.repository === 'me/tool');
   assert.deepEqual([tool.title, tool.entry.assetPattern, tool.entry.sha1], ['tool', '(?i)win64', 'a'.repeat(40)]);
