@@ -16,21 +16,11 @@ clone your fork.
 - **`catalog/uploaders.json`**: the archive.org uploaders. An uploader is on by default when its
   entry has `"launcher": true` and an `uploaderEmail` (what archive.org's `uploader:` field
   matches), and `track` isn't `false`.
-- **`catalog/curated-extras.json`**: ports and tools you add to the port shelf by hand
-  (`name`, `repository`, `folderName`, and `releaseAssetFilter` when the release has several
-  Windows files).
+- **`catalog/curated-ports.json`**: the port shelf. Edit it by hand: add, change or remove
+  entries (the format is in [catalog/README.md](../catalog/README.md#port-shelf)). `npm test`
+  checks every entry.
 
-## 3. Rebuild the port shelf, or keep it
-
-`catalog/curated-ports.json` is what the app loads. It is built from a community list plus
-`catalog/curated-extras.json`:
-
-    CURATED_PORTS_SOURCE_URL=... node scripts/curated-ports.js
-
-`CURATED_PORTS_SOURCE_URL` is the community list's address, set in your own shell. If you don't
-have one, keep the committed `catalog/curated-ports.json` and add your entries to it directly.
-
-## 4. Point the app at your fork
+## 3. Point the app at your fork
 
 The app fetches some lists from this repo's `main` at launch (`overrides.json`,
 `catalog/uploaders.json`, `catalog/curated-ports.json`, `catalog/featured.json`,
@@ -42,7 +32,7 @@ The self-updater checks `https://yabo-san.github.io/RohanKar-Launcher/` (`packag
 `build.publish`, `src/electron/main.js` `UPDATE_CHANNEL_BASE`). Point both at your fork's Pages,
 or your copy offers this repo's releases as updates.
 
-## 5. Build
+## 4. Build
 
 - **On GitHub:** push to your fork's `main`. `release.yml` (release-please) opens a release pull
   request; merging it builds the Windows installer on `windows-latest` and attaches it to the

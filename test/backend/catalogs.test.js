@@ -113,6 +113,23 @@ test('items: one per entry, a port binary with no game data, marked curated', as
   assert.deepEqual([banjo.sourceOnly, banjo.workInProgress, banjo.role, banjo.repositoryUrl], [false, false, null, 'https://github.com/BanjoRecomp/BanjoRecomp']);
 });
 
+test('More ports: entries marked "more" show only with the setting on, or once the library holds one', async (t) => {
+  const { catalogs, fake, catalog, settings, library } = await setup(t);
+  catalog.apps.push({ name: 'BFBB', repository: 'bfbbdecomp/bfbb', more: true }, { name: 'SA2', repository: 'x/sa2', more: true });
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); };
+  await catalogs.refresh('curated');
+  assert.equal(catalogs.morePorts(), false);
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian']);
+  assert.equal(catalogs.list()[0].entries, 2);
+
+  library.add('quiver:curated:x/sa2');
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian', 'SA2'], 'an installed one stays');
+
+  settings.save({ morePorts: true });
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian', 'BFBB', 'SA2']);
+  assert.equal(catalogs.list()[0].entries, 4);
+});
+
 test('an old subscription is never fetched and lists only the ports the library holds from it', async (t) => {
   const { catalogs, settings, dir, library } = await setup(t);
   // An install from before the shelf became curated-only: Quiver's Nintendo list, subscribed and cached

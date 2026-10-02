@@ -328,6 +328,8 @@ test('settings and Playnite export', async (t) => {
   assert.deepEqual((await call('PUT', '/settings', { betaUpdates: true })).body, { betaUpdates: true });
   assert.deepEqual((await call('PUT', '/settings', { checkForUpdates: false })).body, { betaUpdates: true, checkForUpdates: false });
   assert.equal((await call('PUT', '/settings', [1])).status, 400);
+  assert.equal((await call('PUT', '/settings', { morePorts: 'yes' })).status, 400);
+  assert.equal((await call('PUT', '/settings', { morePorts: true })).body.morePorts, true);
 
   backend.library.add('solo');
   const r = await call('POST', '/export/playnite', {});

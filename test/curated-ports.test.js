@@ -1,36 +1,51 @@
 'use strict';
-// scripts/curated-ports.js: building the catalog from the list's repositories, the extras and our metadata
+// catalog/curated-ports.json is edited by hand: every entry must be one the app can show and
+// install. The format is described in catalog/README.md.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { build } = require('../scripts/curated-ports');
+const fs = require('fs');
+const path = require('path');
 
-const doc = (repository, docName, section) => ({ source: 'github', repository, docName, section });
+const FILE = path.join(__dirname, '..', 'catalog', 'curated-ports.json');
+const SECTIONS = ['recomp port', 'decomp port', 'work in progress', 'source only', 'engine', 'launcher'];
+const FIELDS = ['name', 'repository', 'repositorySource', 'folderName', 'releaseAssetFilter', 'appIconUrl', 'description', 'tags', 'filesToAdd', 'more'];
 
-test('full metadata is used as it is, the list adds the section and "curated"', () => {
-  const { apps, withMeta } = build([doc('a/banjo', 'Banjo Recomp', 'recomp port')], [], {
-    'a/banjo': { name: 'Banjo-Kazooie', folderName: 'Banjo', tags: ['n64'] },
-  });
-  assert.deepEqual(apps, [{ name: 'Banjo-Kazooie', folderName: 'Banjo', tags: ['n64', 'recomp port', 'curated'], repository: 'a/banjo' }]);
-  assert.equal(withMeta, 1);
+const catalog = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+
+test('the shelf is a Quiver-style catalog with apps', () => {
+  assert.equal(typeof catalog.name, 'string');
+  assert.ok(Array.isArray(catalog.apps) && catalog.apps.length > 0);
 });
 
-test('metadata with only some fields goes on top of the minimal entry from the list', () => {
-  const { apps } = build([doc('snesrev/zelda3', 'Zelda3', 'decomp port')], [], { 'snesrev/zelda3': { releaseAssetFilter: 'zelda3_' } });
-  assert.deepEqual(apps, [{ name: 'Zelda3', repository: 'snesrev/zelda3', folderName: 'Zelda3', tags: ['decomp port', 'curated'], releaseAssetFilter: 'zelda3_' }]);
+test('every entry has a name, an owner/repo, a folder and known fields only', () => {
+  for (const a of catalog.apps) {
+    const at = a.name || JSON.stringify(a);
+    assert.ok(typeof a.name === 'string' && a.name.trim(), `${at}: name`);
+    assert.match(a.repository, /^[^/\s]+(\/[^/\s]+)+$/, `${at}: repository is owner/repo`);
+    if (a.repositorySource !== 'gitlab') assert.match(a.repository, /^[^/\s]+\/[^/\s]+$/, `${at}: a GitHub repository is owner/repo`);
+    assert.ok(a.repositorySource === undefined || a.repositorySource === 'gitlab', `${at}: repositorySource is "gitlab" or left out`);
+    assert.match(a.folderName, /^[A-Za-z0-9._-]+$/, `${at}: folderName`);
+    for (const k of ['releaseAssetFilter', 'appIconUrl', 'description']) {
+      if (k in a) assert.ok(typeof a[k] === 'string' && a[k].trim(), `${at}: ${k} is a non-empty string`);
+    }
+    if ('appIconUrl' in a) assert.match(a.appIconUrl, /^https:\/\//, `${at}: appIconUrl is https`);
+    if ('more' in a) assert.equal(a.more, true, `${at}: more is true or left out`);
+    if ('filesToAdd' in a) assert.ok(Array.isArray(a.filesToAdd), `${at}: filesToAdd is a list`);
+    for (const k of Object.keys(a)) assert.ok(FIELDS.includes(k), `${at}: unknown field "${k}"`);
+  }
 });
 
-test("a metadata section replaces the list's section and stays out of the entry", () => {
-  const { apps } = build([doc('x/hero', 'Bomberman Hero', 'recomp port'), doc('x/sa2', 'SA2', 'decomp port')], [], {
-    'x/hero': { name: 'Bomberman Hero', folderName: 'BMHero', tags: ['n64'], section: 'source only' },
-    'x/sa2': { section: 'source only' },
-  });
-  assert.deepEqual(apps.map(a => [a.name, a.tags]), [['Bomberman Hero', ['n64', 'source only', 'curated']], ['SA2', ['source only', 'curated']]]);
-  assert.equal(apps.some(a => 'section' in a), false);
+test('every entry has exactly one section tag', () => {
+  for (const a of catalog.apps) {
+    assert.ok(Array.isArray(a.tags), `${a.name}: tags`);
+    const sections = a.tags.filter((t) => SECTIONS.includes(t));
+    assert.equal(sections.length, 1, `${a.name}: one of ${SECTIONS.join(', ')} (has ${sections.join(', ') || 'none'})`);
+  }
 });
 
-test('extras are owner picks, and one can replace a list entry', () => {
-  const { apps } = build([doc('n64decomp/sm64', 'SM64 Decomp', 'source only')], [
-    { name: 'SM64 Builds', repository: 'someone/sm64-builds', section: 'decomp port', replaces: 'n64decomp/sm64', releaseAssetFilter: 'win' },
-  ], {});
-  assert.deepEqual(apps, [{ name: 'SM64 Builds', repository: 'someone/sm64-builds', folderName: 'SM64Builds', releaseAssetFilter: 'win', tags: ['decomp port', 'owner pick'] }]);
+test('no repository or folder is listed twice', () => {
+  const repos = catalog.apps.map((a) => `${a.repositorySource || 'github'}:${a.repository.toLowerCase()}`);
+  const folders = catalog.apps.map((a) => a.folderName.toLowerCase());
+  assert.deepEqual(repos.filter((r, i) => repos.indexOf(r) !== i), []);
+  assert.deepEqual(folders.filter((f, i) => folders.indexOf(f) !== i), []);
 });

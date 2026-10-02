@@ -361,6 +361,9 @@ function createApi(backend) {
     if ('allowAdditionalSources' in s && typeof s.allowAdditionalSources !== 'boolean') {
       throw new HttpError(400, 'bad_request', 'allowAdditionalSources must be true or false');
     }
+    if ('morePorts' in s && typeof s.morePorts !== 'boolean') {
+      throw new HttpError(400, 'bad_request', 'morePorts must be true or false');
+    }
     if ('userSourcesFile' in s && s.userSourcesFile !== null) {
       const f = s.userSourcesFile;
       if (typeof f !== 'string') throw new HttpError(400, 'bad_request', 'userSourcesFile must be a file path');

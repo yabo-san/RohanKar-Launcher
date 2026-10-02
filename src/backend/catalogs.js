@@ -5,7 +5,8 @@
  *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched on
  *     demand, cached under catalogs/, and diffed against the copy the user
  *     last reviewed. The copy bundled with the app (curatedFile) stands in
- *     until a fetch succeeds.
+ *     until a fetch succeeds. Entries marked "more": true show only while
+ *     Settings > More ports is on, or once the library holds them.
  *   - "Your ports": GitHub repos the user adds on their own and user.json's
  *     github entries that the curated list doesn't have.
  *   - Catalogs subscribed before the shelf became curated-only (settings
@@ -184,7 +185,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
-      entries:   entries(sub.id).length,
+      entries:   shown(sub.id).length,
       fetchedAt: cache?.fetchedAt ?? null,
       error:     cache?.error ?? null,
       // the curated shelf before any fetch has succeeded: the copy bundled with the app
@@ -193,6 +194,16 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   }
 
   const list = () => shelves().map(describe);
+
+  // Settings > More ports: the curated entries marked "more" show too
+  const morePorts = () => settings.load().morePorts === true;
+  // A shelf's entries as the shelf shows them
+  function shown(id) {
+    const all = entries(id);
+    if (id !== CURATED_ID || morePorts()) return all;
+    const held = heldKeys(CURATED_ID);
+    return all.filter(e => e.more !== true || held.has(entryKey(e)));
+  }
   const get  = (id) => { const s = find(id); return s ? describe(s) : null; };
 
   // Fetches and caches the curated shelf. A failed fetch keeps the last good
@@ -249,7 +260,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // Normalized items for every shelf
   function items() {
     const curated = curatedRepos();
-    return shelves().flatMap(sub => entries(sub.id).map(e => ({
+    return shelves().flatMap(sub => shown(sub.id).map(e => ({
       // not reviewed by us: a "Your ports" entry
       userSource:  !!sub.local,
       curated:     curated.has(repoKey(e.repository)),
@@ -267,7 +278,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   }
 
   return { list, get, refresh, warm, entries, review, markSeen, items,
-    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional };
+    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional, morePorts };
 }
 
 module.exports = { createCatalogs, parseCatalog, diffEntries, entryKey, CURATED_ID, CURATED_PORTS_URL };
