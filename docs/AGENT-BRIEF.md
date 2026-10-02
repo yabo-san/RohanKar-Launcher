@@ -90,9 +90,16 @@ through our one Playnite extension. Keep it small. Every feature is something th
    `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
    source has a newer release, with an Update button that reinstalls into the same folder. No
    automatic updates.
-9. **README**: replace it with exactly the text in "README" below; move Development and Releases
+9. **Live ports job, binaries only.** Bring back a non-blocking scheduled CI job (nightly plus
+   workflow_dispatch) that really installs the Acceptance tiles below into a temp folder with the
+   app's own install engine, against the real GitHub and GitLab: pick the release asset, download,
+   extract, list what landed. No game data. It catches a port renaming its release files or
+   breaking its filter. Report results in the job summary; failures never block PRs. The old
+   collision version lives on `parked/collisions` (`scripts/live-port.js`,
+   `.github/workflows/live-ports.yml`) and can be the starting point.
+10. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
-10. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
+11. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
    community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
    community-supported. PRs that add sources, catalog entries or asset filters for other
    platforms are welcome."
@@ -118,37 +125,36 @@ Use this text exactly:
 ```markdown
 # y4bo
 
-A semi-curated list of games and ports from GitHub and archive.org, and a launcher that downloads
-and installs them. Add your own sources if you don't like my picks.
+A launcher that downloads and installs games and ports from archive.org and GitHub.
+It's a semi-curated list: my picks are built in, and you can add your own.
 
-- **archive.org:** uploads from a handful of uploaders I trust.
-- **GitHub:** decomp and recomp ports made by people, plus a few tools I use.
-- **Your own:** add single archive.org items or GitHub repos in a `user.json`. To change the
-  curated list itself, build your own copy: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
-- **Playnite:** one extension reads the launcher's library, so your games show up in Playnite.
+I made this to test a CI/CD pipeline (see the commit history), not to show what a
+proper frontend looks like. **The frontend is vibecoded.**
 
-## Why this exists
+## What it does
 
-I built it to practice CI/CD: tests, security scans, signed builds and release channels on a real
-app. **The entire frontend is vibecoded.** I'm saying so up front.
+- **archive.org:** browse a few uploaders I trust; one-click download and extract (zip, 7z, rar).
+- **GitHub and GitLab:** install release builds of decomp and recomp ports.
+- **Add your own:** single archive.org items or GitHub repos in a `user.json`.
+  Want a different curated list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
+- **Launch:** picks the right exe, or lets you choose when there are several.
+- **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).
+- **Playtime:** tracks how long you've played each game.
+- **Uninstall:** moves the game's folder to the Recycle Bin, so it can be undone.
+- **Open folder:** opens the install folder, for adding data files, mods or saves by hand.
+- **Updates:** the launcher updates itself; installed ports show when a newer release is out.
+- **Playnite:** the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library in Playnite.
 
 ## Install
 
-Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest) and run it.
-Windows SmartScreen will warn because the installer isn't signed: **More info, then Run anyway**.
+Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest).
+SmartScreen will warn (unsigned): **More info, then Run anyway**.
+Verify a download: `gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher`
 
-Every installer carries a build provenance attestation. To check a download came from this repo's pipeline:
-
-    gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher
-
-## Development
-
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-
-## Credits and license
+## Credits
 
 Fork of the RohanKar Launcher by Kilted-Kraken. Not affiliated with the Internet Archive.
-Games are the property of their owners and hosted publicly on archive.org.
+Games belong to their owners and are hosted publicly on archive.org.
 ```
 
 ## Rules
