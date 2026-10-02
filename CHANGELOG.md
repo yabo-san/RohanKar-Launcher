@@ -1,5 +1,44 @@
 # Changelog
 
+## [1.6.0-fork.14](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.13...v1.6.0-fork.14) (2026-10-02)
+
+
+### Features
+
+* a curated tile's details name the curated list, its folder and catalog ([e4ef7fc](https://github.com/yabo-san/RohanKar-Launcher/commit/e4ef7fcd47db72d6f4791d75a1bd2718fa77b259))
+* admin console: pick archive.org data and a GitHub release, get a one-click game tile ([e19e00b](https://github.com/yabo-san/RohanKar-Launcher/commit/e19e00bd953907777ac813ceea03f29f85932dec))
+* admin console: search archive.org, pick files and a release, save a game tile ([e2a5283](https://github.com/yabo-san/RohanKar-Launcher/commit/e2a5283fb0846293914593f5c08a1205913f0c52))
+* admin list view: Make a tile on wall rows, Edit collision on port rows ([6e66f74](https://github.com/yabo-san/RohanKar-Launcher/commit/6e66f741d176759cf00a4a53eddb13d2cdd00ada))
+* admin mode backend: curated collisions edited in place, tiles on their own shelf, hidden gating ([22cd63f](https://github.com/yabo-san/RohanKar-Launcher/commit/22cd63f39413fd0d220c9bb04aa1896bc4885317))
+* curated port catalog (community not-vibecoded list + owner picks) ([7d9ec5e](https://github.com/yabo-san/RohanKar-Launcher/commit/7d9ec5ece6966bc35779aa9a1ca8105641ba7820))
+* curated port catalog from a community not-vibecoded list, plus owner picks ([bccd178](https://github.com/yabo-san/RohanKar-Launcher/commit/bccd17831ac909a0a687faea7ed527bb4d865132))
+* own the curated ports' display metadata; stop reading Quiver's catalog ([7c410e4](https://github.com/yabo-san/RohanKar-Launcher/commit/7c410e4fdd681cedcee5acc8d7732e55021a3655))
+* **preview:** carry banners from featured.json pins and banners.json in the live feed ([a3f1846](https://github.com/yabo-san/RohanKar-Launcher/commit/a3f1846c7e0c377e867ee5d975da865b10b35ef9))
+* **preview:** read the featured, overrides and announcement feeds live from main ([03ef654](https://github.com/yabo-san/RohanKar-Launcher/commit/03ef65471fddf7557527f66b87a96026f51ff6a9))
+* **preview:** read the JSON feeds live from main ([4d83b44](https://github.com/yabo-san/RohanKar-Launcher/commit/4d83b44d66e10f8a2b973bc55be80ba0cbe7d2f9))
+* SteamGridDB hero banners for the featured picks ([612b3c6](https://github.com/yabo-san/RohanKar-Launcher/commit/612b3c67aa7ccdac56d23f86962cefc1593e5371))
+* SteamGridDB hero banners for the featured picks ([1cd4536](https://github.com/yabo-san/RohanKar-Launcher/commit/1cd4536d66fd35d89d7b5a8f904e680d2c44d8c3))
+* **ui:** Cider 2 list view, dropdowns and row menus ([3ca0bfe](https://github.com/yabo-san/RohanKar-Launcher/commit/3ca0bfe3e7c6e50750234bac7871afc14c39020e))
+* **ui:** Cider 2 style list view, dropdowns and row menus ([eb27aaf](https://github.com/yabo-san/RohanKar-Launcher/commit/eb27aaf42090548496c5df05c1e5233521f13be2))
+* **ui:** make the New page the Home page ([df14bd1](https://github.com/yabo-san/RohanKar-Launcher/commit/df14bd10a3d6181f43d0d0a47772d38bbe01fb6d))
+* **ui:** make the New page the Home page ([b2b1713](https://github.com/yabo-san/RohanKar-Launcher/commit/b2b17139776b0a38da388ece88697520a8a2ff88))
+* **ui:** replace the View as select with a grid/list segmented toggle ([3f48182](https://github.com/yabo-san/RohanKar-Launcher/commit/3f481826abda1ffafba2929b2dd64d290ce7db64))
+
+
+### Bug Fixes
+
+* a collision's exe is relative to the install folder, as documented ([b9e1a60](https://github.com/yabo-san/RohanKar-Launcher/commit/b9e1a60666361ce428092f02e4dcaca9fc8ad7ca))
+* a missing data file names what the archive holds instead ([3ac7680](https://github.com/yabo-san/RohanKar-Launcher/commit/3ac7680bd93d195a66e1b170f780a8629142263d))
+* a ROM installed as .z64 is turned big-endian, so N64TOSEC's byteswapped dumps work ([720f40e](https://github.com/yabo-san/RohanKar-Launcher/commit/720f40eb1742a58ff543267b22d5c51e7753f7ab))
+* **ci:** lint scripts/curated-ports.js as a node script ([8194dc7](https://github.com/yabo-san/RohanKar-Launcher/commit/8194dc7064f1f57387b1c5184d564f957de96556))
+* Dusklight launches dusklight.exe (the release also ships crashpad_handler.exe) ([a1f2c38](https://github.com/yabo-san/RohanKar-Launcher/commit/a1f2c3816b18d0ec5fb86685ea66c7d0ca5630cb))
+* Dusklight takes the .ciso its archive.org zip actually holds ([a4c026a](https://github.com/yabo-san/RohanKar-Launcher/commit/a4c026a64905137e6493f8b9f880a07cffab8eb0))
+* Perfect Dark and Dusklight install and launch for real ([1a34b95](https://github.com/yabo-san/RohanKar-Launcher/commit/1a34b952e731c8d6d9729b8ede5b2f3a3ebc469f))
+* Perfect Dark installs runnable: unwrap the release folder, pick the exe ([0f09cb3](https://github.com/yabo-san/RohanKar-Launcher/commit/0f09cb31d7cfa91da119e1ff5672fab1b1e2bd1b))
+* port shelves hand a collision's exe and keepReleaseFolder to the install ([a386ba2](https://github.com/yabo-san/RohanKar-Launcher/commit/a386ba2d7832e710fb4bd5bbe383f6df0fda9441))
+* the admin archive.org search keeps what was typed across re-renders ([5519fe3](https://github.com/yabo-san/RohanKar-Launcher/commit/5519fe3404007757a5dd151e584e655a814dd2f1))
+* **ui:** Add a GitHub repo reads the form as shown; the repo list loads without redrawing it ([8368bc3](https://github.com/yabo-san/RohanKar-Launcher/commit/8368bc3dd9133d686cf221b5887563d0742c8333))
+
 ## [1.6.0-fork.13](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.12...v1.6.0-fork.13) (2026-09-30)
 
 
