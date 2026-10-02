@@ -62,9 +62,22 @@ direction, and the choice is remembered. `RK_UI=legacy` also opens the classic o
 
 ## Installation
 
-1. Go to the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest)
-2. Download the installer, **y4bo-Setup-x.x.x.exe**
-3. Run the installer
+**Newest build.** Every release is built by CI, smoke tested and then
+published as a pre-release.
+
+1. Open [Releases](https://github.com/yabo-san/RohanKar-Launcher/releases) and
+   take the top entry, marked **Pre-release**
+2. Under **Assets**, download **y4bo-Setup-&lt;version&gt;.exe**
+3. Run it. It installs over an older y4bo or RohanKar Launcher and keeps your
+   library, settings and installed games where they are
+
+**Stable.** [Latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest)
+is the last build promoted by hand; it moves less often.
+
+**Staying up to date.** In the classic interface's Settings, turn on
+**Check for updates on launch**, and **Beta updates** to be offered each new
+pre-release rather than only stable ones. The new interface doesn't show these
+two settings yet; what you set in the classic one applies to both.
 
 > **Note:** Windows may show a SmartScreen warning on first run. Click **More info → Run anyway**. This is expected for unsigned installers from new publishers.
 
@@ -163,12 +176,15 @@ checks for updates against a `latest.yml` on the `gh-pages` branch, served at
 
 1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
    open on `main`. Merging it tags the version, builds the Windows installer
-   onto a draft release, and opens a PR against `gh-pages` that moves
-   `beta/latest.yml` to the new version. Publish the draft release, then merge
-   that beta PR.
+   onto a draft release, runs the packaged smoke test against it, and
+   publishes the release as a pre-release. It then opens a PR against
+   `gh-pages` that moves `beta/latest.yml` to the new version; merge that beta
+   PR. A build that fails the smoke test stays a draft and no beta PR opens.
 2. **Merge a promotion PR.** When a beta has proven itself, open a PR against
-   `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`. Stable
-   never moves automatically.
+   `gh-pages` that copies `beta/latest.yml` over `stable/latest.yml`, and mark
+   that release as the latest one
+   (`gh release edit vX --prerelease=false --latest -R yabo-san/RohanKar-Launcher`)
+   so the README's stable link points at it. Stable never moves automatically.
 
 To roll a channel back, revert the `gh-pages` PR that moved it. Installed
 copies stop being offered the bad version on their next check. Copies that
