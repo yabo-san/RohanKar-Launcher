@@ -771,13 +771,20 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .modal-footer .md-btn { flex: 1; }
 .modal-footer .md-btn:focus-visible { outline: 2px solid rgb(250 45 72 / 60%); outline-offset: 1px; }
 
-/* ---- curated ports: the small badge on cards and details ---- */
-.curated-badge {
-  display: inline-block; margin-top: 4px; padding: 1px 6px; border-radius: 4px;
+/* ---- port badges: curated, source only, work in progress, engine/launcher ---- */
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.titles .badges { margin-top: 8px; }
+.curated-badge, .state-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
   font: 600 10px/1.5 var(--font); letter-spacing: .1px; white-space: nowrap;
   color: #30d158; background: rgb(48 209 88 / 12%); box-shadow: inset 0 0 0 .5px rgb(48 209 88 / 30%);
 }
-.by .curated-badge { margin: 0 0 0 6px; vertical-align: 1px; }
+.state-badge.source-only { color: #c7c7cc; background: rgb(255 255 255 / 8%); box-shadow: inset 0 0 0 .5px rgb(255 255 255 / 22%); }
+.state-badge.wip { color: #ff9f0a; background: rgb(255 159 10 / 12%); box-shadow: inset 0 0 0 .5px rgb(255 159 10 / 30%); }
+.state-badge.role { color: #64d2ff; background: rgb(100 210 255 / 12%); box-shadow: inset 0 0 0 .5px rgb(100 210 255 / 30%); }
+.source-only-note { align-self: center; font-size: 13px; color: var(--text2); }
+.port-desc { margin: 14px 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.lv-badge.wip { color: #ff9f0a; background: rgb(255 159 10 / 13%); }
 .lv-badge.curated { color: #30d158; background: rgb(48 209 88 / 13%); }
 
 /* ---- additional sources: the badge, the switch and the user.json panel ---- */

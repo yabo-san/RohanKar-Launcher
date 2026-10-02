@@ -122,6 +122,20 @@ test('no Windows build, unreadable releases, no release, no repository', async (
   assert.equal((await run({ ...item, id: 'quiver:c1:o/pd7' })).error, 'o/pd has no published release');
 
   assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no GitHub repository to install from.' });
+  assert.deepEqual(installs.startPort({ item: { ...item, sourceOnly: true, repositoryUrl: 'https://github.com/o/pd' } }),
+    { ok: false, error: 'source_only', detail: 'Perfect Dark is source only: it publishes no download. Build it from https://github.com/o/pd.' });
+});
+
+test('portTraits: source only, work in progress, engine or launcher, and the repository page', () => {
+  assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['Source Only', 'curated'] }),
+    { sourceOnly: true, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: 'https://github.com/a/b' });
+  assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['work in progress'] }).workInProgress, true);
+  assert.equal(ports.portTraits({ tags: ['engine'] }).role, 'engine');
+  assert.equal(ports.portTraits({ tags: ['launcher', 'owner pick'] }).role, 'launcher');
+  const gitlab = ports.portTraits({ repository: ' g/r ', repositorySource: 'gitlab' });
+  assert.deepEqual([gitlab.repositorySource, gitlab.repositoryUrl], ['gitlab', 'https://gitlab.com/g/r']);
+  assert.deepEqual(ports.portTraits(), { sourceOnly: false, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: null });
+  assert.equal(ports.portTraits({ tags: 'source only' }).sourceOnly, false, 'tags must be a list');
 });
 
 test('a bare exe asset installs the exe; cancelling stops it', async (t) => {

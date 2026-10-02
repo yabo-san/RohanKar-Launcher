@@ -72,4 +72,24 @@ function releaseRoot(dir) {
   return entries.length === 1 && entries[0].isDirectory() ? path.join(dir, entries[0].name) : dir;
 }
 
-module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, ARCHIVE_EXT };
+// What a catalog entry's tags and source say about installing it:
+//   sourceOnly:     "source only", a decompilation with no playable build; nothing to install
+//   workInProgress: "work in progress", installs if a release exists
+//   role:           "engine" or "launcher", a plain app the user brings data to (its
+//                   description says what); no wiring between them
+//   repositorySource, repositoryUrl: "gitlab" for repositorySource "gitlab", else "github",
+//                   and the project page there
+const hasTag = (tags, tag) => tags.some(t => String(t).trim().toLowerCase() === tag);
+function portTraits(entry = {}) {
+  const tags = Array.isArray(entry.tags) ? entry.tags : [];
+  const source = entry.repositorySource === 'gitlab' ? 'gitlab' : 'github';
+  return {
+    sourceOnly:     hasTag(tags, 'source only'),
+    workInProgress: hasTag(tags, 'work in progress'),
+    role:           hasTag(tags, 'engine') ? 'engine' : hasTag(tags, 'launcher') ? 'launcher' : null,
+    repositorySource: source,
+    repositoryUrl:  typeof entry.repository === 'string' && entry.repository.trim() ? `https://${source}.com/${entry.repository.trim()}` : null,
+  };
+}
+
+module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits, ARCHIVE_EXT };

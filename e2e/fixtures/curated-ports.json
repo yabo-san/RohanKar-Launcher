@@ -1,6 +1,6 @@
 {
   "name": "y4bo curated ports",
-  "description": "Fixture: the curated shelf, cut from the real list",
+  "description": "Fixture: the curated shelf, cut from the real list: ports with releases, a source-only decomp, a work-in-progress recomp and an engine",
   "version": 1,
   "apps": [
     {
@@ -47,6 +47,35 @@
         "decomp",
         "n64"
       ]
+    },
+    {
+      "name": "BFBB",
+      "repository": "bfbbdecomp/bfbb",
+      "folderName": "BFBB",
+      "tags": [
+        "source only",
+        "curated"
+      ]
+    },
+    {
+      "name": "MediEvilRecomp",
+      "repository": "BlackLabelHQ/MediEvilRecomp",
+      "folderName": "MediEvilRecomp",
+      "tags": [
+        "work in progress",
+        "curated"
+      ]
+    },
+    {
+      "name": "Quake (ironwail)",
+      "repository": "andrei-drexler/ironwail",
+      "folderName": "ironwail",
+      "releaseAssetFilter": "win64",
+      "tags": [
+        "engine",
+        "owner pick"
+      ],
+      "description": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user."
     }
   ]
 }

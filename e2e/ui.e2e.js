@@ -145,14 +145,43 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
 test('The port shelf is the curated list: every card Curated, no game data, no other shelf', async () => {
   await expect(page.locator('#nav-shelves .navitem')).toHaveCount(1);
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
-  await expect(page.locator('#body .port-card')).toHaveCount(4);
-  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(4);
+  await expect(page.locator('#body .port-card')).toHaveCount(7);
+  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(7);
   await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
   await expect(page.locator('#body .lib-count')).toContainText('Source: y4bo curated list');
   await page.locator('#btn-settings').click();
   await expect(page.locator('#setting-full-quiver')).toHaveCount(0);
   await expect(page.locator('#quiver-import')).toHaveCount(0);
   await page.locator('#btn-settings').click();
+});
+
+test('Card states from tags: source only links the repository, work in progress and engines still install', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  const bfbb = page.locator('.port-card', { hasText: 'BFBB' });
+  await expect(bfbb.locator('.state-badge')).toHaveText('Source only');
+  await expect(bfbb.locator('.play-btn')).toHaveCount(0);
+  await bfbb.click();
+  const detail = page.locator('#detail-panel');
+  await expect(detail.locator('.source-only-note')).toHaveText('Source only, no download');
+  await expect(detail.locator('#btn-install-port')).toHaveCount(0);
+  await expect(detail.locator('[data-toggle-port]')).toHaveCount(0);
+  await expect(detail.locator('.actions [data-href]')).toHaveAttribute('data-href', 'https://github.com/bfbbdecomp/bfbb');
+  await page.keyboard.press('Escape');
+
+  await bfbb.click({ button: 'right' });
+  await expect(page.locator('#ctxmenu [data-menu="install"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.locator('.port-card', { hasText: 'MediEvilRecomp' }).click();
+  await expect(detail.locator('.state-badge.wip')).toHaveText('Work in progress');
+  await expect(detail.locator('#btn-install-port')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.locator('.port-card', { hasText: 'ironwail' }).click();
+  await expect(detail.locator('.state-badge.role')).toHaveText('Engine');
+  await expect(detail.locator('.port-desc')).toHaveText('Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user.');
+  await expect(detail.locator('#btn-install-port')).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 test('Add puts a port in the library and Remove takes it out', async () => {

@@ -110,6 +110,7 @@ test('items: one per entry, a port binary with no game data, marked curated', as
   const banjo = catalogs.items().find(i => i.title === 'Banjo Recomp');
   assert.equal(banjo.id, 'quiver:curated:banjorecomp/banjorecomp');
   assert.deepEqual([banjo.shelf, banjo.icon, banjo.userSource, banjo.curated, 'data' in banjo], ['Curated', 'https://i/b.png', false, true, false]);
+  assert.deepEqual([banjo.sourceOnly, banjo.workInProgress, banjo.role, banjo.repositoryUrl], [false, false, null, 'https://github.com/BanjoRecomp/BanjoRecomp']);
 });
 
 test('an old subscription is never fetched and lists only the ports the library holds from it', async (t) => {
