@@ -692,6 +692,8 @@ function closeSettings() {
 async function saveSettings() {
   const newSources     = parseSources(document.getElementById('setting-sources').value);
   const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
+  const added          = newUncurated(newSources, sources, defaultSources);
+  if (added.length && !confirm(uncuratedWarning(added, (await api.getSettings()).allowAdditionalSources))) return;
   await api.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),

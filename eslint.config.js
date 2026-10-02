@@ -32,7 +32,7 @@ module.exports = [
     files: ['src/frontend/renderer.js'],
     languageOptions: {
       globals: {
-        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', newUncurated: 'readonly', uncuratedWarning: 'readonly',
         preferredVersion: 'readonly', versionLabel: 'readonly',
       },
     },
@@ -42,7 +42,7 @@ module.exports = [
     files: ['src/frontend/new/app.js'],
     languageOptions: {
       globals: {
-        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', newUncurated: 'readonly', uncuratedWarning: 'readonly',
         // ../list-view.js
         ListView: 'readonly',
         // ../details.js
