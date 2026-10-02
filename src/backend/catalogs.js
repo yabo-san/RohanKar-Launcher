@@ -21,6 +21,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { getText } = require('./net');
 const { additionalAllowed } = require('./user-sources');
+const { portTraits } = require('./ports');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 const CURATED_ID = 'curated';
@@ -307,6 +308,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
       icon:        e.appIconUrl || null,
       tags:        Array.isArray(e.tags) ? e.tags : [],
       description: e.description || null,
+      ...portTraits(e),
       entry:       e,
     })));
   }

@@ -234,6 +234,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // Resolves { ok, jobs } or { ok: false, error, detail }.
   function startPort({ item, acceptHashChange = false }) {
     if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository to install from.` };
+    if (item.sourceOnly) return { ok: false, error: 'source_only', detail: `${item.title} is source only: it publishes no download. Build it from ${item.repositoryUrl || item.repository}.` };
     const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
     if (running) return { ok: true, jobs: [view(running)] };
     const job = {

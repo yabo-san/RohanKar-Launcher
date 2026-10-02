@@ -102,6 +102,7 @@ test('items: one per entry, a port binary with no game data', async (t) => {
   assert.equal(banjo.shelf, 'Nintendo');
   assert.equal(banjo.icon, 'https://i/b.png');
   assert.deepEqual([banjo.userSource, 'data' in banjo], [false, false]);
+  assert.deepEqual([banjo.sourceOnly, banjo.workInProgress, banjo.role, banjo.repositoryUrl], [false, false, null, 'https://github.com/BanjoRecomp/BanjoRecomp']);
   assert.equal(catalogs.unsubscribe(sub.id), true);
   assert.equal(catalogs.unsubscribe(sub.id), false);
   assert.deepEqual(catalogs.list(), []);
