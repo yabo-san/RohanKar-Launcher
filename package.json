@@ -36,6 +36,7 @@
       "overrides.json",
       "catalog/uploaders.json",
       "catalog/featured.json",
+      "catalog/banners.json",
       "catalog/curated-ports.json"
     ],
     "extraResources": [

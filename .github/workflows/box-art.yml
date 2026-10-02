@@ -3,7 +3,11 @@ name: Box art report
 # Manual only: finds curated-artist SteamGridDB art for pstriple's archive.org
 # items and opens one PR per batch that adds it to overrides.json (artUrl, plus
 # hero where a 1920x620 exists), with cover previews in the PR body, and refreshes
-# catalog/art.json (every grid and hero found per item). Never runs
+# catalog/art.json (every grid and hero found per item). It also picks a
+# SteamGridDB hero for every Home pick in catalog/featured.json (uploads and
+# ports alike) into catalog/banners.json (scripts/box-art/banners.py: pins win,
+# then the favourite artists in priority order, then the top-voted hero) and
+# resolves pinned hero page links to CDN URLs. Never runs
 # on push or PR, so PR checks never call archive.org. The script paces
 # archive.org at 1 request/s and honours Retry-After; responses are cached
 # across runs. Run from any branch other than main, it prints the overrides.json
@@ -18,6 +22,11 @@ on:
         description: 'Only look up these SteamGridDB grid ids (space-separated) and print their image URL and artist'
         required: false
         default: ''
+      banners_only:
+        description: 'Only refresh the Home banners (catalog/banners.json), skipping the pstriple covers'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -55,14 +64,24 @@ jobs:
           restore-keys: box-art-cache-
 
       - name: Find covers
-        if: inputs.grids == ''
+        if: inputs.grids == '' && !inputs.banners_only
         env:
           STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
         run: python3 scripts/box-art/pstriple-art.py
 
+      # After the covers, so a pick pstriple-art.py just matched reuses its SteamGridDB game from art.json
+      - name: Pick Home banners
+        if: inputs.grids == ''
+        env:
+          STEAMGRIDDB_API_KEY: ${{ secrets.STEAMGRIDDB_API_KEY }}
+        run: |
+          python3 scripts/box-art/banners.py
+          git diff catalog/banners.json
+          cat scripts/box-art/banners.md >> "$GITHUB_STEP_SUMMARY"
+
       # Also in the log and job summary, so the report can be read without downloading the artifact.
       - name: Show report
-        if: inputs.grids == ''
+        if: inputs.grids == '' && !inputs.banners_only
         run: |
           cat scripts/box-art/pstriple-art.csv
           echo '--- candidates.csv ---'
@@ -82,19 +101,20 @@ jobs:
             scripts/box-art/pstriple-art.csv
             scripts/box-art/candidates.csv
             scripts/box-art/batch.md
+            scripts/box-art/banners.md
 
-      # On a branch, only the art catalog is committed back (overrides.json changes stay a dry run).
-      - name: Commit art catalog to this branch
+      # On a branch, only the art catalogs are committed back (overrides.json changes stay a dry run).
+      - name: Commit art catalogs to this branch
         if: github.ref != 'refs/heads/main' && inputs.grids == ''
         run: |
-          if [ -z "$(git status --porcelain catalog/art.json)" ]; then
-            echo "catalog/art.json unchanged."
+          if [ -z "$(git status --porcelain catalog/art.json catalog/banners.json)" ]; then
+            echo "catalog/art.json and catalog/banners.json unchanged."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add catalog/art.json
-          git commit -m "chore: refresh catalog/art.json from SteamGridDB"
+          git add catalog/art.json catalog/banners.json
+          git commit -m "chore: refresh catalog/art.json and catalog/banners.json from SteamGridDB"
           git push origin "HEAD:${GITHUB_REF_NAME}"
 
       - name: Open batch PR
@@ -102,17 +122,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if git diff --quiet overrides.json catalog/art.json; then
+          if git diff --quiet overrides.json catalog/art.json catalog/banners.json; then
             echo "No new art; no PR."
             exit 0
           fi
+          if [ "${{ inputs.banners_only }}" = "true" ]; then
+            title="feat: SteamGridDB banners for the Home picks (batch ${{ github.run_number }})"
+          else
+            title="feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})"
+          fi
+          cat scripts/box-art/batch.md scripts/box-art/banners.md > scripts/box-art/pr-body.md 2>/dev/null || true
           branch="box-art/batch-${{ github.run_number }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git checkout -b "$branch"
-          git add overrides.json catalog/art.json
-          git commit -m "feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})"
+          git add overrides.json catalog/art.json catalog/banners.json
+          git commit -m "$title"
           git push -u origin "$branch"
-          gh pr create --base main --head "$branch" \
-            --title "feat: curated SteamGridDB art for pstriple's items (batch ${{ github.run_number }})" \
-            --body-file scripts/box-art/batch.md
+          gh pr create --base main --head "$branch" --title "$title" --body-file scripts/box-art/pr-body.md
