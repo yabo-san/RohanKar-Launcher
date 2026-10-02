@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.6.0-fork.17](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.16...v1.6.0-fork.17) (2026-10-02)
+
+
+### Features
+
+* **catalog:** hand-edited port feed + More ports switch ([5c4b5c9](https://github.com/yabo-san/RohanKar-Launcher/commit/5c4b5c9ab4e6d6c376a9aadc8bbf00015285c41d))
+* **catalog:** make curated-ports.json the hand-edited port feed ([7497b0c](https://github.com/yabo-san/RohanKar-Launcher/commit/7497b0c685a11dc636ac250992b6d1208cd5b2e6))
+* **ports:** More ports switch for the rest of the community list ([8e3d2df](https://github.com/yabo-san/RohanKar-Launcher/commit/8e3d2dfaec8462ce421b487b7b432fede29c5d35))
+
+
+### Bug Fixes
+
+* **preview:** keep fetching 6 at a time ([eb84779](https://github.com/yabo-san/RohanKar-Launcher/commit/eb847798af11f7495c3cf0bb8a86a1beca505960))
+* **preview:** show build progress and name the banner count ([5992fa9](https://github.com/yabo-san/RohanKar-Launcher/commit/5992fa967559aa6ed46dbf4aa4e68d3f4069deac))
+* **preview:** show build progress, fetch covers 12 at a time, call the art log what it counts ([8a11a7a](https://github.com/yabo-san/RohanKar-Launcher/commit/8a11a7ad047c18cbee98a449f80b29cee3aa54af))
+
 ## [1.6.0-fork.16](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.15...v1.6.0-fork.16) (2026-10-02)
 
 
