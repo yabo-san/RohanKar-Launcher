@@ -1844,7 +1844,11 @@ document.addEventListener('mousedown', (e) => {
 const closeMenus = () => { closeMenu(); closeDropdown(); };
 window.addEventListener('blur', closeMenus);
 window.addEventListener('resize', closeMenus);
-document.addEventListener('scroll', (e) => { if (!e.target.closest?.('#ddmenu, #ctxmenu')) closeMenus(); }, true);
+// A scroll the user starts closes open menus; one the app makes (restoring a
+// page's scroll, a row settling) doesn't, or a menu could vanish as it opens
+const userScroll = (e) => { if (!e.target.closest?.('#ddmenu, #ctxmenu')) closeMenus(); };
+document.addEventListener('wheel', userScroll, { capture: true, passive: true });
+document.addEventListener('touchmove', userScroll, { capture: true, passive: true });
 
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
