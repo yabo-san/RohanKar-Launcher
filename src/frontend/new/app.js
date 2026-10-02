@@ -529,8 +529,18 @@ document.addEventListener('pointerup', () => {
   const { row, moved } = rowDrag;
   rowDrag = null;
   row.classList.remove('dragging');
+  if (moved) settleRow(row);
   if (moved) document.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); }, { capture: true, once: true });
 });
+// After a drag, settle on the nearest card or column edge (Chromium doesn't re-snap on its own)
+function settleRow(row) {
+  const base = row.getBoundingClientRect().left + parseFloat(getComputedStyle(row).paddingLeft);
+  const edges = [...new Set([...row.children].map(c => Math.round(c.getBoundingClientRect().left - base + row.scrollLeft)))];
+  if (!edges.length) return;
+  const max = row.scrollWidth - row.clientWidth;
+  const target = Math.min(max, edges.reduce((a, b) => Math.abs(b - row.scrollLeft) < Math.abs(a - row.scrollLeft) ? b : a));
+  row.scrollTo({ left: target, behavior: motionOk() ? 'smooth' : 'auto' });
+}
 document.addEventListener('dragstart', (e) => { if (e.target.closest?.('#body .row')) e.preventDefault(); });
 document.addEventListener('scroll', (e) => { if (e.target.classList?.contains('row')) syncRowNav(e.target); }, true);
 window.addEventListener('resize', syncRows);
@@ -580,34 +590,6 @@ function wallNotice(uploader = null) {
   if (!f.length) return '';
   return `<div class="notice warn"><div class="grow">Couldn't reach archive.org for <b>${esc(f.map(x => sourceName(x.src)).join(', '))}</b>: ${esc(f[0].error)}.</div>
     <button class="btn" data-action="reload-wall">Try again</button></div>`;
-}
-
-function viewHome() {
-  const enabled = state.sources.filter(s => s.enabled !== false);
-  const ports = state.ports;
-  let html = wallNotice();
-
-  const newest = state.games.slice().sort(byNewest).slice(0, 24);
-  html += section('Newest on the Wall', newest.length ? newest.map(gameCard).join('') : skeletons(8),
-    { cls: 'row', seeAll: ['wall'] });
-
-  for (const s of enabled) {
-    const list = state.games.filter(g => (g._versions || [g]).some(v => v._uploader === s.uploader)).sort(byDownloads);
-    const failed = state.wall.failed.some(f => f.src.uploader === s.uploader);
-    if (failed) continue;
-    const body = list.length ? list.slice(0, 20).map(gameCard).join('') : state.wall.loading ? skeletons(8) : '';
-    if (!body) continue;
-    html += section(`Most Played from ${sourceName(s)}`, body, { count: list.length || null, cls: 'row', seeAll: ['uploader', s.uploader] });
-  }
-
-  for (const shelf of ports?.shelves || []) {
-    const items = ports.items.filter(i => i.shelf === shelf.id);
-    if (!items.length) continue;
-    html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
-      { count: items.length, cls: 'row ports', seeAll: ['shelf', shelf.id] });
-  }
-  if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
-  return html;
 }
 
 // ─── library pages (after Cider's library-albums and songs pages) ──────────
@@ -934,9 +916,10 @@ function viewLibrary() {
   return html;
 }
 
-// New, laid out like Cider's New page: a wide carousel of the hand-picked
+// Home, laid out like Cider's New page: a wide carousel of the hand-picked
 // games and ports (catalog/featured.json), then a compact list of what landed
-// most recently, this week's uploads and the ports new in the catalogs.
+// most recently, this week's uploads and the ports new in the catalogs, then
+// rows of each uploader's most played games and each shelf's ports.
 const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
 const blurbOf = (text) => {
   const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
@@ -956,14 +939,17 @@ function resolvePicks() {
   });
 }
 
+// The banner is the pick's SteamGridDB hero (catalog/featured.json or
+// catalog/banners.json, via the backend); never a port's square icon or a
+// portrait cover. With no hero yet, a plain colour banner with the title.
 function featureCard({ kind, g, v, p, pick }) {
   const port = kind === 'port';
   const title = port ? p.name : getTitle(g);
   const sub = port ? (p.project || p.repository) : [v._sourceLabel, v.addeddate ? new Date(v.addeddate).getFullYear() : ''].filter(Boolean).join(' · ');
   const blurb = pick.blurb || blurbOf(port ? p.description : v.description);
-  const art = port
-    ? `<div class="art icon" style="background:${tint(p.repository)}">${p.iconUrl ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt="">` : ''}`
-    : `<div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(title)}">`;
+  const art = pick.banner
+    ? `<div class="art banner" style="background:${tint(title)}"><img loading="lazy" src="${esc(pick.banner)}" alt="">`
+    : `<div class="art banner plain" style="background:${tint(title)}"><span class="banner-title" aria-hidden="true">${esc(title)}</span>`;
   return `<button class="card feature-card" data-open="${port ? 'port' : 'game'}" data-id="${esc(port ? p.id : g.identifier)}">
     <div class="eyebrow">${port ? 'y4bo pick · port' : 'y4bo pick'}</div>
     <div class="title">${esc(title)}</div>
@@ -971,6 +957,15 @@ function featureCard({ kind, g, v, p, pick }) {
     ${art}${blurb ? `<p>${esc(blurb)}</p>` : ''}</div>
   </button>`;
 }
+
+// A hero that won't load falls back to the plain banner
+document.addEventListener('error', (e) => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.matches('.feature-card .art.banner img')) return;
+  const art = img.parentElement;
+  art.classList.add('plain');
+  img.outerHTML = `<span class="banner-title" aria-hidden="true">${esc(art.closest('.feature-card').querySelector('.title').textContent)}</span>`;
+}, true);
 
 function listItem(g) {
   const v = newestVersion(g);
@@ -982,12 +977,12 @@ function listItem(g) {
   </button>`;
 }
 
-function viewNew() {
+function viewHome() {
   let html = wallNotice();
   const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
-  if (!newest.length) return html + (state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>');
+  if (!newest.length) html += state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>';
 
-  const picks = resolvePicks();
+  const picks = newest.length ? resolvePicks() : [];
   if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
 
   const rest = newest.slice(0, 40);
@@ -999,9 +994,23 @@ function viewNew() {
 
   const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
   const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
-  // With nothing new in the catalogs, the ports row shows what they hold
-  const ports = newPorts.length ? newPorts : (state.ports?.items || []).slice(0, 24);
-  if (ports.length) html += section(newPorts.length ? 'New Ports' : 'Ports', ports.map(portCard).join(''), { cls: 'row squares ports', seeAll: newPorts.length ? ['updates'] : null });
+  if (newPorts.length) html += section('New Ports', newPorts.map(portCard).join(''), { cls: 'row squares ports', seeAll: ['updates'] });
+
+  // Then each uploader's most downloaded games and each shelf's ports
+  for (const s of state.sources.filter(x => x.enabled !== false)) {
+    if (state.wall.failed.some(f => f.src.uploader === s.uploader)) continue;
+    const list = state.games.filter(g => (g._versions || [g]).some(v => v._uploader === s.uploader)).sort(byDownloads);
+    if (!list.length) continue;
+    html += section(`Most Played from ${sourceName(s)}`, list.slice(0, 20).map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', s.uploader] });
+  }
+  const ports = state.ports;
+  for (const shelf of ports?.shelves || []) {
+    const items = ports.items.filter(i => i.shelf === shelf.id);
+    if (!items.length) continue;
+    html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
+      { cls: 'row squares ports', seeAll: ['shelf', shelf.id] });
+  }
+  if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
   return html;
 }
 
@@ -1121,8 +1130,8 @@ function viewSearch(q) {
 }
 
 // The round reload button at the right of the page title (Cider's reload-btn)
-const RELOADS = { home: 'reload-all', new: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', new: 'New', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', 'add-repo': 'Add a GitHub repo' };
+const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
+const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', 'add-repo': 'Add a GitHub repo' };
 
 function render() {
   const v = state.view;
@@ -1131,7 +1140,6 @@ function render() {
   pageControls = null;
   let html;
   if (state.query) html = viewSearch(state.query);
-  else if (v.name === 'new') html = viewNew();
   else if (v.name === 'wall') html = viewWall(null);
   else if (v.name === 'uploader') html = viewWall(v.arg);
   else if (v.name === 'shelf') html = viewShelf(v.arg);

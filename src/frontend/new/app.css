@@ -248,12 +248,10 @@ button { font: inherit; color: inherit; }
 .feature-card .title { margin-top: 3px; font-size: 16px; font-weight: 600; }
 .feature-card .sub { font-size: 13px; margin-top: 1px; }
 .feature-card .art {
-  position: relative; margin-top: 10px; aspect-ratio: 16 / 9; border-radius: var(--rad-card); overflow: hidden;
+  position: relative; margin-top: 10px; aspect-ratio: 1920 / 620; border-radius: var(--rad-card); overflow: hidden;
   background-size: cover; background-position: center 25%; transition: box-shadow .16s ease;
 }
-.feature-card .art img { position: absolute; inset: 0; object-position: center 25%; }
-.feature-card .art.icon { display: flex; align-items: center; justify-content: center; }
-.feature-card .art.icon img { position: static; width: auto; height: 46%; }
+.feature-card .art img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .feature-card:hover .art { box-shadow: 0 14px 34px rgba(0, 0, 0, .6); }
 .feature-card .art p {
   position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; margin: 0; padding: 40px 14px 12px; font-size: 12px; line-height: 1.4; color: #fff;
@@ -359,7 +357,6 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 [data-ico=downloads] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5'/%3E%3Cpath d='M4 15.5v2A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-2'/%3E%3C/svg%3E"); }
 [data-ico=swap] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8h14.5M15 4.5 18.5 8 15 11.5M20 16H5.5M9 12.5 5.5 16 9 19.5'/%3E%3C/svg%3E"); }
 [data-ico=home] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3.5 10.2 12 3.5l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-5.8H9.2v5.8H5A1.5 1.5 0 0 1 3.5 19z'/%3E%3C/svg%3E"); }
-[data-ico=new] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4' y='4' width='6.5' height='6.5' rx='2'/%3E%3Crect x='13.5' y='4' width='6.5' height='6.5' rx='2'/%3E%3Crect x='4' y='13.5' width='6.5' height='6.5' rx='2'/%3E%3Crect x='13.5' y='13.5' width='6.5' height='6.5' rx='2'/%3E%3C/svg%3E"); }
 [data-ico=wall] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4' width='5' height='16' rx='1.2'/%3E%3Crect x='10.5' y='4' width='5' height='16' rx='1.2'/%3E%3Cpath d='m17.8 4.6 3 .8-3.6 14.1-2.4-.6'/%3E%3C/svg%3E"); }
 [data-ico=library] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 20V4M9.5 20V4M14 20 17.8 4.2l2.9.7L17 20z'/%3E%3C/svg%3E"); }
 [data-ico=updates] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.6-5.9L20 8.5'/%3E%3Cpath d='M20 3.5v5h-5'/%3E%3C/svg%3E"); }
@@ -606,26 +603,33 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .card .sub { margin-top: 1px; font-size: 12px; color: var(--text2); }
 .art.icon img { width: 58%; height: 58%; }
 
-/* ---- New: the hero carousel ---- */
+/* ---- New: the hero carousel, SteamGridDB heroes (1920x620) ---- */
 .feature-sec { margin-top: 27px; }
-.row.feature { grid-auto-columns: calc((100% - 14px) / 2.11); gap: 14px; scroll-snap-type: x mandatory; padding: 0; }
+.row.feature { grid-auto-columns: calc((100% - 14px) / 1.5); gap: 14px; scroll-snap-type: x mandatory; padding: 0; }
 .feature-card { scroll-snap-align: start; }
 .feature-card:hover .art { filter: none; }
 .feature-card .eyebrow { font: 600 11px/1.3 var(--font); letter-spacing: .1px; text-transform: uppercase; color: var(--text2); }
 .feature-card .title { margin-top: 3px; font: 500 17px/1.3 var(--font); letter-spacing: -.2px; color: #ececec; }
 .feature-card .sub { margin-top: 0; font: 400 17px/1.3 var(--font); letter-spacing: -.2px; color: var(--text2); }
 .feature-card .art, .feature-card:hover .art {
-  margin-top: 15px; aspect-ratio: 1.75; border-radius: var(--rad-card); box-shadow: none; background-position: center 25%;
+  margin-top: 15px; aspect-ratio: 1920 / 620; border-radius: var(--rad-card); box-shadow: none; background-position: center;
 }
 .feature-card .art img { transition: transform .5s var(--ease-out); }
 .feature-card:hover .art img { transform: scale(1.015); }
-.feature-card .art.icon img { height: 44%; width: auto; }
-.feature-card:hover .art.icon img { transform: none; }
+/* No hero yet: the title over soft blurred colour, until the workflow finds one */
+.feature-card .art.plain::before {
+  content: ""; position: absolute; inset: -20%; filter: blur(40px); opacity: .7;
+  background: radial-gradient(circle at 20% 30%, rgb(255 255 255 / 22%), transparent 45%), radial-gradient(circle at 80% 80%, rgb(0 0 0 / 45%), transparent 55%);
+}
+.feature-card .art.plain .banner-title {
+  position: absolute; left: 18px; right: 18px; top: 16px; font: 700 clamp(20px, 2.4vw, 34px)/1.1 var(--font); letter-spacing: -.5px;
+  color: rgb(255 255 255 / 88%); text-shadow: 0 2px 12px rgb(0 0 0 / 25%); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .feature-card .art p {
   padding: 60px 14px 15px; max-width: none; font: 500 12px/1.35 var(--font); color: #fff;
   background: linear-gradient(transparent, rgb(0 0 0 / 38%)); text-shadow: 0 1px 2px rgb(0 0 0 / 30%);
 }
-.feature-card .art p { padding-right: 55%; }
+.feature-card .art p { padding-right: 45%; }
 .feature-sec .row-nav { justify-content: center; margin: 14px 0 0; }
 
 /* ---- New: the song-list grid, four deep, columns scrolling sideways ---- */
