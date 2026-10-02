@@ -7,10 +7,55 @@ fallback. Every file changes by pull request.
 | --- | --- | --- |
 | `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
+| `curated-ports.json` | the port shelf, edited by hand (see Port shelf below) | 45 |
 | `featured.json` | the Home page's hand-picked games and ports, in display order: `{ picks: [{ identifier \| repository, blurb?, banner? }] }` (see Home banners below) | per pick |
 | `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Also each featured pick's Home banner, keyed by archive.org identifier or lowercase `owner/repo`: `banner: { url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API; pinned banners are never overwritten | per item |
 
 Rules: uploader emails are what archive.org's `uploader:` field matches; handles are labels.
+
+## Port shelf
+
+`curated-ports.json` is the port shelf: GitHub and GitLab projects whose release binary the
+launcher installs. It is written by hand; nothing generates it. To add a port, copy an entry,
+edit it and open a PR. `npm test` (`test/curated-ports.test.js`) checks every entry. The file
+keeps Quiver's catalog shape (`{ name, description, version, apps: [...] }`) because installed
+copies of the launcher fetch it from `main`.
+
+```json
+{
+  "name": "Quake (ironwail)",
+  "repository": "andrei-drexler/ironwail",
+  "folderName": "ironwail",
+  "releaseAssetFilter": "win64",
+  "description": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user.",
+  "tags": ["engine", "quake"]
+}
+```
+
+| field | | what |
+| --- | --- | --- |
+| `name` | required | the tile's title |
+| `repository` | required | `owner/repo` (GitLab: the project path, may have subgroups) |
+| `folderName` | required | the install folder's name; letters, digits, `.`, `_`, `-`; unique |
+| `tags` | required | exactly one section tag, plus any free tags (platform, series: `n64`, `nintendo`, `zelda`) |
+| `repositorySource` | GitLab only | `"gitlab"`; leave out for GitHub |
+| `releaseAssetFilter` | when needed | text the release file's name must contain, when a release has several Windows files (`win64`, `DoomLauncher_`) |
+| `appIconUrl` | optional | an https image for the tile when there is no cover |
+| `description` | optional | shown on the tile's page; for engines and launchers, say what the user brings |
+| `filesToAdd` | optional | empty files created in the install folder, e.g. `portable.txt` |
+
+Section tags decide how a tile behaves:
+
+| tag | the tile |
+| --- | --- |
+| `recomp port`, `decomp port` | installs the latest release |
+| `work in progress` | installs, with a "work in progress" badge |
+| `engine`, `launcher` | installs, and shows its description (what the user brings) |
+| `source only` | no Install button; links to the repository. The Live ports check skips it |
+
+Covers and banners come from `art.json` / `overrides.json` as for everything else. The Live ports
+workflow checks every entry nightly, so a wrong `releaseAssetFilter` or a renamed repository
+shows up in its summary.
 
 ## Home banners
 

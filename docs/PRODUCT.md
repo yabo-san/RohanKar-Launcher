@@ -30,7 +30,7 @@ on disk instead of re-downloading them.
 | feed | what it is | who curates |
 | --- | --- | --- |
 | `catalog/uploaders.json` | archive.org uploader accounts to search | this repo |
-| `catalog/curated-ports.json` | the port shelf, in Quiver's catalog format | this repo, refreshed by hand |
+| `catalog/curated-ports.json` | the port shelf, in Quiver's catalog format | this repo, edited by hand |
 | `overrides.json`, `catalog/art.json` | titles, covers and banners | this repo |
 
 All of them are files, fetched at launch and cached. The logic lives in the backend

@@ -12,8 +12,8 @@ through our one Playnite extension. Keep it small. Every feature is something th
 ## In scope
 
 - **Curated archive.org uploaders** (`catalog/uploaders.json`). Their uploads are the game wall.
-- **Curated port shelf** (`catalog/curated-ports.json`, built by `scripts/curated-ports.js` from a
-  community list plus `catalog/curated-extras.json`). Installs the release binary from GitHub or
+- **Curated port shelf** (`catalog/curated-ports.json`, edited by hand, format in
+  `catalog/README.md`). Installs the release binary from GitHub or
   GitLab. Nothing else: no data files, no wiring between apps.
 - **Imports:** `user.json` with single archive.org items and single GitHub (or GitLab) repos.
 - **Playnite export** (`playnite-export.json`, `--export-playnite`, `--install`, `--uninstall`).
@@ -28,13 +28,12 @@ through our one Playnite extension. Keep it small. Every feature is something th
   `parked/collisions`.
 - Grouping tiles into one card, or several Play actions per Playnite game.
 - Any mod support: no mod manager, no "browse mods" or "open mods folder", no links to mod sites.
-  The Thunderstore mod manager (r2modman) is just another tile in `curated-extras.json`.
+  The Thunderstore mod manager (r2modman) is just another tile in `curated-ports.json`.
 - Search UIs for /idgames, Quaddicted or similar. Doom and Quake are separate tiles.
 - Announcements, manual apps, Android.
 - Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import. Remove both,
   including `src/backend/quiver-import.js` and the four Quiver catalog URLs in the frontend.
-  (`scripts/curated-ports.js` may still read Quiver's catalogs at build time to borrow names,
-  icons and asset filters; that is a data source, not a feature.)
+  The shelf file keeps Quiver's catalog shape only because installed copies of the app read it.
 - Adding a whole archive.org uploader from the app (see Locked down).
 
 ## Locked down
@@ -45,10 +44,10 @@ through our one Playnite extension. Keep it small. Every feature is something th
   `catalog/uploaders.json` and builds their own copy; `docs/BUILD-YOUR-OWN.md` explains how.
 - **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
   Drop its `collisions` section. Validation and "curated wins on conflict" stay.
-- **`catalog/curated-ports.json` is a one-time pass, refreshed by hand only.** The owner re-runs
-  `scripts/curated-ports.js` locally when they want; no workflow, schedule or CI check runs it.
-  Its source URL comes from `CURATED_PORTS_SOURCE_URL` in the owner's shell and never appears in
-  the repo, commits, PRs or logs. Never write that URL, its document ID or its author anywhere.
+- **`catalog/curated-ports.json` is the source of truth, edited by hand.** Entries change by pull
+  request; no script, outside list or workflow generates it. `test/curated-ports.test.js` checks
+  every entry. It used to be scraped from an outside list; never write that list's URL, document
+  ID or author anywhere.
 
 ## User data
 
@@ -66,9 +65,7 @@ through our one Playnite extension. Keep it small. Every feature is something th
    fetch, data-file staging, sha1-of-staged-data verification, `.bps` handling, collision card
    text, and `user.json` collisions, with their tests. Report net lines removed.
 2. **Lock down** as above, and write `docs/BUILD-YOUR-OWN.md`: fork the repo, edit
-   `catalog/uploaders.json` and `catalog/curated-extras.json`, run
-   `CURATED_PORTS_SOURCE_URL=... node scripts/curated-ports.js` (or keep the committed file),
-   then build: push to your fork and let `release.yml` build the installer, or run
+   `catalog/uploaders.json` and `catalog/curated-ports.json`, then build: push to your fork and let `release.yml` build the installer, or run
    `npm run build` on Windows.
 3. **The port shelf = curated only.** Load `catalog/curated-ports.json` (raw URL from main,
    cached, bundled copy as fallback) plus the user's `user.json` repos. Remove the Quiver catalog
