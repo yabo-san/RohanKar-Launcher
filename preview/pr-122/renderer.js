@@ -18,6 +18,7 @@
 let allGames      = [];   // one entry per title (first version of each group)
 let pendingOpenItem = null;  // identifier Playnite asked to show, until the games load
 let allVersions   = [];   // every fetched item, across all sources
+let defaultSources = [];   // from catalog/uploaders.json, used when settings has no `sources`
 let sources       = [];
 let library       = {};
 let collections   = [];
@@ -154,8 +155,9 @@ const btnChooseInstall        = document.getElementById('btn-choose-install');
 // ─── Sources ──────────────────────────────────────────────────────────────────
 // getTitle, parseSources, formatSources, preferredVersion and
 // versionLabel live in sources.js (loaded before this file).
-// The curated uploaders, on or off as saved: the backend decides (/v1/sources)
-const loadSources = async () => (await api.getSources()).sources;
+function loadSourcesSetting(s) {
+  return Array.isArray(s.sources) ? s.sources.filter(x => x && x.uploader) : defaultSources;
+}
 
 const thumbUrlCache = {};
 
@@ -496,7 +498,8 @@ async function init() {
   document.getElementById('btn-add-to-steam').addEventListener('click', onAddToSteam);
 
   const initSettings = await api.getSettings();
-  sources            = await loadSources();
+  defaultSources     = (await api.getSources()).defaults;
+  sources            = loadSourcesSetting(initSettings);
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
   applyInstalledBadgeSetting();
@@ -678,7 +681,7 @@ async function openSettings() {
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
   document.getElementById('setting-check-updates').checked = !!s.checkForUpdates;
   document.getElementById('setting-beta-updates').checked  = !!s.betaUpdates;
-  document.getElementById('setting-sources').value = formatSources(await loadSources());
+  document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
   settingsModal.classList.remove('hidden');
 }
 
@@ -689,7 +692,9 @@ function closeSettings() {
 async function saveSettings() {
   const newSources     = parseSources(document.getElementById('setting-sources').value);
   const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
-  const saved = await api.saveSettings({
+  const added          = newUncurated(newSources, sources, defaultSources);
+  if (added.length && !confirm(uncuratedWarning(added, (await api.getSettings()).allowAdditionalSources))) return;
+  await api.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),
     deleteAfterInstall:  deleteAfterInstallCheck.checked,
@@ -699,7 +704,6 @@ async function saveSettings() {
     checkForUpdates:     document.getElementById('setting-check-updates').checked,
     betaUpdates:         document.getElementById('setting-beta-updates').checked,
   });
-  if (!saved.ok) { showToast(saved.body?.detail || `Couldn't save settings (HTTP ${saved.status}).`); return; }
   installedFirst     = installedFirstCheck.checked;
   showInstalledBadge = showInstalledBadgeCheck.checked;
   applyInstalledBadgeSetting();
