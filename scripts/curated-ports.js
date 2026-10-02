@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+'use strict';
 // Builds catalog/curated-ports.json: the default port shelf.
 //
 // Source of truth is a community-kept list of decomp and recomp projects made by people, not
