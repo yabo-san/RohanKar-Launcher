@@ -46,6 +46,9 @@
   -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
   mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
 }
+/* The compact list and the picks carousel keep their own mandatory snap; no snap mid-drag */
+.row-wrap > .row.list, .row-wrap > .row.feature { scroll-snap-type: x mandatory; }
+.row-wrap > .row.dragging { scroll-snap-type: none; }
 .row-wrap.more-left > .row { --fl: 44px; }
 .row-wrap.more-right > .row { --fr: 44px; }
 .row-wrap > .row > .card { scroll-snap-align: start; }

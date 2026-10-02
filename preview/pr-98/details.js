@@ -64,7 +64,6 @@ function portMeta(p) {
   return [
     p.shelfName ? `${p.shelfName} port` : 'Port',
     'Windows',
-    p.data?.status === 'available' ? 'Game data from archive.org' : p.data?.status === 'missing' ? 'Needs game data' : '',
     p.tags?.length ? p.tags.slice(0, 3).join(', ') : '',
   ].filter(Boolean);
 }
@@ -99,11 +98,10 @@ function moreFrom(games, uploader, { except = null, limit = 20 } = {}) {
     .slice(0, limit);
 }
 
-// More ports from the same catalog shelf, the ones with data first
+// More ports from the same catalog shelf, in catalog order
 function morePorts(items, port, { limit = 20 } = {}) {
   return (items || [])
     .filter(p => p.shelf === port.shelf && p.id !== port.id)
-    .sort((a, b) => (b.data?.status === 'available') - (a.data?.status === 'available'))
     .slice(0, limit);
 }
 
