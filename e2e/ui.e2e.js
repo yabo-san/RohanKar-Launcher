@@ -9,13 +9,19 @@
  * - Install downloads, extracts and registers an archive.org game.
  * - A port installs the Windows build from its GitHub release, and only that
  *   (Perfect Dark); game data is the user's job.
- * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
- *   the Left/Right keys, and a drag doesn't open a card.
+ * - Home's rows have no scrollbar; they scroll with the header arrows, the
+ *   arrows over their ends, a drag (snapping to a column) and the Left/Right
+ *   keys, and a drag doesn't open a card.
+ * - Opening a game or a port shows its details page (after Cider's album
+ *   page); Back, or Escape, returns to the page it came from, scrolled where
+ *   it was, and a search comes back with its results.
  * - Home (the app opens on it) leads with the featured picks (a wall game and
  *   a port), then a compact list of the latest uploads, newest first, then
  *   each uploader's most played games and each shelf's ports.
  * - The announcement from announcement.json shows until dismissed.
  * - Your own app: a folder the library makes, fills and launches.
+ * - Cards lift on hover and pages rise in, and prefers-reduced-motion turns
+ *   both off.
  * - Additional sources: the Settings toggle asks in a modal every time it goes
  *   on; user.json's entries show with the Your source badge, curated ones
  *   never; a file that changed since its first install asks before installing.
@@ -36,6 +42,11 @@ const ENABLED = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(
 test.describe.configure({ mode: 'serial' });
 
 let stack, page;
+
+// A page change rises in (motion.css); wait it out before opening a dropdown,
+// or Playwright's scroll-into-view retries land mid-animation and scroll the
+// page, which closes the dropdown as a real scroll would
+const settled = () => expect(page.locator('#body.page-enter')).toHaveCount(0);
 
 test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, { page: 'new/index.html' });
@@ -84,14 +95,34 @@ test("Home's rows scroll without a scrollbar", async () => {
   await prev.click();
   await expect.poll(left).toBe(0);
 
+  // The arrows over the row's ends show on hover, the left one only once it has scrolled
+  const edgeNext = section.locator('.row-edge.next');
+  await row.hover();
+  await expect(edgeNext).toHaveCSS('opacity', '1');
+  await expect(section.locator('.row-edge.prev')).toBeDisabled();
+  await edgeNext.click();
+  await expect.poll(left).toBeGreaterThan(0);
+  await expect(section.locator('.row-wrap')).toHaveClass(/more-left/);
+  await section.locator('.row-edge.prev').click();
+  await expect.poll(left).toBe(0);
+
+  // A drag scrolls, then settles on a card's edge
   const box = await row.boundingBox();
   await page.mouse.move(box.x + 300, box.y + 100);
   await page.mouse.down();
   await page.mouse.move(box.x + 100, box.y + 100, { steps: 5 });
+  expect(await left()).toBeGreaterThan(0);
   await page.mouse.up();
-  // The list row snaps to a column once the drag lets go
-  await expect.poll(left).toBeGreaterThanOrEqual(200);
-  await expect(page.locator('#detail')).toHaveClass(/hidden/);
+  // Once the drag lets go the row comes to rest on a snap stop: a column's edge, or either end
+  const resting = () => row.evaluate(r => {
+    const pad = parseFloat(getComputedStyle(r).paddingLeft) || 0;
+    const base = r.getBoundingClientRect().left + pad;
+    const stops = [0, r.scrollWidth - r.clientWidth,
+      ...[...r.children].map(c => c.getBoundingClientRect().left - base + r.scrollLeft)];
+    return stops.some(x => Math.abs(x - r.scrollLeft) <= 2) ? 'ok' : `scrollLeft ${r.scrollLeft}, stops ${stops.map(Math.round)}`;
+  });
+  await expect.poll(resting).toBe('ok');
+  await expect(page.locator('#detail')).toHaveCount(0);
 
   await row.locator('.card').first().focus();
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
@@ -135,11 +166,75 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
   await expect(page.locator('#body h2', { hasText: / ports$/ }).first()).toBeVisible();
 
   await items.first().click();
-  await expect(page.locator('#detail')).not.toHaveClass(/hidden/);
+  await expect(page.locator('#detail')).toBeVisible();
   await page.keyboard.press('Escape');
+  await expect(page.locator('#heading')).toHaveText('Home');
   await features.nth(1).click();
   await expect(page.locator('#detail')).toContainText('Banjo');
   await page.keyboard.press('Escape');
+});
+
+test('A game opens its details page; Back returns to the page and the scroll it came from', async () => {
+  await page.locator('[data-view="wall"]').click();
+  const body = page.locator('#body');
+  const zoo = page.locator('#body .game-card', { hasText: 'Zoo Tycoon' });
+  await page.setViewportSize({ width: 1280, height: 500 });
+  await body.evaluate(b => { b.style.scrollBehavior = 'auto'; });
+  await zoo.scrollIntoViewIfNeeded();
+  const scrolled = await body.evaluate(b => b.scrollTop);
+  expect(scrolled).toBeGreaterThan(0);
+  await zoo.click();
+
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
+  await expect(page.locator('#heading')).toHaveCount(0);
+  await expect(detail.locator('.album-sub')).toHaveText('rohanjackson071');
+  await expect(detail.locator('.album-meta')).toContainText('PC');
+  await expect(detail.locator('.album-meta')).toContainText('1,200 downloads');
+  await expect(detail.locator('#btn-download')).toBeVisible();
+  // The versions as a track list, newest first, the one shown ticked
+  await expect(detail.locator('.track')).toHaveCount(2);
+  await expect(detail.locator('.track').first()).toContainText('hailstormttv');
+  await expect(detail.locator('.track.on')).toHaveAttribute('data-version', 'rk-e2e-zoo-tycoon');
+  await expect(detail.locator('.album-foot')).toContainText('rk-e2e-zoo-tycoon');
+
+  // Back lands on the wall where it was left; Forward returns
+  await page.locator('#nav-back').click();
+  await expect(page.locator('#heading')).toHaveText('Game wall');
+  await expect(detail).toHaveCount(0);
+  await expect.poll(() => body.evaluate(b => b.scrollTop)).toBe(scrolled);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.locator('#nav-fwd').click();
+  await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
+  await settled();
+
+  // ⋯ opens the row menu (the same grouped, iconed list as a list row's ⋯),
+  // without Properties since this is that page; Escape closes it and stays
+  await detail.locator('[data-detail-menu]').click();
+  const menu = page.locator('#ctxmenu');
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .sep')).toHaveCount(2);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(5);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(detail).toBeVisible();
+  // Right-click on the page's head opens the same menu
+  await detail.locator('.album-title').click({ button: 'right' });
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+
+  // More from the uploader opens that title's page; Back walks back to this one
+  const more = detail.locator('.section', { hasText: 'More from rohanjackson071' });
+  await more.locator('.game-card', { hasText: 'Halo' }).click();
+  await expect(detail.locator('.album-title')).toHaveText('Halo: Combat Evolved');
+  await page.locator('#nav-back').click();
+  await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
+
+  // The uploader under the title leads to their wall
+  await detail.locator('.album-sub').click();
+  await expect(page.locator('#heading')).toHaveText('rohanjackson071');
 });
 
 test('The port shelf is the curated list: every card Curated, no game data, no other shelf', async () => {
@@ -161,11 +256,11 @@ test('Card states from tags: source only links the repository, work in progress 
   await expect(bfbb.locator('.state-badge')).toHaveText('Source only');
   await expect(bfbb.locator('.play-btn')).toHaveCount(0);
   await bfbb.click();
-  const detail = page.locator('#detail-panel');
+  const detail = page.locator('#detail');
   await expect(detail.locator('.source-only-note')).toHaveText('Source only, no download');
   await expect(detail.locator('#btn-install-port')).toHaveCount(0);
   await expect(detail.locator('[data-toggle-port]')).toHaveCount(0);
-  await expect(detail.locator('.actions [data-href]')).toHaveAttribute('data-href', 'https://github.com/bfbbdecomp/bfbb');
+  await expect(detail.locator('.album-actions [data-href]')).toHaveAttribute('data-href', 'https://github.com/bfbbdecomp/bfbb');
   await page.keyboard.press('Escape');
 
   await bfbb.click({ button: 'right' });
@@ -187,15 +282,19 @@ test('Card states from tags: source only links the repository, work in progress 
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
-  await expect(page.locator('#detail-panel .srcline')).toHaveText('Binary: GitHub release from BanjoRecomp/BanjoRecomp');
-  await page.locator('#detail-panel [data-toggle-port]').click();
-  await expect(page.locator('#detail-panel [data-toggle-port]')).toHaveText('Remove from library');
-  await page.keyboard.press('Escape');
+  // What installs: the release binary, and only that
+  await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
+  await expect(page.locator('#detail .tracklist .track')).toContainText('GitHub release from BanjoRecomp/BanjoRecomp');
+  await expect(page.locator('#detail .album-cover')).toHaveClass(/square/);
+  await page.locator('#detail [data-toggle-port]').click();
+  await expect(page.locator('#detail [data-toggle-port]')).toHaveText('Remove from library');
+  await page.locator('#nav-back').click();
+  await expect(page.locator('#heading')).toHaveText('Curated ports');
 
   await page.locator('[data-view="library"]').click();
   await expect(page.locator('#body .port-card')).toHaveCount(1);
   await page.locator('#body .port-card').click();
-  await page.locator('#detail-panel [data-toggle-port]').click();
+  await page.locator('#detail [data-toggle-port]').click();
   await page.keyboard.press('Escape');
   await expect(page.locator('#body .port-card')).toHaveCount(0);
 });
@@ -207,7 +306,14 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   await expect(page.locator('#btn-play')).toBeVisible({ timeout: 30_000 });
   const lib = await page.evaluate(() => api.getLibrary());
   expect(Object.values(lib).some(l => l.install_dir)).toBe(true);
+  // Installed: ⋯ (the row menu) has Add to Steam and Delete, the drawer's other buttons
+  await page.locator('#detail [data-detail-menu]').click();
+  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Play', 'Open Folder', 'Add to Steam…', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Delete']);
   await page.keyboard.press('Escape');
+  // Back to the search, with its results
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#q')).toHaveValue('Halo');
+  await expect(page.locator('#heading')).toHaveText('Search');
   await page.keyboard.press('Escape');
 });
 
@@ -271,8 +377,8 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
 test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab release', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
-  const detail = page.locator('#detail-panel');
-  await expect(detail.locator('.srcline')).toHaveText('Binary: GitLab release from sonicdcer/Starfox64Recomp');
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.tracklist .track')).toContainText('GitLab release from sonicdcer/Starfox64Recomp');
   await detail.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'StarFox64-StarFox64Recompiled');
@@ -284,6 +390,7 @@ test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab r
 
 test("The wall's library header sorts, searches, lists and pages, after Cider's", async () => {
   await page.locator('[data-view="wall"]').click();
+  await settled();
   const titles = () => page.locator('#body .game-card .title').allInnerTexts();
   const header = page.locator('.album-header');
   // Cider 2's dropdowns: a pill that opens a listbox, the choice marked
@@ -339,6 +446,7 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
 
 test("The wall's list view: Cider 2's song list, with sorting headers, a column picker and a ⋯ menu", async () => {
   await page.locator('[data-view="wall"]').click();
+  await settled();
   await page.locator('.album-header').getByRole('button', { name: 'List' }).click();
   const table = page.locator('#body .lv');
   const rows = table.locator('.lv-row');
@@ -377,6 +485,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await expect(picker).toBeHidden();
   await page.reload();
   await page.locator('[data-view="wall"]').click();
+  await settled();
   await expect(page.locator('#body .lv-head button[data-sort-col]')).toHaveText(['Name', 'Platform', 'Added', 'Downloads', 'Status']);
   await page.locator('#body [data-col-picker]').click();
   await page.locator('#ddmenu [role="option"][data-value="uploader"]').click();
@@ -402,6 +511,8 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await menu.locator('[data-menu="details"]').click();
   await expect(page.locator('#detail')).toContainText('The Sims');
   await page.keyboard.press('Escape');
+  await expect(page.locator('#detail')).toHaveCount(0);
+  await settled();
 
   await page.locator('.album-header').getByRole('button', { name: 'Cover art' }).click();
   await page.locator('.album-header [data-pref="sort"]').click();
@@ -417,6 +528,33 @@ test('Sidebar groups fold and stay folded', async () => {
   await expect(page.locator('#nav-uploaders')).toBeHidden();
   await page.locator('[data-collapse="uploaders"]').click();
   await expect(page.locator('#nav-uploaders')).toBeVisible();
+});
+
+/* global document, getComputedStyle, MutationObserver -- page.evaluate callbacks run in the page */
+test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
+  await page.locator('[data-view="home"]').click();
+  const card = page.locator('#body .row .game-card').first();
+  await card.hover();
+  await expect.poll(() => card.evaluate(c => getComputedStyle(c).transform)).not.toBe('none');
+  // Whether the next page change runs the page-enter animation
+  const entered = async (view) => {
+    await page.evaluate(() => {
+      globalThis.sawEnter = false;
+      new MutationObserver(() => { if (document.querySelector('#body').classList.contains('page-enter')) globalThis.sawEnter = true; })
+        .observe(document.querySelector('#body'), { attributes: true, attributeFilter: ['class'] });
+    });
+    await page.locator(`[data-view="${view}"]`).click();
+    await page.waitForTimeout(50);
+    return page.evaluate(() => globalThis.sawEnter);
+  };
+  expect(await entered('wall')).toBe(true);
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await entered('home')).toBe(false);
+  await card.hover();
+  expect(await card.evaluate(c => getComputedStyle(c).transform)).toBe('none');
+  expect(await card.evaluate(c => getComputedStyle(c).transitionDuration)).toBe('0s');
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
 });
 
 test('Additional sources: the toggle asks every time, user.json cards carry the badge, a changed file asks first', async () => {
@@ -539,7 +677,7 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   await page.locator('#manual-name').fill('My Homebrew');
   await page.locator('#btn-manual-create').click();
   const detail = page.locator('#detail');
-  await expect(detail.locator('h2')).toHaveText('My Homebrew');
+  await expect(detail.locator('.album-title')).toHaveText('My Homebrew');
   await expect(detail.locator('.manual-note')).toContainText("Put the app's files in its folder");
   const folder = await page.evaluate(async () => (await api.getLibrary())['manual:My Homebrew'].install_dir);
   expect(fs.readdirSync(folder)).toEqual(['Place app files here.txt']);
@@ -551,12 +689,18 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   expect((await launched).postDataJSON().exePath).toBe(path.join(folder, 'homebrew.exe'));
 
   await page.evaluate(() => { globalThis.prompt = () => 'Homebrew Deluxe'; });
-  await detail.locator('[data-action="manual-rename"]').click();
-  await expect(detail.locator('h2')).toHaveText('Homebrew Deluxe');
-  await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toContainText('Your folder');
+  await detail.locator('[data-detail-menu]').click();
+  await page.locator('#ctxmenu [data-menu="manual-rename"]').click();
+  await expect(detail.locator('.album-title')).toHaveText('Homebrew Deluxe');
+  await page.locator('#nav-back').click();
+  const card = page.locator('.game-card', { hasText: 'Homebrew Deluxe' });
+  await expect(card).toContainText('Your folder');
 
-  await detail.locator('[data-action="manual-remove"]').click();
-  await expect(detail).toBeHidden();
+  await card.click();
+  await detail.locator('[data-detail-menu]').click();
+  await page.locator('#ctxmenu [data-menu="manual-remove"]').click();
+  await expect(detail).toHaveCount(0);
+  await expect(page.locator('#heading')).toHaveText('Library');
   await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
   expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
 });

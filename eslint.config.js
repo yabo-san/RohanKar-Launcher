@@ -38,10 +38,17 @@ module.exports = [
     },
   },
   {
-    // Defined in ../api.js and ../sources.js, which new/index.html loads before app.js
+    // Defined in ../api.js, ../sources.js, ../list-view.js and ../details.js, which new/index.html loads before app.js
     files: ['src/frontend/new/app.js'],
     languageOptions: {
-      globals: { api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', ListView: 'readonly' },
+      globals: {
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly',
+        // ../list-view.js
+        ListView: 'readonly',
+        // ../details.js
+        installBytes: 'readonly', gameMeta: 'readonly', portMeta: 'readonly', versionRows: 'readonly',
+        moreFrom: 'readonly', morePorts: 'readonly', createHistory: 'readonly',
+      },
     },
   },
   {
@@ -51,7 +58,7 @@ module.exports = [
   },
   {
     // module.exports is guarded by typeof, for the node:test suite
-    files: ['src/frontend/sources.js'],
+    files: ['src/frontend/sources.js', 'src/frontend/details.js'],
     languageOptions: { globals: { module: 'writable' } },
   },
   {
