@@ -41,8 +41,8 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base`, `--overrides-url`, `--uploaders-url` and `--github-api` point archive.org, the
-catalog fetches and the GitHub API elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api` and `--gitlab-api` point
+archive.org, the catalog fetches and the GitHub and GitLab APIs elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
 the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
@@ -405,8 +405,11 @@ progress on `/events` or poll `/installs/:id`.
 A catalog port (`quiver:` id) is one job, `step: "binary"`: it takes the latest non-draft,
 non-prerelease GitHub release of the port's repository and picks its Windows asset (a user.json
 entry's `assetPattern` wins, then Quiver's `releaseAssetFilter`, then a Windows heuristic), then
-downloads and extracts it into `<install folder>/<folderName>`. Only the release binary is
-installed; game data is the user's job. Unknown ports answer `404`, ports that can't start (no repository) `422`.
+downloads and extracts it into `<install folder>/<folderName>`. An entry with `repositorySource:
+"gitlab"` takes GitLab's releases instead (`/projects/<url-encoded owner/repo>/releases`, the
+release's asset links, upcoming releases skipped); a download with no extension is unpacked by
+what its first bytes say it is. Only the release binary is installed; game data is the user's job.
+Unknown ports answer `404`, ports that can't start (no repository, or tagged "source only") `422`.
 
 From an additional source ([USER-SOURCES.md](USER-SOURCES.md)), a downloaded file (an archive.org
 upload, or a port's release asset) is checked against the sha1 its entry gives, or else against the

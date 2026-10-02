@@ -54,6 +54,7 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
+    '--gitlab-api', fixtures.base,
     '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
     '--curated-ports-url', `${fixtures.base}/curated-ports.json`,

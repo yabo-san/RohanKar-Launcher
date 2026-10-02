@@ -1,6 +1,6 @@
 {
   "name": "y4bo curated ports",
-  "description": "Fixture: the curated shelf: a port Quiver's Nintendo list also has, a source-only decomp, a work-in-progress recomp and an engine",
+  "description": "Fixture: the curated shelf: a port Quiver's Nintendo list also has, a source-only decomp, a work-in-progress recomp, an engine and a GitLab port",
   "version": 1,
   "apps": [
     {
@@ -43,6 +43,22 @@
         "owner pick"
       ],
       "description": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user."
+    },
+    {
+      "name": "Star Fox 64",
+      "project": "Star Fox 64: Recompiled",
+      "repository": "sonicdcer/Starfox64Recomp",
+      "repositorySource": "gitlab",
+      "folderName": "StarFox64-StarFox64Recompiled",
+      "tags": [
+        "recomp",
+        "n64",
+        "recomp port",
+        "owner pick"
+      ],
+      "filesToAdd": [
+        "portable.txt"
+      ]
     }
   ]
 }

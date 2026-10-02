@@ -1,7 +1,7 @@
 'use strict';
 /**
  * Port installs, the pieces that aren't downloading or extracting: which
- * GitHub release and asset to take, and laying the release down. A port
+ * GitHub or GitLab release and asset to take, and laying the release down. A port
  * installs its release binary only; game data is the user's job.
  */
 const fs     = require('fs');
@@ -18,6 +18,38 @@ const NOT_64 = /x86(?!_64)|win32|arm|i686/i;
 // GitHub API's /releases list (newest first)
 function pickRelease(releases) {
   return (Array.isArray(releases) ? releases : []).find(r => r && !r.draft && !r.prerelease) || null;
+}
+
+// GitLab's /projects/:id/releases (newest first) in GitHub's shape, so
+// pickRelease and pickAsset work on both. A release's downloads are its asset
+// links; the source archives GitLab adds to every release aren't builds. An
+// upcoming release (released_at in the future) counts as a prerelease.
+function releasesFromGitlab(list) {
+  return (Array.isArray(list) ? list : []).filter(r => r && r.tag_name).map(r => ({
+    tag_name:   r.tag_name,
+    name:       r.name || r.tag_name,
+    draft:      false,
+    prerelease: !!r.upcoming_release,
+    assets:     (Array.isArray(r.assets?.links) ? r.assets.links : []).filter(l => l && l.name && (l.direct_asset_url || l.url))
+      .map(l => ({ name: l.name, browser_download_url: l.direct_asset_url || l.url })),
+  }));
+}
+
+// GitLab's releases API for a repository (owner/repo, or group/subgroup/repo)
+const gitlabReleasesUrl = (api, repository) => `${api}/projects/${encodeURIComponent(repository)}/releases`;
+
+// An archive's extension from its first bytes, for a download whose name has
+// none (GitLab package links like ...-Windows-RelWithDebInfo): '.zip', '.7z' or ''
+const MAGIC = [['.zip', Buffer.from('504b0304', 'hex')], ['.7z', Buffer.from('377abcaf271c', 'hex')], ['.rar', Buffer.from('526172211a07', 'hex')]];
+function sniffArchiveExt(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const head = Buffer.alloc(8);
+    const n = fs.readSync(fd, head, 0, head.length, 0);
+    return MAGIC.find(([, m]) => n >= m.length && head.subarray(0, m.length).equals(m))?.[0] || '';
+  } catch { return ''; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
 }
 
 // A .NET-style pattern (a user.json github entry's assetPattern), e.g. "(?i)x86_64-windows"
@@ -92,4 +124,5 @@ function portTraits(entry = {}) {
   };
 }
 
-module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits, ARCHIVE_EXT };
+module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits,
+  releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, ARCHIVE_EXT };
