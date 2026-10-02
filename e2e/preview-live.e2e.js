@@ -51,7 +51,7 @@ test('the preview shows the feeds on main, not the build-time copies', async ({ 
   await expect(page.locator('#announce')).toContainText('Posted after the build');
   await page.locator('[data-view="wall"]').first().click();
   await expect(page.locator('#body')).toContainText('Halo, renamed on main');
-  await page.locator('[data-view="new"]').first().click();
+  await page.locator('[data-view="home"]').first().click();
   await expect(page.locator('#body')).toContainText('Picked after the build.');
   await expect(page.locator('#body')).not.toContainText('The one that started it all.');
   await expect(page.locator('body')).toContainText('feeds live');
@@ -61,7 +61,7 @@ test('a feed that fails falls back to what the build saved', async ({ page }) =>
   for (const k of Object.keys(feed)) delete feed[k];
 
   await page.goto(`${base}/new/index.html`);
-  await page.locator('[data-view="new"]').first().click();
+  await page.locator('[data-view="home"]').first().click();
   await expect(page.locator('#body')).toContainText('The one that started it all.');
   await page.locator('[data-view="wall"]').first().click();
   await expect(page.locator('#body')).toContainText('Halo: Combat Evolved');

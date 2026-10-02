@@ -1,6 +1,6 @@
 {
   "name": "y4bo-launcher",
-  "version": "1.6.0-fork.13",
+  "version": "1.6.0-fork.14",
   "description": "y4bo game launcher",
   "author": "Kilted-Kraken",
   "main": "src/electron/main.js",
@@ -35,7 +35,8 @@
       "assets/**/*",
       "overrides.json",
       "catalog/uploaders.json",
-      "catalog/featured.json"
+      "catalog/featured.json",
+      "catalog/banners.json"
     ],
     "extraResources": [
       {

@@ -26,21 +26,18 @@ Rules (K):
 
 Usage: python3 pstriple-art.py [--artists catalog/favorite-artists.json] [--overrides overrides.json]
 """
-import argparse, csv, hashlib, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
+import argparse, csv, json, sys, urllib.parse
 from pathlib import Path
 
+from sgdb import ALIASES, HERE, KEY, ROOT, art_entry, curated, find_game, game_name, get, load_artists, ranked, sgdb, steam64, votes
+
 UPLOADER = "frankiemiqueli1@gmail.com"
-KEY = os.environ.get("STEAMGRIDDB_API_KEY")
 if not KEY:
     sys.exit("STEAMGRIDDB_API_KEY is not set")
 
-HERE = Path(__file__).resolve().parent
-ROOT = HERE.parent.parent
 OUT = HERE / "pstriple-art.csv"
 BATCH = HERE / "batch.md"
 CANDIDATES = HERE / "candidates.csv"
-CACHE = HERE / "cache"
-CACHE.mkdir(exist_ok=True)
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--artists", type=Path, default=ROOT / "catalog" / "favorite-artists.json")
@@ -48,47 +45,7 @@ ap.add_argument("--overrides", type=Path, default=ROOT / "overrides.json")
 ap.add_argument("--art", type=Path, default=ROOT / "catalog" / "art.json")
 args = ap.parse_args()
 
-favs = json.loads(args.artists.read_text(encoding="utf-8"))["artists"]
-RANK = {str(a["steam64"]): i for i, a in enumerate(favs)}
-NAME = {str(a["steam64"]): a["name"] for a in favs}
-
-# Minimum seconds between live requests, per host.
-PACE = {"archive.org": 1.0, "www.steamgriddb.com": 0.25}
-last = {}
-
-
-def get(url, headers=None):
-    path = CACHE / (hashlib.sha256(url.encode()).hexdigest() + ".json")
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    host = urllib.parse.urlparse(url).hostname
-    req = urllib.request.Request(url, headers={"User-Agent": "yabo", **(headers or {})})
-    for _ in range(5):
-        wait = PACE.get(host, 1.0) - (time.monotonic() - last.get(host, 0))
-        if wait > 0:
-            time.sleep(wait)
-        last[host] = time.monotonic()
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                data = json.load(r)
-            path.write_text(json.dumps(data), encoding="utf-8")
-            return data
-        except urllib.error.HTTPError as e:
-            if e.code in (429, 503):
-                retry = e.headers.get("Retry-After")
-                time.sleep(float(retry) if retry and retry.isdigit() else 30)
-                continue
-            if e.code == 404:
-                path.write_text("null", encoding="utf-8")
-            return None
-        except Exception:
-            time.sleep(5)
-    return None
-
-
-def sgdb(path):
-    return get("https://www.steamgriddb.com/api/v2" + path, {"Authorization": "Bearer " + KEY})
+RANK, NAME = load_artists(args.artists)
 
 
 def items():
@@ -100,79 +57,19 @@ def items():
     return res.get("response", {}).get("docs", [])
 
 
-# Titles too abbreviated or misspelled for the search, by archive.org identifier.
-ALIASES = {
-    "SpidermanWOS": "Spider-Man: Web of Shadows",
-    "ResistanceOnline": "Resistance: Fall of Man",
-    "TOKYOJUNGLERPCS3": "Tokyo Jungle",
-    "pcsx-2-sly-1": "Sly Cooper and the Thievius Raccoonus",
-    "rpcs-3-latest-mod-nation-racers-online": "ModNation Racers",
-    "INFAMOUS1RPCS3": "inFAMOUS",
-    "IronMan2-RPCS3": "Iron Man 2",
-    "shadps-4-gr-2-branch": "Gravity Rush 2",
-    "GRFork": "Gravity Rush Remastered",  # GR2fork build tagged "gravity rush 1" on archive.org
-    "BBLauncher": "Bloodborne",  # Bloodborne on shadPS4, per catalog/uploaders.json
-    "Pokestadia": "Pokémon Stadium",  # the Pokémon Stadium recomp
-    "gen-1-recomp-guide-dramatic-shape-mod": "Pokémon Red Version",  # gen 1 recomp, not "GEN 2.1"
-    "dragon-ball-z-raging-blast-2-rpcs3": "Dragon Ball: Raging Blast 2",
-    "rag-doll-kung-fu-fists-of-plastic-rpcs3": "Rag Doll Kung Fu: Fists of Plastic",
-}
-
-# Emulator names, build numbers and extras that bundle titles carry around the game.
-JUNK = [
-    r"R[PC]{2}S\s?3", r"PCSX\s?2", r"Shad\s?PS\s?4", r"Recompiled", r"Preconfigured", r"Bundle",
-    r"Online Revived", r"Build[- ]?(\d[\d.]*(\s\d+)?)?", r"Latest", r"Patched", r"Multiplayer",
-    r"Revived", r"DLC", r"ONLINE",
-]
-
-
-def game_name(title):
-    t = re.sub(r"\[.*?\]|\(.*?\)", "", title)
-    t = re.split(r"\s[-|:]\s|\+", t)[0]
-    for junk in JUNK:
-        t = re.sub(r"\b" + junk + r"\b", "", t, flags=re.I)
-    return re.sub(r"\s+", " ", t).strip(" -:")
-
-
-def curated(assets):
-    """The best asset by a curated artist: artist priority first, then no_logo."""
-    fav = [a for a in assets if str((a.get("author") or {}).get("steam64") or "") in RANK]
-    fav.sort(key=lambda a: (RANK[str(a["author"]["steam64"])], a.get("style") != "no_logo"))
-    return fav[0] if fav else None
-
-
 def cover(term):
     """(matched game, cover grid, hero, all portrait grids, all heroes) for a search term."""
-    s = sgdb("/search/autocomplete/" + urllib.parse.quote(term))
-    # Skip emulator entries, which match any title that still mentions one.
-    games = [g for g in (s or {}).get("data") or [] if "(Emulator)" not in g["name"]]
-    if not games:
+    game = find_game(term)
+    if not game:
         return None, None, None, [], []
-    game = games[0]
     grids = (sgdb(f"/grids/game/{game['id']}?dimensions=600x900&types=static") or {}).get("data") or []
     heroes = (sgdb(f"/heroes/game/{game['id']}?dimensions=1920x620&types=static") or {}).get("data") or []
-    g = curated(grids)
-    return game, g, curated(heroes) if g else None, grids, heroes
+    g = curated(grids, RANK)
+    return game, g, curated(heroes, RANK) if g else None, grids, heroes
 
 
 def artist(asset):
-    return NAME[str(asset["author"]["steam64"])] if asset else ""
-
-
-def votes(asset):
-    return asset.get("score", (asset.get("upvotes") or 0) - (asset.get("downvotes") or 0))
-
-
-def art_entry(a):
-    au = a.get("author") or {}
-    return {"id": a.get("id"), "url": a.get("url"), "artist": au.get("name"), "steam64": str(au.get("steam64") or ""),
-            "style": a.get("style"), "votes": votes(a), "curated": str(au.get("steam64") or "") in RANK}
-
-
-def ranked(assets):
-    # Curated artists first (in priority order), then no_logo, then votes
-    return sorted(assets, key=lambda a: (RANK.get(str((a.get("author") or {}).get("steam64") or ""), len(RANK)),
-                                         a.get("style") != "no_logo", -votes(a)))
+    return NAME[steam64(asset)] if asset else ""
 
 
 current = json.loads(args.overrides.read_text(encoding="utf-8"))
@@ -188,8 +85,8 @@ for d in docs:
     art[d["identifier"]] = {
         "title": d.get("title", ""), "searched": term,
         "sgdb": {"id": game["id"], "name": game["name"]} if game else None,
-        "grids": [art_entry(a) for a in ranked(grids)],
-        "heroes": [art_entry(a) for a in ranked(heroes)],
+        "grids": [art_entry(a, RANK) for a in ranked(grids, RANK)],
+        "heroes": [art_entry(a, RANK) for a in ranked(heroes, RANK)],
     }
     if not g:
         # No curated art: top three portrait grids by anyone, no_logo first, then votes, for K to pick from.
