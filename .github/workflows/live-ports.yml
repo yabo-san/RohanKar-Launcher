@@ -1,6 +1,6 @@
 name: Live ports
 
-# A real port install against the real GitHub and archive.org
+# Real installs of Perfect Dark, Dusklight and Raze against the real GitHub and archive.org
 # (scripts/live-port.js), which the fixture tests can only imitate. Not a
 # required check: an upstream release or an archive.org outage can turn it red
 # without anything in this repo being wrong.
@@ -13,10 +13,13 @@ on:
       - 'src/backend/installs.js'
       - 'src/backend/ports.js'
       - '.github/workflows/live-ports.yml'
+  # Weekly, so an upstream release or archive.org change that breaks an install shows up
+  schedule:
+    - cron: '17 6 * * 1'
   workflow_dispatch:
     inputs:
       repos:
-        description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark and Dusklight)'
+        description: 'Repositories from catalog/collisions.json, space separated (default: Perfect Dark, Dusklight and Raze)'
         required: false
       ia:
         description: 'archive.org items to list, as item or item:regex, space separated'
@@ -30,8 +33,13 @@ permissions:
 
 jobs:
   install:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Windows is where the ports run: its job also tries starting each exe
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -40,6 +48,7 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Install the ports for real
+        shell: bash
         env:
           REPOS: ${{ inputs.repos }}
           # The TOSEC N64 set, for collisions that take a ROM from it, and Dusklight's data item

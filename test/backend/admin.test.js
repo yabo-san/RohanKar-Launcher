@@ -89,6 +89,28 @@ test('admin: a tile saved into the curated file shows on its shelf; edits keep t
   assert.deepEqual(JSON.parse(fs.readFileSync(collisionsFile, 'utf8')).map(c => c.repository), ['A/Listed']);
 });
 
+test('admin: an archive.org-only tile (no repository) is keyed by name:, shows on its shelf, renames in place', async (t) => {
+  const { call, collisionsFile, backend } = await setup(t);
+  const RAZE = { name: 'Raze', shelf: 'y4bo ports', exe: 'raze.exe', sources: [{ ia: 'raze-package', path: 'Raze Package.zip', extract: true, unwrap: true }] };
+  assert.equal((await call('PUT', `/admin/collisions/${enc('name:Raze')}`, RAZE)).status, 201);
+  assert.deepEqual(JSON.parse(fs.readFileSync(collisionsFile, 'utf8')), [...CURATED, RAZE]);
+  const [item] = backend.catalogs.items().filter(i => i.shelf === 'y4bo ports');
+  assert.deepEqual([item.id, item.title, item.repository, item.data.exe, item.data.sources[0].ia], ['quiver:curated-y4bo-ports:name:Raze', 'Raze', null, 'raze.exe', 'raze-package']);
+  assert.equal((await call('GET', `/collisions/${enc('name:Raze')}`)).body.origin, 'bundled');
+
+  // Renaming it replaces it where it is; a name another entry has is refused
+  assert.equal((await call('PUT', `/admin/collisions/${enc('name:Raze')}`, { ...RAZE, name: 'Raze (Build games)' })).status, 200);
+  assert.deepEqual(JSON.parse(fs.readFileSync(collisionsFile, 'utf8')).map(c => c.repository || c.name), ['a/listed', 'Raze (Build games)']);
+  await call('PUT', `/admin/collisions/${enc('name:Other')}`, { ...RAZE, name: 'Other' });
+  const clash = await call('PUT', `/admin/collisions/${enc('name:Other')}`, { ...RAZE, name: 'Raze (Build games)' });
+  assert.deepEqual([clash.status, clash.body.errors], [400, ['Raze (Build games) is already in the curated list']]);
+
+  const bad = await call('PUT', `/admin/collisions/${enc('name:X')}`, { name: 'X', assetPattern: 'x' });
+  assert.deepEqual(bad.body.errors, ['repository must be owner/repo (or leave it out and give a name and sources)', 'assetPattern needs a repository']);
+  assert.equal((await call('DELETE', `/admin/collisions/${enc('name:Raze (Build games)')}`)).status, 204);
+  assert.deepEqual(JSON.parse(fs.readFileSync(collisionsFile, 'utf8')).map(c => c.repository || c.name), ['a/listed', 'Other']);
+});
+
 test('admin: releases with a pattern per asset that survives version bumps; archive.org search', async (t) => {
   const { call } = await setup(t);
   const r = (await call('GET', `/admin/releases/${enc('o/pd')}?pattern=${enc('(?i)windows')}`)).body;

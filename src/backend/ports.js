@@ -161,7 +161,12 @@ const safeRel = (p) => typeof p === 'string' && !/^([a-z]:|[\\/])/i.test(p) && !
 function validateCollision(c) {
   const errs = [];
   if (!c || typeof c !== 'object' || Array.isArray(c)) return ['entry must be an object'];
-  if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
+  // No repository: an archive.org-only entry, its binaries among its sources
+  const hasSources = Array.isArray(c.sources) && c.sources.length > 0;
+  if (c.repository == null || c.repository === '') {
+    if (!hasSources || !c.name) errs.push('repository must be owner/repo (or leave it out and give a name and sources)');
+    for (const k of ['assetPattern', 'releaseAssetFilter', 'keepReleaseFolder', 'binaryTarget', 'base']) if (c[k] != null) errs.push(`${k} needs a repository`);
+  } else if (typeof c.repository !== 'string' || !REPO.test(c.repository.trim())) errs.push('repository must be owner/repo');
   for (const k of ['name', 'folderName', 'releaseAssetFilter', 'shelf']) if (c[k] != null && typeof c[k] !== 'string') errs.push(`${k} must be a string`);
   if (c.hidden != null && typeof c.hidden !== 'boolean') errs.push('hidden must be true or false');
   if (c.assetPattern != null) {
@@ -181,9 +186,10 @@ function validateCollision(c) {
     if (s.target != null && !safeRel(s.target)) errs.push(`${at}.target must be a relative folder`);
     if (s.sha1 != null && !SHA1.test(s.sha1)) errs.push(`${at}.sha1 must be 40 hex characters`);
     if (s.sha1 != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.sha1 only applies to a single file`);
-    for (const k of ['extract', 'optional']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
+    for (const k of ['extract', 'optional', 'unwrap']) if (s[k] != null && typeof s[k] !== 'boolean') errs.push(`${at}.${k} must be true or false`);
     if (s.as != null && !(typeof s.as === 'string' && /^[^\\/:*?"<>|]+$/.test(s.as) && s.as !== '.' && s.as !== '..')) errs.push(`${at}.as must be a file name`);
     if (s.as != null && typeof s.path === 'string' && isGlob(s.path)) errs.push(`${at}.as only applies to a single file`);
+    if (s.unwrap && !s.extract) errs.push(`${at}.unwrap only applies with extract`);
   });
   if (!(Array.isArray(c.sources) && c.sources.length) && !(Array.isArray(c.dataFiles) && c.dataFiles.length) && !c.name) {
     errs.push('an entry with no data sources needs a name (it defines a port of its own)');

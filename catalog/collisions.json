@@ -181,12 +181,17 @@
   {
     "name": "Raze",
     "repository": "ZDoom/Raze",
-    "iaIdentifier": "raze-package",
-    "contentUrl": "https://archive.org/download/raze-package/Raze%20Package.zip",
-    "ingest": "place-file",
-    "assetPattern": "^Raze-.*-windows\\.zip$",
+    "assetPattern": "(?i)^raze-.*-windows\\.zip$",
     "folderName": "ZDoom.Raze",
-    "dataFiles": null
+    "exe": "raze.exe",
+    "sources": [
+      {
+        "ia": "raze-package",
+        "path": "Raze Package.zip",
+        "extract": true,
+        "unwrap": true
+      }
+    ]
   },
   {
     "name": "OutRun 2006: Coast 2 Coast",

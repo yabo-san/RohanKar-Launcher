@@ -6,12 +6,13 @@
  *
  *   node scripts/live-port.js [owner/repo ...] [--keep] [--ia item[:regex] ...] [--zip item/file.zip ...]
  *
- * For each repository in catalog/collisions.json (default: Perfect Dark and Dusklight) it
+ * For each repository (or, archive.org-only, name) in catalog/collisions.json (default: Perfect Dark and Dusklight) it
  * prints the releases GitHub returns and the asset it would pick, then
  * installs the port into a temp folder with the same install engine the app
- * uses, and lists what landed. --ia lists an archive.org item's files (those
+ * uses, lists what landed and checks it against EXPECT (on Windows it also
+ * tries starting the exe). --ia lists an archive.org item's files (those
  * whose path matches the regex), to find the file a collision should use.
- * Exits 1 if any install fails.
+ * Exits 1 if any install fails or misses a file it should have.
  */
 const fs   = require('fs');
 const os   = require('os');
@@ -24,7 +25,16 @@ const { getText } = require('../src/backend/net');
 const { itemData } = require('../src/backend/catalogs');
 
 const ROOT = path.join(__dirname, '..');
-const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight'];
+const DEFAULT = ['perfect-dark-pc-port/perfect_dark', 'TwilitRealm/dusklight', 'ZDoom/Raze'];
+
+// What a good install of each default port holds: files found anywhere in the
+// install folder (case-insensitive), with a sha1 or a minimum size where one
+// is known. The exe the collision names must be there too.
+const EXPECT = {
+  'perfect-dark-pc-port/perfect_dark': [{ path: 'data/pd.ntsc-final.z64', sha1: 'af8788ac4d1a57260eae9c53ffe851fcf2a3319b' }],
+  'twilitrealm/dusklight': [{ name: 'Legend of Zelda, The - Twilight Princess (USA).ciso', minSize: 1_000_000_000 }],
+  'zdoom/raze': [{ name: 'raze.pk3' }, { name: 'DUKE3D.GRP' }, { name: 'BLOOD.RFF' }],
+};
 
 function parseArgs(argv) {
   const ia = [];
@@ -59,7 +69,7 @@ async function listIa(spec, print) {
 // A collision as the catalog item catalogs.items() would build for it
 function itemFor(c) {
   return {
-    id: `quiver:live:${c.repository.toLowerCase()}`, title: c.name || c.repository, repository: c.repository,
+    id: `quiver:live:${(c.repository || c.name).toLowerCase()}`, title: c.name || c.repository, repository: c.repository || null,
     entry: { folderName: c.folderName || '', ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}) },
     data: itemData(c), // as the app's port shelves hand it to the install
   };
@@ -86,6 +96,49 @@ function n64Header(file) {
   const order = { 80371240: 'z64 (big-endian)', 37804012: 'v64 (byteswapped)', 40123780: 'n64 (little-endian)' }[magic] || `unknown order ${magic}`;
   if (!order.startsWith('z64')) return order;
   return `${order}, title "${b.toString('latin1', 0x20, 0x34).trim()}", code ${b.toString('latin1', 0x3b, 0x3f)}, rev ${b[0x3f]}`;
+}
+
+// Every file under dir, relative, forward slashes
+function allFiles(dir, rel = '', out = []) {
+  for (const e of fs.readdirSync(path.join(dir, rel), { withFileTypes: true })) {
+    const r = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) allFiles(dir, r, out); else out.push(r);
+  }
+  return out;
+}
+
+// The install checked against EXPECT and the collision's exe → problems, empty when it's good
+function checkInstall(dir, c, expect = EXPECT[String(c.repository).toLowerCase()] || []) {
+  const files = allFiles(dir);
+  const errs = [];
+  const want = [...(c.exe ? [{ path: c.exe }] : []), ...expect];
+  for (const w of want) {
+    const hit = w.path ? files.find(f => f.toLowerCase() === w.path.toLowerCase()) : files.find(f => path.posix.basename(f).toLowerCase() === w.name.toLowerCase());
+    if (!hit) { errs.push(`${w.path || w.name} is missing`); continue; }
+    const p = path.join(dir, hit);
+    if (w.minSize && fs.statSync(p).size < w.minSize) errs.push(`${hit} is ${fs.statSync(p).size} bytes, expected at least ${w.minSize}`);
+    if (w.sha1) {
+      const sum = require('crypto').createHash('sha1').update(fs.readFileSync(p)).digest('hex');
+      if (sum !== w.sha1) errs.push(`${hit} has sha1 ${sum}, expected ${w.sha1}`);
+    }
+  }
+  return errs;
+}
+
+// Windows only: starts the exe and says whether it's still running after a
+// few seconds (a game that can't find its data usually quits at once). Only
+// reported: a CI runner has no GPU, so a crash here isn't proof of a bad install
+async function tryLaunch(exe, print, seconds = 8) {
+  if (process.platform !== 'win32' || !exe) return;
+  const { spawn } = require('child_process');
+  const child = spawn(exe, [], { cwd: path.dirname(exe), stdio: 'ignore' });
+  const exited = await new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), seconds * 1000);
+    child.on('exit', (code) => { clearTimeout(t); resolve({ code }); });
+    child.on('error', (e) => { clearTimeout(t); resolve({ code: e.message }); });
+  });
+  if (exited) print(`launch: ${path.basename(exe)} exited within ${seconds}s (code ${exited.code})`);
+  else { print(`launch: ${path.basename(exe)} still running after ${seconds}s`); child.kill(); }
 }
 
 async function releases(repository, print) {
@@ -156,10 +209,11 @@ async function run(opts, print = (l) => console.log(l)) {
   for (const spec of opts.zips || []) failed += await listZip(spec, print);
   try {
     for (const repo of opts.repos) {
-      const c = catalog.find(x => x.repository.toLowerCase() === repo.toLowerCase());
+      // owner/repo, or the name of an archive.org-only entry
+      const c = catalog.find(x => (x.repository || x.name || '').toLowerCase() === repo.toLowerCase());
       print(`\n== ${repo}`);
       if (!c) { print('not in catalog/collisions.json'); failed++; continue; }
-      await releases(c.repository, print);
+      if (c.repository) await releases(c.repository, print);
       const item = itemFor(c);
       const started = installs.startPort({ item });
       if (!started.ok) { print(`can't start: ${started.detail}`); failed++; continue; }
@@ -176,6 +230,9 @@ async function run(opts, print = (l) => console.log(l)) {
       if (job.status === 'done') {
         print(`installed to ${job.installDir}; exe ${job.exePath || '(several or none)'}`);
         print(tree(job.installDir).map(l => `  ${l}`).join('\n'));
+        const errs = checkInstall(job.installDir, c);
+        if (errs.length) { print(`CHECK FAILED: ${errs.join('; ')}`); failed++; } else print('check: every expected file is there');
+        await tryLaunch(job.exePath, print);
       } else {
         print(`FAILED at ${job.step || 'start'}: ${job.error}`);
         failed++;
@@ -193,4 +250,4 @@ if (require.main === module) {
     .catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { parseArgs, itemFor, n64Header, parseListing, summarizeListing, run };
+module.exports = { parseArgs, itemFor, n64Header, parseListing, summarizeListing, checkInstall, run };

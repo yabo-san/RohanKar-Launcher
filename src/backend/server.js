@@ -245,7 +245,10 @@ function createApi(backend) {
   });
   route('PUT', '/admin/collisions/:repo', ({ params, body }) => {
     needAdmin();
-    const r = catalogs.saveCurated({ ...requireObject(body), repository: params.repo });
+    // name:<name> names an archive.org-only entry (no repository)
+    const r = params.repo.startsWith('name:')
+      ? catalogs.saveCurated(requireObject(body), params.repo)
+      : catalogs.saveCurated({ ...requireObject(body), repository: params.repo });
     if (!r.ok) throw new HttpError(400, 'bad_collision', r.errors.join('; '), { errors: r.errors });
     return { status: r.created ? 201 : 200, body: r.entry };
   });

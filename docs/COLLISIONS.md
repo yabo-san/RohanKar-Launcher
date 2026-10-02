@@ -64,7 +64,7 @@ An array of entries, `{ "collisions": [...] }`, or an object keyed by repository
 
 | field | meaning |
 | --- | --- |
-| `repository` | Required. The GitHub repository, `owner/repo`. The join key; titles never match. |
+| `repository` | The GitHub repository, `owner/repo`. The join key; titles never match. Leave it out for an archive.org-only entry, whose binaries come from its `sources`: it then needs a `name` (its key) and at least one source, and the release fields (`assetPattern`, `releaseAssetFilter`, `keepReleaseFolder`, `binaryTarget`, `base`) don't apply. Curated only for now, with a `shelf` to make it a tile. |
 | `name`, `folderName` | The port's name and install folder when no catalog lists it. `folderName` also names the folder when one does. |
 | `assetPattern` | Regex (`(?i)` prefix for case-insensitive) that picks the release asset. Wins over the catalog's `releaseAssetFilter`. |
 | `base` | Which half lays down first: `"binary"` (default) or `"data"`. The other goes on top and wins on clashes. |
@@ -90,6 +90,7 @@ one file out of it.
 | `sha1` | For a single file: the sha1 it must have. Without it, archive.org's own sha1 from the item's file list is checked. Folder sources are always checked against archive.org's. |
 | `optional` | `true` skips the source when the item doesn't have it, instead of failing. |
 | `as` | For a single file: the name it lands under, e.g. the `pd.ntsc-final.z64` a port expects. With `extract`, the archive's one file (its biggest, past any readme) lands under that name: a ROM set like N64TOSEC ships one zip per ROM, named its own way. A name ending in `.z64` gets a big-endian ROM: N64TOSEC's byteswapped `.n64` dumps are turned around, since recomps read `.z64`. |
+| `unwrap` | With `extract`: an archive that holds one folder and nothing else (like `Raze Package/`) lays down that folder's contents in `target`, as a release archive does. |
 
 Paths never climb out of the install folder: `..`, drive letters and leading slashes are refused.
 

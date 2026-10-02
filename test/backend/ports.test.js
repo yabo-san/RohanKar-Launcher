@@ -13,6 +13,7 @@ const { createArchive } = require('../../src/backend/archive');
 const { createSettings } = require('../../src/backend/settings');
 const { createLibrary } = require('../../src/backend/library');
 const { fakeArchive, tmpDir, makeZip } = require('./helpers');
+const { itemData } = require('../../src/backend/catalogs');
 
 const asset = (name) => ({ name, browser_download_url: `https://x/${name}` });
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex');
@@ -218,7 +219,7 @@ test('missing data, optional data, no Windows build, no repository', async (t) =
   state.routes['/repos/o/pd/releases'] = (req, res) => { res.writeHead(200); res.end('[]'); };
   assert.equal((await run({ ...item, id: 'quiver:c1:o/pd7' })).error, 'o/pd has no published release');
 
-  assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no GitHub repository to install from.' });
+  assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no GitHub repository or archive.org sources to install from.' });
 });
 
 test('a port with no data and a bare exe asset installs the exe; cancelling stops it', async (t) => {
@@ -344,6 +345,26 @@ test('a ROM zip from a set like N64TOSEC: unpacked, its one ROM renamed with `as
   assert.equal(ports.expandSource({ ia: 'i', path: 'roms/bk.z64', as: 'baserom.z64' }, IA_FILES).files[0].rel, 'baserom.z64');
 });
 
+test('a data archive that is one folder ("Raze Package/") lays down its contents with `unwrap`', async (t) => {
+  const { dir, installs, item, state } = await setup(t, { bin: PD_REAL() });
+  const pack = makeZip({ 'Raze Package/DUKE3D.GRP': 'GRP', 'Raze Package/Blood/BLOOD.RFF': 'RFF' });
+  state.files['raze-package'] = [{ name: 'Raze Package.zip', source: 'original', size: String(pack.length), sha1: sha1(pack) }];
+  state.routes['/download/raze-package/Raze%20Package.zip'] = (req, res) => { res.writeHead(200); res.end(pack); };
+  const source = { ia: 'raze-package', path: 'Raze Package.zip', extract: true, unwrap: true };
+  assert.deepEqual(ports.validateCollision({ repository: 'o/raze', sources: [source] }), []);
+  const r = installs.startPort({ item: { ...item, data: { assetPattern: '(?i)x86_64-windows', exe: 'pd.x86_64.exe', sources: [source] } } });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
+  assert.deepEqual([job.status, job.error], ['done', null]);
+  assert.equal(fs.readFileSync(path.join(dest, 'DUKE3D.GRP'), 'utf8'), 'GRP');
+  assert.equal(fs.readFileSync(path.join(dest, 'Blood', 'BLOOD.RFF'), 'utf8'), 'RFF');
+  assert.ok(!fs.readdirSync(dest).some(n => n.startsWith('.unpack-') || n === 'Raze Package'), 'no staging, no wrapper folder');
+  assert.deepEqual(ports.validateCollision({ repository: 'o/raze', sources: [{ ia: 'i', path: 'x.zip', unwrap: true }, { ia: 'i', path: 'x.zip', extract: true, unwrap: 'yes' }] }), [
+    'sources[0].unwrap only applies with extract', 'sources[1].unwrap must be true or false',
+  ]);
+});
+
 test('an N64 ROM in any byte order becomes a .z64; other files are left as they are', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-z64-'));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -360,4 +381,29 @@ test('an N64 ROM in any byte order becomes a .z64; other files are left as they 
   assert.equal(ports.toZ64(text), null);
   assert.equal(fs.readFileSync(text, 'utf8'), 'not a rom');
   assert.equal(ports.n64Order(Buffer.alloc(2)), null);
+});
+
+test('an archive.org-only entry (no repository) installs its binaries from its sources and never asks GitHub', async (t) => {
+  const { installs, state } = await setup(t, { bin: PD_REAL() });
+  const pack = makeZip({ 'Raze Package/raze.exe': 'EXE', 'Raze Package/DUKE3D.GRP': 'GRP' });
+  state.files['raze-package'] = [{ name: 'Raze Package.zip', source: 'original', size: String(pack.length), sha1: sha1(pack) }];
+  state.routes['/download/raze-package/Raze%20Package.zip'] = (req, res) => { res.writeHead(200); res.end(pack); };
+  let github = 0;
+  const releases = state.routes['/repos/o/pd/releases'];
+  state.routes['/repos/o/pd/releases'] = (req, res) => { github++; releases(req, res); };
+  const entry = { name: 'Raze', exe: 'raze.exe', sources: [{ ia: 'raze-package', path: 'Raze Package.zip', extract: true, unwrap: true }] };
+  assert.deepEqual(ports.validateCollision(entry), []);
+  const item = { id: 'quiver:curated-ports:name:Raze', title: 'Raze', repository: null, entry: { name: 'Raze', folderName: '' }, data: itemData(entry) };
+  const r = installs.startPort({ item });
+  await installs.wait(r.jobs[0].id);
+  const job = installs.get(r.jobs[0].id);
+  assert.deepEqual([job.status, job.error, path.basename(job.installDir)], ['done', null, 'Raze']);
+  assert.equal(job.exePath, path.join(job.installDir, 'raze.exe'));
+  assert.equal(fs.readFileSync(path.join(job.installDir, 'DUKE3D.GRP'), 'utf8'), 'GRP');
+  assert.equal(github, 0);
+
+  assert.deepEqual(installs.startPort({ item: { ...item, data: itemData({ name: 'Raze' }) } }).error, 'no_repository');
+  assert.deepEqual(ports.validateCollision({ exe: 'raze.exe', sources: entry.sources }), ['repository must be owner/repo (or leave it out and give a name and sources)']);
+  assert.deepEqual(ports.validateCollision({ name: 'Raze' }), ['repository must be owner/repo (or leave it out and give a name and sources)']);
+  assert.deepEqual(ports.validateCollision({ ...entry, assetPattern: 'x', base: 'data' }), ['assetPattern needs a repository', 'base needs a repository']);
 });

@@ -43,7 +43,7 @@ test('parse: apps wrapper or bare array; collisions as array or keyed object', (
   assert.throws(() => parseCatalog('{"x":[]}'), /array/);
   const keyed = parseCollisions(JSON.stringify({ _comment: 'x', 'Owner/Repo': { iaIdentifier: 'i' } }));
   assert.deepEqual([...keyed.keys()], ['owner/repo']);
-  assert.equal(parseCollisions('[{"repository":"  A/B "},{"name":"no repo"}]').size, 1);
+  assert.deepEqual([...parseCollisions('[{"repository":"  A/B "},{"name":"archive.org only"},{"x":1}]').keys()], ['a/b', 'name:archive.org only']);
   assert.equal(entryKey({ repository: 'A/B' }), 'a/b');
   assert.equal(entryKey({ name: 'N' }), 'name:N');
 });
