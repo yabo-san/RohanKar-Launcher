@@ -48,6 +48,18 @@ test('getFollow: follows absolute and relative redirects, gives up after the lim
   assert.ok((await follow('http://[bad')).error);
 });
 
+test('getFollow: extra headers go out on every hop', async (t) => {
+  const seen = [];
+  const fake = await fakeArchive(t, {
+    routes: {
+      '/hop':  (req, res) => { seen.push(req.headers.range); res.writeHead(302, { location: '/last' }); res.end(); },
+      '/last': (req, res) => { seen.push(req.headers.range); res.writeHead(206); res.end('ab'); },
+    },
+  });
+  assert.deepEqual(await follow(`${fake.base}/hop`, { headers: { Range: 'bytes=0-1' } }), { status: 206 });
+  assert.deepEqual(seen, ['bytes=0-1', 'bytes=0-1']);
+});
+
 test('getFollow: an aborted request reports nothing', async (t) => {
   const fake = await fakeArchive(t, { routes: { '/slow': () => {} } });
   let called = false;
