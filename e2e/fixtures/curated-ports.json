@@ -1,0 +1,97 @@
+{
+  "name": "y4bo curated ports",
+  "description": "Fixture: the curated shelf, cut from the real list: ports with releases, a source-only decomp, a work-in-progress recomp, an engine and a GitLab port",
+  "version": 1,
+  "apps": [
+    {
+      "name": "Banjo-Kazooie",
+      "project": "Banjo: Recompiled",
+      "repository": "BanjoRecomp/BanjoRecomp",
+      "folderName": "BanjoKazooie-BanjoRecompiled",
+      "tags": [
+        "recomp",
+        "n64",
+        "recomp port",
+        "curated"
+      ],
+      "filesToAdd": [
+        "portable.txt"
+      ]
+    },
+    {
+      "name": "Mario Kart 64",
+      "project": "Mario Kart 64: Recompiled",
+      "repository": "sonicdcer/MarioKart64Recomp",
+      "folderName": "MarioKart64-MarioKart64Recompiled",
+      "tags": [
+        "recomp",
+        "n64"
+      ]
+    },
+    {
+      "name": "AeroGauge",
+      "project": "AeroGauge: Recompiled",
+      "repository": "alondero/aerogauge-recomp",
+      "folderName": "AeroGauge-AeroGaugeRecompiled",
+      "tags": [
+        "recomp",
+        "n64"
+      ]
+    },
+    {
+      "name": "Perfect Dark",
+      "project": "Perfect Dark PC Port",
+      "repository": "perfect-dark-pc-port/perfect_dark",
+      "folderName": "PerfectDark-PerfectDarkPCPort",
+      "tags": [
+        "decomp",
+        "n64"
+      ]
+    },
+    {
+      "name": "BFBB",
+      "repository": "bfbbdecomp/bfbb",
+      "folderName": "BFBB",
+      "tags": [
+        "source only",
+        "curated"
+      ]
+    },
+    {
+      "name": "MediEvilRecomp",
+      "repository": "BlackLabelHQ/MediEvilRecomp",
+      "folderName": "MediEvilRecomp",
+      "tags": [
+        "work in progress",
+        "curated"
+      ]
+    },
+    {
+      "name": "Quake (ironwail)",
+      "repository": "andrei-drexler/ironwail",
+      "folderName": "ironwail",
+      "releaseAssetFilter": "win64",
+      "tags": [
+        "engine",
+        "owner pick"
+      ],
+      "description": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user."
+    },
+    {
+      "name": "Star Fox 64",
+      "project": "Star Fox 64: Recompiled",
+      "repository": "sonicdcer/Starfox64Recomp",
+      "repositorySource": "gitlab",
+      "folderName": "StarFox64-StarFox64Recompiled",
+      "tags": [
+        "recomp",
+        "n64",
+        "recomp port",
+        "owner pick"
+      ],
+      "filesToAdd": [
+        "portable.txt"
+      ]
+    }
+  ]
+}

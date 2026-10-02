@@ -4,8 +4,7 @@
  * a plain browser against the standalone backend.
  *
  * - The wall holds the shipped uploaders' games, grouped by title.
- * - A Ports shelf comes from a Quiver list; a list that can't be fetched
- *   shows as unreachable.
+ * - The port shelf is the curated list, with no game data on its cards.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
  * - A port installs the Windows build from its GitHub release, and only that
@@ -26,10 +25,9 @@
  * - Additional sources: the Settings toggle asks in a modal every time it goes
  *   on; user.json's entries show with the Your source badge, curated ones
  *   never; a file that changed since its first install asks before installing.
- * - Settings imports a Quiver library (apps.json + Apps/) without downloading.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
- * archive.org and the Quiver lists are served by fixture-server.js.
+ * archive.org, GitHub and the curated list are served by fixture-server.js.
  */
 
 const { test, expect } = require('@playwright/test');
@@ -51,10 +49,7 @@ let stack, page;
 const settled = () => expect(page.locator('#body.page-enter')).toHaveCount(0);
 
 test.beforeAll(async ({ browser }) => {
-  stack = await startStack({}, {
-    page: 'new/index.html',
-    catalogs: [{ file: 'Nintendo.json', shelf: 'Nintendo' }, { file: 'Xbox.json', shelf: 'Xbox' }, { file: 'TestPorts.json', shelf: 'Test ports' }],
-  });
+  stack = await startStack({}, { page: 'new/index.html' });
   page = await browser.newPage();
   // SteamGridDB's CDN, for the featured banners: a small local hero
   await page.route('https://cdn2.steamgriddb.com/**', r => r.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.join(__dirname, 'fixtures', 'hero.png')) }));
@@ -142,7 +137,7 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
   await page.locator('[data-view="home"]').click();
   await expect(page.locator('#heading')).toHaveText('Home');
   await expect(page.locator('.sidebar [data-view="home"]')).toHaveClass(/active/);
-  // featured.json: Halo, an item not on the wall (skipped), Banjo from the Nintendo list
+  // featured.json: Halo, an item not on the wall (skipped), Banjo from the curated list
   const features = page.locator('#body .feature-card');
   await expect(features).toHaveCount(2);
   await expect(features.nth(0).locator('.title')).toHaveText('Halo: Combat Evolved');
@@ -242,17 +237,50 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   await expect(page.locator('#heading')).toHaveText('rohanjackson071');
 });
 
-test('a Ports shelf comes from its Quiver list, with no game data on its cards', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
-  await expect(page.locator('#body .port-card')).toHaveCount(3);
+test('The port shelf is the curated list: every card Curated, no game data, no other shelf', async () => {
+  await expect(page.locator('#nav-shelves .navitem')).toHaveCount(1);
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await expect(page.locator('#body .port-card')).toHaveCount(8);
+  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(8);
   await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
+  await expect(page.locator('#body .lib-count')).toContainText('Source: y4bo curated list');
+  await page.locator('#btn-settings').click();
+  await expect(page.locator('#setting-full-quiver')).toHaveCount(0);
+  await expect(page.locator('#quiver-import')).toHaveCount(0);
+  await page.locator('#btn-settings').click();
+});
 
-  await page.locator('#nav-shelves .navitem', { hasText: 'Xbox' }).click();
-  await expect(page.locator('#body .notice')).toContainText("Couldn't fetch the Xbox catalog");
+test('Card states from tags: source only links the repository, work in progress and engines still install', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  const bfbb = page.locator('.port-card', { hasText: 'BFBB' });
+  await expect(bfbb.locator('.state-badge')).toHaveText('Source only');
+  await expect(bfbb.locator('.play-btn')).toHaveCount(0);
+  await bfbb.click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.source-only-note')).toHaveText('Source only, no download');
+  await expect(detail.locator('#btn-install-port')).toHaveCount(0);
+  await expect(detail.locator('[data-toggle-port]')).toHaveCount(0);
+  await expect(detail.locator('.album-actions [data-href]')).toHaveAttribute('data-href', 'https://github.com/bfbbdecomp/bfbb');
+  await page.keyboard.press('Escape');
+
+  await bfbb.click({ button: 'right' });
+  await expect(page.locator('#ctxmenu [data-menu="install"]')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  await page.locator('.port-card', { hasText: 'MediEvilRecomp' }).click();
+  await expect(detail.locator('.state-badge.wip')).toHaveText('Work in progress');
+  await expect(detail.locator('#btn-install-port')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  await page.locator('.port-card', { hasText: 'ironwail' }).click();
+  await expect(detail.locator('.state-badge.role')).toHaveText('Engine');
+  await expect(detail.locator('.port-desc')).toHaveText('Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user.');
+  await expect(detail.locator('#btn-install-port')).toBeVisible();
+  await page.keyboard.press('Escape');
 });
 
 test('Add puts a port in the library and Remove takes it out', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
   // What installs: the release binary, and only that
   await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
@@ -261,7 +289,7 @@ test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#detail [data-toggle-port]').click();
   await expect(page.locator('#detail [data-toggle-port]')).toHaveText('Remove from library');
   await page.locator('#nav-back').click();
-  await expect(page.locator('#heading')).toHaveText('Nintendo ports');
+  await expect(page.locator('#heading')).toHaveText('Curated ports');
 
   await page.locator('[data-view="library"]').click();
   await expect(page.locator('#body .port-card')).toHaveCount(1);
@@ -307,7 +335,7 @@ test('An installed upload with a newer one on archive.org gets the Newer release
 });
 
 test('Perfect Dark installs its GitHub build only', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
@@ -319,7 +347,7 @@ test('Perfect Dark installs its GitHub build only', async () => {
 });
 
 test('Right-click menu on a port card: installed actions, Launch Options submenu, Escape closes', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   const card = page.locator('.port-card', { hasText: 'Perfect Dark' });
   await card.click({ button: 'right' });
   const menu = page.locator('#ctxmenu');
@@ -336,13 +364,27 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeHidden();
 
   // Not installed: Download and Locate Existing Install
-  await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Mario Kart 64' }).click({ button: 'right' });
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi').first()).toHaveText('Download');
   await expect(menu.locator('[data-menu="locate"]')).toBeVisible();
   await menu.locator('[data-menu="details"]').click();
   await expect(menu).toBeHidden();
   await expect(page.locator('#detail')).toContainText('Mario Kart 64');
+  await page.keyboard.press('Escape');
+});
+
+test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab release', async () => {
+  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.tracklist .track')).toContainText('GitLab release from sonicdcer/Starfox64Recomp');
+  await detail.locator('#btn-install-port').click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const dir = path.join(stack.dataDir, 'games', 'StarFox64-StarFox64Recompiled');
+  expect(fs.existsSync(path.join(dir, 'Starfox64Recompiled.exe'))).toBe(true);
+  expect(fs.existsSync(path.join(dir, 'portable.txt'))).toBe(true);
+  await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
 
@@ -564,7 +606,7 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
   await expect(page.locator('.port-card', { hasText: 'User Tool' }).locator('.user-badge')).toHaveText('Your source · not reviewed');
   await expect(page.locator('.port-card .user-badge')).toHaveCount(await page.locator('.port-card').count());
-  await page.locator('[data-view="shelf"][data-arg]', { hasText: 'Test ports' }).click();
+  await page.locator('[data-view="shelf"][data-arg]', { hasText: 'Curated' }).click();
   await expect(page.locator('.port-card', { hasText: 'Perfect Dark' }).locator('.user-badge')).toHaveCount(0);
 
   // First install pins the file; a different file later asks before installing
@@ -619,37 +661,6 @@ test('Add a GitHub repo: it lands on Your ports, and can be removed', async () =
   await page.locator('#nav-add-repo').click();
   await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();
   await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toHaveCount(0);
-});
-
-test('Settings imports a Quiver library: preview, import, then the library and Your ports show it', async () => {
-  const root = path.join(stack.dataDir, 'quiver');
-  const put = (rel, text = 'MZ') => { fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true }); fs.writeFileSync(path.join(root, rel), text); };
-  put('apps.json', JSON.stringify({ apps: [
-    { name: 'Perfect Dark', folderName: 'PerfectDark', repository: 'perfect-dark-pc-port/perfect_dark' },
-    { name: 'Obscure Port', folderName: 'ObscurePort', repository: 'someone/obscure-port' },
-    { name: 'Homebrew Thing', folderName: 'Homebrew', tags: ['manual'] },
-  ] }));
-  put('Apps/Homebrew/thing.exe');
-  await page.evaluate((dir) => { api.chooseFolder = async () => dir; }, root);
-
-  await page.locator('#btn-settings').click();
-  const field = page.locator('#quiver-import');
-  await field.locator('[data-action="quiver-import-choose"]').click();
-  await expect(field.locator('.import-list li')).toHaveCount(3);
-  await expect(field.locator('.import-list li', { hasText: 'Perfect Dark' })).toContainText('already here');
-  await expect(field.locator('.import-list li', { hasText: 'Homebrew Thing' })).toContainText('your folder · installed');
-  await field.locator('[data-action="quiver-import-apply"]').click();
-  await expect(field.locator('.import-done')).toContainText('1 adopted, 1 added, 1 new on Your ports, 1 already here');
-  await field.locator('[data-action="quiver-import-cancel"]').click();
-
-  await expect(page.locator('#nav-shelves .navitem', { hasText: 'Your ports' })).toBeVisible();
-  await page.locator('[data-view="library"]').click();
-  const card = page.locator('.game-card', { hasText: 'Homebrew Thing' });
-  await expect(card).toContainText('Your folder');
-  await card.click();
-  await expect(page.locator('#detail .by')).toHaveText('Your folder');
-  await expect(page.locator('#detail #btn-play')).toBeVisible();
-  await page.keyboard.press('Escape');
 });
 
 test('the announcement shows once and stays dismissed', async () => {

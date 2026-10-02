@@ -41,8 +41,8 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base`, `--overrides-url`, `--uploaders-url` and `--github-api` point archive.org, the
-catalog fetches and the GitHub API elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api` and `--gitlab-api` point
+archive.org, the catalog fetches and the GitHub and GitLab APIs elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
 the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
@@ -72,7 +72,7 @@ item. Library state is joined in on every read.
 }
 ```
 
-- `shelf` is `wall` for archive.org items and the catalog's shelf name (Nintendo, PlayStation…)
+- `shelf` is `wall` for archive.org items and the shelf name (Curated, Your ports)
   for catalog items.
 - `override` is the item's `overrides.json` entry; its `title` already replaced `title`.
 - `library` is the library row of the installed version if any, else of the first version.
@@ -182,38 +182,31 @@ pinned image that won't download shows none. `404 no_image` when there is none.
 
 ### `GET /catalogs`
 
-Subscribed catalogs with entry count, last fetch time and last error.
+The port shelves with entry count, last fetch time and last error: `curated`
+(catalog/curated-ports.json on main, `"bundled": true` while only the copy shipped with the app is
+there), then `local` ("Your ports", below). A catalog subscribed before the shelf became
+curated-only (`settings.catalogs`) is never fetched again; it stays, `"legacy": true`, only for the
+ports the library holds from it. The curated shelf is fetched first if it never has been. Every
+item from `/catalogs/:id/items` carries `curated: true` when the curated list has its repository.
+There is no subscribing: the shelf is fixed.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs
-# {"catalogs":[{"id":"8c1f0e2a9b3d","url":"https://…/nintendo.json","name":"nintendo","shelf":"Nintendo","entries":214,"fetchedAt":1790000000000,"error":null}]}
+# {"catalogs":[{"id":"curated","url":"https://raw.githubusercontent.com/…/curated-ports.json","name":"Curated","shelf":"Curated","curated":true,"entries":44,"fetchedAt":1790000000000,"error":null}]}
 ```
 
-### `POST /catalogs`
+### `GET /catalogs/:id`
 
-Subscribe by URL (`{ url, name?, shelf? }`). Fetches and caches it; the first copy counts as
-reviewed. `201` when new, `200` when already subscribed.
-
-```sh
-curl -X POST -d '{"url":"https://raw.githubusercontent.com/…/nintendo.json","shelf":"Nintendo"}' http://127.0.0.1:7777/v1/catalogs
-# {"id":"8c1f0e2a9b3d","url":"…","name":"nintendo","shelf":"Nintendo","entries":214,"fetchedAt":…,"error":null}
-```
-
-### `GET /catalogs/:id`, `DELETE /catalogs/:id`
-
-One subscription; delete unsubscribes and drops its cache (`204`).
-
-```sh
-curl -X DELETE http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d
-```
+One shelf, as `GET /catalogs` lists it.
 
 ### `POST /catalogs/:id/refresh`
 
-Fetch again. A failed fetch keeps the last good copy and sets `error`.
+Fetch the curated shelf again (other shelves aren't fetched). A failed fetch keeps the last good
+copy and sets `error`.
 
 ```sh
-curl -X POST http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/refresh
-# {"id":"8c1f0e2a9b3d","entries":215,"error":null,…}
+curl -X POST http://127.0.0.1:7777/v1/catalogs/curated/refresh
+# {"id":"curated","entries":45,"error":null,…}
 ```
 
 ### `GET /catalogs/:id/items`
@@ -222,16 +215,16 @@ That catalog's entries as items (the same shape as catalog items in `GET /items`
 state joined in), without waiting for archive.org.
 
 ```sh
-curl http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/items
-# {"items":[{"id":"quiver:8c1f0e2a9b3d:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Nintendo","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
+curl http://127.0.0.1:7777/v1/catalogs/curated/items
+# {"items":[{"id":"quiver:curated:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Curated","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
 ```
 
 ### `GET /catalogs/:id/review`
 
-Entries new, changed or removed since the catalog was last marked seen, keyed on `repository`.
+Entries new, changed or removed since the curated shelf was last marked seen, keyed on `repository`.
 
 ```sh
-curl http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/review
+curl http://127.0.0.1:7777/v1/catalogs/curated/review
 # {"new":[{"name":"2Ship2Harkinian","repository":"HarbourMasters/2ship2harkinian",…}],"changed":[],"removed":[]}
 ```
 
@@ -240,12 +233,12 @@ curl http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/review
 Marks the current copy as reviewed (`204`).
 
 ```sh
-curl -X POST http://127.0.0.1:7777/v1/catalogs/8c1f0e2a9b3d/seen
+curl -X POST http://127.0.0.1:7777/v1/catalogs/curated/seen
 ```
 
 ### Your repos
 
-GitHub repos the user adds on their own. A repo no subscribed catalog lists shows on the "Your
+GitHub repos the user adds on their own. A repo the curated shelf doesn't list shows on the "Your
 ports" shelf (catalog id `local`) while additional sources are allowed. `:repo` is `owner/repo`
 URL-encoded (`owner%2Frepo`).
 
@@ -274,8 +267,8 @@ Add: `{ id, source? }` puts an item in the library without installing it. `201` 
 when it was already there; returns the row.
 
 ```sh
-curl -X POST -d '{"id":"quiver:8c1f0e2a9b3d:harbourmasters/shipwright","source":"https://…/nintendo.json"}' http://127.0.0.1:7777/v1/library
-# {"identifier":"quiver:8c1f0e2a9b3d:harbourmasters/shipwright","install_dir":null,"source":"https://…/nintendo.json",…}
+curl -X POST -d '{"id":"quiver:curated:harbourmasters/shipwright","source":"https://…/curated-ports.json"}' http://127.0.0.1:7777/v1/library
+# {"identifier":"quiver:curated:harbourmasters/shipwright","install_dir":null,"source":"https://…/curated-ports.json",…}
 ```
 
 ### `GET /library/:id`, `PATCH /library/:id`
@@ -359,30 +352,6 @@ curl -X POST -d '{"name":"My Homebrew"}' http://127.0.0.1:7777/v1/library/manual
 # {"identifier":"manual:My Homebrew","install_dir":"C:\\Games\\My Homebrew","source":"manual","title":"My Homebrew",…}
 ```
 
-### `POST /library/import/quiver`
-
-Reads a Quiver Launcher folder (`dir`: the folder holding `apps.json`, or `apps.json` itself) and
-says what importing it would do; with `"apply": true` it imports. Nothing is downloaded: installed
-apps are adopted where they are, found the way Quiver finds them (`installPath`, else
-`settings.json`'s `AppsPath` or `Apps/`, plus `folderName`; `install-incomplete.txt` means not
-installed; `version.txt` and `selected_executable.txt` are read).
-
-Each app's `kind` is `port` (a subscribed catalog lists the repository; the row is that item),
-`new` (none does; adding the repository to the user's repos puts it on "Your ports", id
-`quiver:local:<repo>`) or `manual` (no GitHub repository; row `manual:<folderName>`, kept only when
-its folder has something to launch). Tags, the display name and the installed version go to the
-row's `tags`, `title` and `version`. An install already in the library is left as it is, so a
-second import changes nothing. 400 `not_quiver` when there is no readable `apps.json`.
-
-```sh
-curl -X POST -d '{"dir":"D:\\QuiverLauncher","apply":true}' http://127.0.0.1:7777/v1/library/import/quiver
-# {"root":"D:\\QuiverLauncher","appsPath":"D:\\QuiverLauncher\\Apps",
-#  "apps":[{"name":"Perfect Dark","repository":"fgsfdsfgs/perfect_dark","kind":"port","id":"quiver:…",
-#           "installed":true,"installDir":"D:\\QuiverLauncher\\Apps\\PerfectDark","exe":"…\\pd.exe","version":"v1.2.0",…}],
-#  "skipped":[{"name":"Old thing","reason":"manual app with nothing installed"}],
-#  "result":{"added":1,"adopted":4,"ports":2,"unchanged":0}}
-```
-
 ### Collections
 
 `GET /collections`, `POST /collections` (`{ name }`, `409 name_taken` on a duplicate),
@@ -405,8 +374,11 @@ progress on `/events` or poll `/installs/:id`.
 A catalog port (`quiver:` id) is one job, `step: "binary"`: it takes the latest non-draft,
 non-prerelease GitHub release of the port's repository and picks its Windows asset (a user.json
 entry's `assetPattern` wins, then Quiver's `releaseAssetFilter`, then a Windows heuristic), then
-downloads and extracts it into `<install folder>/<folderName>`. Only the release binary is
-installed; game data is the user's job. Unknown ports answer `404`, ports that can't start (no repository) `422`.
+downloads and extracts it into `<install folder>/<folderName>`. An entry with `repositorySource:
+"gitlab"` takes GitLab's releases instead (`/projects/<url-encoded owner/repo>/releases`, the
+release's asset links, upcoming releases skipped); a download with no extension is unpacked by
+what its first bytes say it is. Only the release binary is installed; game data is the user's job.
+Unknown ports answer `404`, ports that can't start (no repository, or tagged "source only") `422`.
 
 From an additional source ([USER-SOURCES.md](USER-SOURCES.md)), a downloaded file (an archive.org
 upload, or a port's release asset) is checked against the sha1 its entry gives, or else against the

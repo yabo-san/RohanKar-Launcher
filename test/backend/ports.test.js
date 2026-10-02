@@ -32,6 +32,28 @@ test('pickAsset: pattern, then filter, then a Windows-looking build, 64-bit firs
   assert.match(ports.pickAsset(pd, { pattern: '(' }).error, /Bad asset pattern/);
 });
 
+test('releasesFromGitlab: GitLab\'s releases in GitHub\'s shape, asset links only', () => {
+  const gitlab = require('../fixtures/gitlab/starfox64recomp-releases.json');
+  const [r] = ports.releasesFromGitlab(gitlab);
+  assert.deepEqual([r.tag_name, r.draft, r.prerelease, r.assets.length], ['v1.0.3', false, false, 5]);
+  assert.ok(r.assets.every(a => a.browser_download_url.includes('/-/package_files/')), 'no source archives');
+  assert.equal(ports.pickAsset(r.assets).asset.name, 'Starfox64Recompiled-v1.0.3-Windows-RelWithDebInfo');
+  assert.equal(ports.pickRelease(ports.releasesFromGitlab([{ tag_name: 'v2', upcoming_release: true, assets: {} }, ...gitlab])).tag_name, 'v1.0.3');
+  assert.deepEqual(ports.releasesFromGitlab({ message: '404 Project Not Found' }), []);
+  assert.deepEqual(ports.releasesFromGitlab([{ tag_name: 'v1', assets: { links: [{ name: 'a', url: 'https://x/a' }, { name: 'nourl' }] } }])[0].assets,
+    [{ name: 'a', browser_download_url: 'https://x/a' }]);
+  assert.equal(ports.gitlabReleasesUrl('https://gitlab.com/api/v4', 'group/sub/repo'), 'https://gitlab.com/api/v4/projects/group%2Fsub%2Frepo/releases');
+});
+
+test('sniffArchiveExt: an archive by its first bytes', (t) => {
+  const dir = tmpDir(t);
+  const write = (name, buf) => { fs.writeFileSync(path.join(dir, name), buf); return path.join(dir, name); };
+  assert.equal(ports.sniffArchiveExt(write('a', makeZip({ 'x.txt': 'x' }))), '.zip');
+  assert.equal(ports.sniffArchiveExt(write('b', Buffer.from('377abcaf271c0004', 'hex'))), '.7z');
+  assert.equal(ports.sniffArchiveExt(write('c', Buffer.from('MZ'))), '');
+  assert.equal(ports.sniffArchiveExt(path.join(dir, 'missing')), '');
+});
+
 test('inside keeps a relative path under its root', (t) => {
   const dir = tmpDir(t);
   assert.equal(ports.inside(dir, 'data', 'rom.z64'), path.join(dir, 'data', 'rom.z64'));
@@ -121,7 +143,21 @@ test('no Windows build, unreadable releases, no release, no repository', async (
   state.routes['/repos/o/pd/releases'] = (req, res) => { res.writeHead(200); res.end('[]'); };
   assert.equal((await run({ ...item, id: 'quiver:c1:o/pd7' })).error, 'o/pd has no published release');
 
-  assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no GitHub repository to install from.' });
+  assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no repository to install from.' });
+  assert.deepEqual(installs.startPort({ item: { ...item, sourceOnly: true, repositoryUrl: 'https://github.com/o/pd' } }),
+    { ok: false, error: 'source_only', detail: 'Perfect Dark is source only: it publishes no download. Build it from https://github.com/o/pd.' });
+});
+
+test('portTraits: source only, work in progress, engine or launcher, and the repository page', () => {
+  assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['Source Only', 'curated'] }),
+    { sourceOnly: true, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: 'https://github.com/a/b' });
+  assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['work in progress'] }).workInProgress, true);
+  assert.equal(ports.portTraits({ tags: ['engine'] }).role, 'engine');
+  assert.equal(ports.portTraits({ tags: ['launcher', 'owner pick'] }).role, 'launcher');
+  const gitlab = ports.portTraits({ repository: ' g/r ', repositorySource: 'gitlab' });
+  assert.deepEqual([gitlab.repositorySource, gitlab.repositoryUrl], ['gitlab', 'https://gitlab.com/g/r']);
+  assert.deepEqual(ports.portTraits(), { sourceOnly: false, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: null });
+  assert.equal(ports.portTraits({ tags: 'source only' }).sourceOnly, false, 'tags must be a list');
 });
 
 test('a bare exe asset installs the exe; cancelling stops it', async (t) => {

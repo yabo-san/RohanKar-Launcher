@@ -3,14 +3,16 @@
  * archive.org as the e2e tests see it, from fixtures/search.json:
  *   - advancedsearch.php?q=uploader:<id> ... returns that uploader's docs
  *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip
- *   - Quiver's lists (…/quiver-community-app-catalog/…/<file>, or /quiver/<file>) come
- *     from fixtures/quiver/; a list with no fixture is a 404
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
  *     three exes)
+ *   - GitLab, for Star Fox 64: Recompiled: /projects/sonicdcer%2FStarfox64Recomp/releases is
+ *     test/fixtures/gitlab's copy of the real response, its links pointing here; the Windows
+ *     link is a zip with no extension, as on GitLab
  *   - /featured.json is fixtures/featured.json: a wall game (with a pinned
  *     banner), a port and a pick not on the wall; /art.json is
  *     fixtures/art.json, whose banner for the wall game the pin overrides
+ *   - /curated-ports.json is fixtures/curated-ports.json: the curated shelf
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -23,6 +25,8 @@ const path = require('path');
 const SEARCH   = require('./fixtures/search.json');
 const TINY_ZIP = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
 const { makeZip } = require('../test/backend/helpers');
+// Star Fox 64: Recompiled's Windows link: a zip, served without an extension
+const SF64_BUILD = makeZip({ 'Starfox64Recompiled.exe': 'MZ', 'assets/.keep': '' });
 // Laid out like the real release: one folder, three exes, a data folder
 const PD_BUILD = makeZip({
   'pd-x86_64-windows/pd.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.pal.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.jpn.x86_64.exe': 'MZ',
@@ -44,11 +48,6 @@ function answer(url, base = '') {
     return reply(200, JSON.stringify(json), 'application/json');
   }
 
-  if (url.pathname.startsWith('/quiver/') || url.pathname.includes('/quiver-community-app-catalog/')) {
-    const fixture = path.join(__dirname, 'fixtures', 'quiver', path.basename(url.pathname));
-    return fs.existsSync(fixture) ? reply(200, fs.readFileSync(fixture), 'application/json') : reply(404, 'no fixture', 'text/plain');
-  }
-
   if (url.pathname === '/repos/perfect-dark-pc-port/perfect_dark/releases') {
     return reply(200, JSON.stringify([{ tag_name: 'v1.0', assets: [
       { name: 'pd-x86_64-linux.tar.gz', browser_download_url: `${base}/gh/pd-x86_64-linux.tar.gz` },
@@ -57,8 +56,18 @@ function answer(url, base = '') {
   }
   if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
 
+  if (url.pathname === '/projects/sonicdcer%2FStarfox64Recomp/releases') {
+    const releases = require('../test/fixtures/gitlab/starfox64recomp-releases.json').map(r => ({ ...r, assets: { ...r.assets,
+      links: r.assets.links.map(l => ({ ...l, direct_asset_url: l.direct_asset_url.replace('https://gitlab.com', base) })) } }));
+    return reply(200, JSON.stringify(releases), 'application/json');
+  }
+  if (url.pathname.startsWith('/sonicdcer/Starfox64Recomp/-/package_files/')) return reply(200, SF64_BUILD, 'application/zip');
+
   if (url.pathname === '/announcement.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'announcement.json')), 'application/json');
+  }
+  if (url.pathname === '/curated-ports.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'curated-ports.json')), 'application/json');
   }
   if (url.pathname === '/featured.json' || url.pathname === '/art.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', url.pathname.slice(1))), 'application/json');

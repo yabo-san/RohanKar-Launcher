@@ -2,7 +2,7 @@
 /**
  * Install engine: download an archive.org file, extract it, find its
  * executable, record it in library.db. Ports (catalog items) take the latest
- * GitHub release's Windows build (ports.js); game data is the user's job.
+ * GitHub or GitLab release's Windows build (ports.js); game data is the user's job.
  * Files from additional sources are checked against the user's sha1, or
  * pinned on first install (pins); a changed file stops with hashChange set.
  */
@@ -18,9 +18,10 @@ const { checkPin } = require('./user-sources');
 
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
 const GITHUB_API = 'https://api.github.com';
+const GITLAB_API = 'https://gitlab.com/api/v4';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -233,7 +234,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // (userSource) has its release binary checked or pinned per release tag.
   // Resolves { ok, jobs } or { ok: false, error, detail }.
   function startPort({ item, acceptHashChange = false }) {
-    if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no GitHub repository to install from.` };
+    if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no repository to install from.` };
+    if (item.sourceOnly) return { ok: false, error: 'source_only', detail: `${item.title} is source only: it publishes no download. Build it from ${item.repositoryUrl || item.repository}.` };
     const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
     if (running) return { ok: true, jobs: [view(running)] };
     const job = {
@@ -246,14 +248,20 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { ok: true, jobs: [view(job)] };
   }
 
-  async function latestRelease(repository) {
-    const r = await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
-      kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
-    });
+  // The newest published release, from GitHub or GitLab (repositorySource "gitlab")
+  async function latestRelease(item) {
+    const gitlab = item.repositorySource === 'gitlab' || item.entry?.repositorySource === 'gitlab';
+    const repository = item.repository;
+    const r = gitlab
+      ? await getText(ports.gitlabReleasesUrl(gitlabApi, repository), { kind: 'gitlab', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/json' } })
+      : await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
+        kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
+      });
     if (r.status !== 200) throw new Error(`Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})`);
-    const release = ports.pickRelease(JSON.parse(r.body));
+    const list = JSON.parse(r.body);
+    const release = ports.pickRelease(gitlab ? ports.releasesFromGitlab(list) : list);
     if (!release) throw new Error(`${repository} has no published release`);
-    return release;
+    return { release, source: gitlab ? 'gitlab' : 'github' };
   }
 
   // The latest release's Windows build, unpacked into the port's folder
@@ -266,15 +274,20 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     fs.mkdirSync(dest, { recursive: true });
 
     update(job, { status: 'downloading', step: 'binary', percent: 0 });
-    const release = await latestRelease(item.repository);
+    const { release, source } = await latestRelease(item);
     const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter });
     if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
     update(job, { file: pick.asset.name });
     const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
     if (job.status === 'cancelled') return;
     if (!bin.ok) return fail(bin.error);
+    // A GitLab package link's name has no extension: name it after what it holds
+    if (!ports.ARCHIVE_EXT.test(bin.filePath) && !/\.exe$/i.test(bin.filePath)) {
+      const ext = ports.sniffArchiveExt(bin.filePath);
+      if (ext) { fs.renameSync(bin.filePath, bin.filePath + ext); bin.filePath += ext; }
+    }
     if (item.userSource) {
-      const ok = await checkUserFile(job, { pinKey: `github:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
+      const ok = await checkUserFile(job, { pinKey: `${source}:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
       if (!ok) return;
     }
     update(job, { status: 'extracting', percent: 100 });
@@ -338,4 +351,4 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
 }
 
-module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API };
+module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API, GITLAB_API };

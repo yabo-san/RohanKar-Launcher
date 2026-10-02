@@ -5,7 +5,7 @@
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
  *     pointed at that server for archive.org, overrides.json, uploaders.json,
- *     featured.json and GitHub's releases
+ *     featured.json, curated-ports.json and GitHub's releases
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -42,9 +42,8 @@ async function startFixtures() {
 
 // Fixtures + backend on a fresh data dir holding `settings`.
 //   page:     the page to open under src/frontend/ (index.html is the classic UI)
-//   catalogs: Quiver list files to subscribe to first, as [{ file, shelf }]
 // Resolves { dataDir, pageUrl, base, close }; pageUrl opens the page on that backend.
-async function startStack(settings, { page = 'index.html', catalogs = [] } = {}) {
+async function startStack(settings, { page = 'index.html' } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-e2e-'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings, null, 2));
   const fixtures = await startFixtures();
@@ -54,12 +53,11 @@ async function startStack(settings, { page = 'index.html', catalogs = [] } = {})
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
+    '--gitlab-api', fixtures.base,
     '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
+    '--curated-ports-url', `${fixtures.base}/curated-ports.json`,
   ], {}, () => {});
-  for (const c of catalogs) {
-    await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });
-  }
   const pageUrl = `${fixtures.base}/app/${page}?${new URLSearchParams({ api: backend.url, token: backend.token })}`;
   const close = async () => {
     await backend.stop();

@@ -1,21 +1,30 @@
 'use strict';
 /**
- * Quiver-style catalogs: JSON files of ports ({ apps: [...] } or a bare
- * array) that the user subscribes to by URL. Each subscription is fetched on
- * demand, cached under catalogs/, and diffed against the copy the user last
- * reviewed. GitHub repos the user adds on their own (and user.json's github
- * entries) that no subscribed catalog lists make up a "Your ports" shelf.
+ * The port shelves, in Quiver's catalog format ({ apps: [...] } or a bare
+ * array):
+ *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched on
+ *     demand, cached under catalogs/, and diffed against the copy the user
+ *     last reviewed. The copy bundled with the app (curatedFile) stands in
+ *     until a fetch succeeds.
+ *   - "Your ports": GitHub repos the user adds on their own and user.json's
+ *     github entries that the curated list doesn't have.
+ *   - Catalogs subscribed before the shelf became curated-only (settings
+ *     .catalogs, Quiver's lists) are never fetched again; each lists only the
+ *     ports the library holds from it, from its cache, so nothing a user
+ *     added disappears.
+ * Every item says whether the curated list has its repository.
  */
 const fs     = require('fs');
 const path   = require('path');
-const crypto = require('crypto');
 const { getText } = require('./net');
 const { additionalAllowed } = require('./user-sources');
+const { portTraits } = require('./ports');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
+const CURATED_ID = 'curated';
+const CURATED_PORTS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/curated-ports.json';
 const REPO = /^[\w.-]+\/[\w.-]+$/;
 
-const catalogId = (url) => crypto.createHash('sha1').update(url).digest('hex').slice(0, 12);
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
 
 // The entry's identity within its catalog: repository when it has one, else name
@@ -44,7 +53,10 @@ function diffEntries(seen, current) {
 const NO_USER = { entries: () => ({ archive: [], github: [] }) };
 
 // userSources: createUserSources(), for user.json
-function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {}, log = () => {} }) {
+// curatedUrl: the curated shelf's catalog (none when null); curatedFile: its bundled copy
+// libraryIds(): ids the library holds, so an old subscription keeps the user's ports
+function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = null, curatedFile = null,
+  libraryIds = () => new Set(), netLog = () => {}, log = () => {} }) {
   fs.mkdirSync(dir, { recursive: true });
   const file = (id, kind) => path.join(dir, `${id}.${kind}.json`);
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
@@ -122,12 +134,33 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
 
   const userConflicts = () => userLayers().conflicts;
 
-  const subscriptions = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : []);
+  // ─── The curated shelf, and what's left of old subscriptions ──────────────
+  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Curated', shelf: 'Curated', curated: true }) : null;
+
+  let bundled;
+  function bundledCurated() {
+    if (bundled === undefined) {
+      try { bundled = curatedFile ? parseCatalog(fs.readFileSync(curatedFile, 'utf8')) : null; }
+      catch (e) { log(`[catalogs] bundled curated ports unreadable (${e.message})`); bundled = null; }
+    }
+    return bundled;
+  }
+
+  // Library ids from an old subscription, as entry keys
+  function heldKeys(id) {
+    const prefix = `quiver:${id}:`;
+    return new Set([...libraryIds()].filter(x => x.startsWith(prefix)).map(x => x.slice(prefix.length)));
+  }
+  // Old subscriptions the library still holds ports from
+  const legacy = () => (Array.isArray(settings.load().catalogs) ? settings.load().catalogs : [])
+    .filter(c => c && c.id && c.id !== CURATED_ID && c.id !== LOCAL.id && heldKeys(c.id).size)
+    .map(c => ({ ...c, legacy: true }));
 
   // Repositories the port shelves list
   function listedRepos() {
-    return new Set(subscriptions().flatMap(sub => cachedEntries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
+    return new Set([...(CURATED ? [CURATED] : []), ...legacy()].flatMap(sub => entries(sub.id).map(e => repoKey(e.repository))).filter(Boolean));
   }
+  const curatedRepos = () => new Set(CURATED ? entries(CURATED_ID).map(e => repoKey(e.repository)).filter(Boolean) : []);
 
   // The user's repos no port shelf lists, as catalog entries: the "Your
   // ports" shelf. Empty while additional sources are off.
@@ -142,8 +175,8 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     }));
   }
 
-  // Subscriptions, and "Your ports" while it has anything on it
-  const shelves = () => [...subscriptions(), ...(localEntries().length ? [LOCAL] : [])];
+  // Curated, old subscriptions while they hold a port of the user's, and "Your ports" while it has anything on it
+  const shelves = () => [...(CURATED ? [CURATED] : []), ...legacy(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
   function describe(sub) {
@@ -151,20 +184,23 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     const cache = readJson(file(sub.id, 'cache'), null);
     return {
       ...sub,
-      entries:   cache ? cache.entries.length : 0,
+      entries:   entries(sub.id).length,
       fetchedAt: cache?.fetchedAt ?? null,
       error:     cache?.error ?? null,
+      // the curated shelf before any fetch has succeeded: the copy bundled with the app
+      ...(sub.id === CURATED_ID && !cache?.fetchedAt ? { bundled: true } : {}),
     };
   }
 
   const list = () => shelves().map(describe);
   const get  = (id) => { const s = find(id); return s ? describe(s) : null; };
 
-  // Fetches and caches a subscription. A failed fetch keeps the last good copy.
+  // Fetches and caches the curated shelf. A failed fetch keeps the last good
+  // copy. Old subscriptions and "Your ports" aren't fetched.
   async function refresh(id) {
     const sub = find(id);
     if (!sub) return null;
-    if (sub.local) return describe(sub);
+    if (!sub.curated) return describe(sub);
     const r = await getText(sub.url, { kind: 'catalog', log: netLog });
     const prev = readJson(file(id, 'cache'), null);
     let entries = null;
@@ -176,55 +212,47 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
     }
     writeJson(file(id, 'cache'), entries
       ? { fetchedAt: Date.now(), entries, error: null }
-      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? [], error });
+      : { fetchedAt: prev?.fetchedAt ?? null, entries: prev?.entries ?? cachedEntries(id), error });
+    // The first copy counts as reviewed
+    if (!fs.existsSync(file(id, 'seen'))) writeJson(file(id, 'seen'), cachedEntries(id));
     return describe(sub);
   }
 
-  // Adds a subscription (idempotent per URL) and fetches it. The first copy
-  // counts as reviewed, so review starts empty.
-  async function subscribe({ url, name, shelf }) {
-    let parsed;
-    try { parsed = new URL(url); } catch { parsed = null; }
-    if (!parsed || !/^https?:$/.test(parsed.protocol)) return { ok: false, error: 'bad_url', detail: 'url must be an http(s) URL' };
-    const id = catalogId(parsed.toString());
-    if (!find(id)) {
-      const label = name || decodeURIComponent(parsed.pathname.split('/').pop() || parsed.host).replace(/\.json$/i, '');
-      settings.save({ catalogs: [...subscriptions(), { id, url: parsed.toString(), name: label, shelf: shelf || label }] });
-      const described = await refresh(id);
-      writeJson(file(id, 'seen'), entries(id));
-      return { ok: true, created: true, catalog: described };
-    }
-    return { ok: true, created: false, catalog: get(id) };
+  // Fetches the curated shelf if it has never been fetched (a first run)
+  async function warm() {
+    if (CURATED && !fs.existsSync(file(CURATED_ID, 'cache'))) await refresh(CURATED_ID);
   }
 
-  function unsubscribe(id) {
-    if (!find(id) || id === LOCAL.id) return false;
-    settings.save({ catalogs: subscriptions().filter(c => c.id !== id) });
-    for (const kind of ['cache', 'seen']) fs.rmSync(file(id, kind), { force: true });
-    return true;
+  // The curated shelf falls back to the bundled copy until a fetch has succeeded
+  const cachedEntries = (id) => readJson(file(id, 'cache'), null)?.entries
+    ?? (id === CURATED_ID ? bundledCurated() : null) ?? [];
+  function entries(id) {
+    if (id === LOCAL.id) return localEntries();
+    if (id === CURATED_ID) return cachedEntries(id);
+    const held = heldKeys(id);
+    return cachedEntries(id).filter(e => held.has(entryKey(e)));
   }
-
-  const cachedEntries = (id) => readJson(file(id, 'cache'), { entries: [] }).entries;
-  const entries = (id) => (id === LOCAL.id ? localEntries() : cachedEntries(id));
 
   function review(id) {
     if (!find(id)) return null;
-    if (id === LOCAL.id) return { new: [], changed: [], removed: [] };
+    if (id !== CURATED_ID || !fs.existsSync(file(id, 'seen'))) return { new: [], changed: [], removed: [] };
     return diffEntries(readJson(file(id, 'seen'), []), entries(id));
   }
 
   function markSeen(id) {
     if (!find(id)) return false;
-    if (id === LOCAL.id) return true;
+    if (id !== CURATED_ID) return true;
     writeJson(file(id, 'seen'), entries(id));
     return true;
   }
 
-  // Normalized items for every subscribed catalog
+  // Normalized items for every shelf
   function items() {
+    const curated = curatedRepos();
     return shelves().flatMap(sub => entries(sub.id).map(e => ({
       // not reviewed by us: a "Your ports" entry
       userSource:  !!sub.local,
+      curated:     curated.has(repoKey(e.repository)),
       id:          `quiver:${sub.id}:${entryKey(e)}`,
       title:       e.name || e.repository,
       source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
@@ -233,12 +261,13 @@ function createCatalogs({ dir, settings, userSources = NO_USER, netLog = () => {
       icon:        e.appIconUrl || null,
       tags:        Array.isArray(e.tags) ? e.tags : [],
       description: e.description || null,
+      ...portTraits(e),
       entry:       e,
     })));
   }
 
-  return { list, get, subscribe, unsubscribe, refresh, entries, review, markSeen, items,
+  return { list, get, refresh, warm, entries, review, markSeen, items,
     localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional };
 }
 
-module.exports = { createCatalogs, parseCatalog, diffEntries, catalogId, entryKey };
+module.exports = { createCatalogs, parseCatalog, diffEntries, entryKey, CURATED_ID, CURATED_PORTS_URL };

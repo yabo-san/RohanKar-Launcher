@@ -36,7 +36,8 @@
       "overrides.json",
       "catalog/uploaders.json",
       "catalog/featured.json",
-      "catalog/art.json"
+      "catalog/art.json",
+      "catalog/curated-ports.json"
     ],
     "win": {
       "target": "nsis",

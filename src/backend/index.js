@@ -15,8 +15,8 @@ const { createNetLog }   = require('./netlog');
 const { createLibrary }  = require('./library');
 const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
-const { createInstalls, GITHUB_API } = require('./installs');
-const { createCatalogs } = require('./catalogs');
+const { createInstalls, GITHUB_API, GITLAB_API } = require('./installs');
+const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
@@ -70,7 +70,9 @@ function createBackend({
   overridesUrl = OVERRIDES_URL,
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
+  gitlabApi = GITLAB_API,
   featuredUrl = FEATURED_URL,
+  curatedPortsUrl = CURATED_PORTS_URL,
   announcementUrl = ANNOUNCEMENT_URL,
   playniteExportDelayMs = 250,
   host = {},
@@ -156,8 +158,12 @@ function createBackend({
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, art: readArt(appDir, log), log: netlog.log });
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
-  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi });
-  const catalogs = createCatalogs({ dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log });
+  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi });
+  const catalogs = createCatalogs({
+    dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
+    curatedUrl: curatedPortsUrl, curatedFile: path.join(appDir, 'catalog', 'curated-ports.json'),
+    libraryIds: () => new Set(Object.keys(library.all())),
+  });
   const items    = createItems({ archive, settings, catalogs, library, getOverrides, userSources, getDefaultSources, emit, log });
 
   // ─── Actions that combine a module with the OS ────────────────────────────
