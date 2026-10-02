@@ -90,9 +90,16 @@ through our one Playnite extension. Keep it small. Every feature is something th
    `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
    source has a newer release, with an Update button that reinstalls into the same folder. No
    automatic updates.
-9. **README**: replace it with exactly the text in "README" below; move Development and Releases
+9. **Live ports job, binaries only.** Bring back a non-blocking scheduled CI job (nightly plus
+   workflow_dispatch) that really installs the Acceptance tiles below into a temp folder with the
+   app's own install engine, against the real GitHub and GitLab: pick the release asset, download,
+   extract, list what landed. No game data. It catches a port renaming its release files or
+   breaking its filter. Report results in the job summary; failures never block PRs. The old
+   collision version lives on `parked/collisions` (`scripts/live-port.js`,
+   `.github/workflows/live-ports.yml`) and can be the starting point.
+10. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
-10. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
+11. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
    community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
    community-supported. PRs that add sources, catalog entries or asset filters for other
    platforms are welcome."
