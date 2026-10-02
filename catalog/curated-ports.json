@@ -5,8 +5,6 @@
   "apps": [
     {
       "name": "Banjo-Kazooie",
-      "project": "Banjo: Recompiled",
-      "repository": "BanjoRecomp/BanjoRecomp",
       "folderName": "BanjoKazooie-BanjoRecompiled",
       "appIconUrl": "https://raw.githubusercontent.com/BanjoRecomp/BanjoRecomp/refs/heads/main/icons/app.png",
       "tags": [
@@ -21,7 +19,8 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "BanjoRecomp/BanjoRecomp"
     },
     {
       "name": "BFBB",
@@ -34,8 +33,6 @@
     },
     {
       "name": "Blue Dragon",
-      "project": "re:Blue",
-      "repository": "zolaware/reblue",
       "folderName": "BlueDragon-ReBlue",
       "appIconUrl": "https://raw.githubusercontent.com/zolaware/reblue/refs/heads/main/res/reblue.png",
       "tags": [
@@ -48,12 +45,11 @@
         "recompilation",
         "recomp port",
         "curated"
-      ]
+      ],
+      "repository": "zolaware/reblue"
     },
     {
       "name": "Bomberman 64",
-      "project": "Bomberman 64: Recompiled",
-      "repository": "RevoSucks/BM64Recomp",
       "folderName": "Bomberman64-Bomberman64Recompiled",
       "appIconUrl": "https://raw.githubusercontent.com/RevoSucks/BM64Recomp/refs/heads/master/icons/512.png",
       "tags": [
@@ -68,12 +64,11 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "RevoSucks/BM64Recomp"
     },
     {
       "name": "Bomberman Hero",
-      "project": "Bomberman Hero: Recompiled",
-      "repository": "RevoSucks/BMHeroRecomp",
       "folderName": "BombermanHero-BombermanHeroRecompiled",
       "appIconUrl": "https://raw.githubusercontent.com/RevoSucks/BMHeroRecomp/refs/heads/master/icons/app.png",
       "tags": [
@@ -88,12 +83,11 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "RevoSucks/BMHeroRecomp"
     },
     {
       "name": "Castlevania: Symphony of the Night",
-      "project": "SymphonyRecomp",
-      "repository": "BlackLabelHQ/SymphonyRecomp",
       "folderName": "CastlevaniaSymphonyOfTheNight-SymphonyRecomp",
       "appIconUrl": "https://cdn2.steamgriddb.com/thumb/114f463bf3ee32b2230a1f3e96d94870.jpg",
       "tags": [
@@ -105,12 +99,11 @@
         "recompilation",
         "work in progress",
         "curated"
-      ]
+      ],
+      "repository": "BlackLabelHQ/SymphonyRecomp"
     },
     {
       "name": "Cut the Rope",
-      "project": "Cut the Rope: DX",
-      "repository": "yell0wsuit/cuttherope-dx",
       "folderName": "CutTheRope-CutTheRopeDX",
       "appIconUrl": "https://raw.githubusercontent.com/yell0wsuit/cuttherope-dx/refs/heads/main/distribution/icons/CutTheRopeDXIcon.ico",
       "tags": [
@@ -120,7 +113,8 @@
         "decompilation",
         "decomp port",
         "curated"
-      ]
+      ],
+      "repository": "yell0wsuit/cuttherope-dx"
     },
     {
       "name": "Dcb_decomp",
@@ -142,8 +136,6 @@
     },
     {
       "name": "Donkey Kong 64",
-      "project": "DK64 Rekongpiled",
-      "repository": "Rainchus/Donkey-Kong-64-Recompiled",
       "folderName": "DonkeyKong64-DK64Rekongpiled",
       "appIconUrl": "https://raw.githubusercontent.com/Rainchus/Donkey-Kong-64-Recompiled/refs/heads/main/icons/app.png",
       "tags": [
@@ -158,7 +150,8 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "Rainchus/Donkey-Kong-64-Recompiled"
     },
     {
       "name": "Doom Launcher",
@@ -213,8 +206,6 @@
     },
     {
       "name": "Kirby's Return to Dream Land",
-      "project": "Kirby Wii Recomp",
-      "repository": "ExpansionPak/ModernGekko",
       "folderName": "KirbysReturnToDreamLand-KirbyWiiRecomp",
       "appIconUrl": "https://cdn2.steamgriddb.com/icon/ca6ab34959489659f8c3776aaf1f8efd.png",
       "tags": [
@@ -225,7 +216,8 @@
         "recompilation",
         "work in progress",
         "curated"
-      ]
+      ],
+      "repository": "ExpansionPak/ModernGekko"
     },
     {
       "name": "Lom-decomp",
@@ -265,8 +257,6 @@
     },
     {
       "name": "Mystical Ninja Starring Goemon",
-      "project": "Goemon 64: Recompiled",
-      "repository": "klorfmorf/Goemon64Recomp",
       "folderName": "MysticalNinjaStarringGoemon-Goemon64Recompiled",
       "appIconUrl": "https://raw.githubusercontent.com/klorfmorf/Goemon64Recomp/refs/heads/dev/icons/512.png",
       "tags": [
@@ -281,12 +271,11 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "klorfmorf/Goemon64Recomp"
     },
     {
       "name": "Perfect Dark",
-      "project": "Perfect Dark PC Port",
-      "repository": "perfect-dark-pc-port/perfect_dark",
       "folderName": "PerfectDark-PerfectDarkPCPort",
       "appIconUrl": "https://raw.githubusercontent.com/perfect-dark-pc-port/perfect_dark/refs/heads/port/dist/linux/io.github.perfect_dark_pc_port.perfect_dark.png",
       "tags": [
@@ -298,7 +287,8 @@
         "decompilation",
         "decomp port",
         "curated"
-      ]
+      ],
+      "repository": "perfect-dark-pc-port/perfect_dark"
     },
     {
       "name": "Perfect_dark",
@@ -443,8 +433,6 @@
     },
     {
       "name": "Sonic CD (2011)",
-      "project": "RSDKv3 Decompilation",
-      "repository": "RSDKModding/RSDKv3-Decompilation",
       "folderName": "SonicCD-RSDKv3Decompilation",
       "appIconUrl": "https://raw.githubusercontent.com/RSDKModding/RSDKv3-Decompilation/refs/heads/master/RSDKv3/RSDKv3%20Decomp%20Icon.ico",
       "tags": [
@@ -455,7 +443,8 @@
         "decompilation",
         "source only",
         "curated"
-      ]
+      ],
+      "repository": "RSDKModding/RSDKv3-Decompilation"
     },
     {
       "name": "Sonic Mania - Decompilation",
@@ -468,8 +457,6 @@
     },
     {
       "name": "Sonic Unleashed",
-      "project": "Unleashed Recompiled",
-      "repository": "hedge-dev/UnleashedRecomp",
       "folderName": "SonicUnleashed-UnleashedRecompiled",
       "appIconUrl": "https://raw.githubusercontent.com/hedge-dev/UnleashedRecompResources/35322388006365a648f75f4981a496b12a7f7478/images/game_icon.png",
       "tags": [
@@ -481,13 +468,11 @@
         "recompilation",
         "recomp port",
         "curated"
-      ]
+      ],
+      "repository": "hedge-dev/UnleashedRecomp"
     },
     {
       "name": "Star Fox 64",
-      "project": "Star Fox 64: Recompiled",
-      "repository": "sonicdcer/Starfox64Recomp",
-      "repositorySource": "gitlab",
       "folderName": "StarFox64-StarFox64Recompiled",
       "appIconUrl": "https://gitlab.com/sonicdcer/Starfox64Recomp/-/raw/main/icons/512.png",
       "tags": [
@@ -503,12 +488,12 @@
       "filesToAdd": [
         "portable.txt"
       ],
+      "repositorySource": "gitlab",
+      "repository": "sonicdcer/Starfox64Recomp",
       "description": "Must-have. Releases: https://gitlab.com/sonicdcer/Starfox64Recomp/-/releases"
     },
     {
       "name": "Super Mario 64 [Co-op DX]",
-      "project": "Super Mario 64 Co-op DX",
-      "repository": "coop-deluxe/sm64coopdx",
       "folderName": "SuperMario64-SuperMario64CoopDX",
       "appIconUrl": "https://raw.githubusercontent.com/coop-deluxe/sm64coopdx/refs/heads/main/res/icon.icon/Assets/icon.png",
       "tags": [
@@ -520,12 +505,11 @@
         "decompilation",
         "decomp port",
         "curated"
-      ]
+      ],
+      "repository": "coop-deluxe/sm64coopdx"
     },
     {
       "name": "Super Mario World",
-      "project": "snesrev: smw",
-      "repository": "snesrev/smw",
       "folderName": "SuperMarioWorld-SnesrevSmw",
       "appIconUrl": "https://raw.githubusercontent.com/snesrev/smw/refs/heads/main/src/platform/switch/icon.jpg",
       "tags": [
@@ -537,12 +521,11 @@
         "decompilation",
         "decomp port",
         "curated"
-      ]
+      ],
+      "repository": "snesrev/smw"
     },
     {
       "name": "The Legend of Zelda: Majora's Mask and Ocarina of Time",
-      "project": "Zelda 64: Recompiled",
-      "repository": "Zelda64Recomp/Zelda64Recomp",
       "folderName": "TheLegendOfZeldaMajorasMaskAndOcarinaOfTime-Zelda64Recompiled",
       "appIconUrl": "https://raw.githubusercontent.com/Zelda64Recomp/Zelda64Recomp/refs/heads/dev/icons/512.png",
       "tags": [
@@ -557,7 +540,8 @@
       ],
       "filesToAdd": [
         "portable.txt"
-      ]
+      ],
+      "repository": "Zelda64Recomp/Zelda64Recomp"
     },
     {
       "name": "Zelda3",

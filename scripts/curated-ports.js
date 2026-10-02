@@ -6,14 +6,11 @@
 // returning HTML), as an environment variable or a repo secret in CI. This script takes every
 // repository linked in it,
 // records which section of the doc it sits under, and adds the must-haves from
-// catalog/curated-extras.json. The output is in Quiver's community catalog format, so the
-// launcher reads it like any Quiver catalog. Entries that also appear in Quiver's catalogs
-// reuse Quiver's metadata (name, folder, icon, asset filter, tags); the rest get a minimal
-// entry built from the doc.
+// catalog/curated-extras.json. Display metadata (name, folder, icon URL hosted in the port's
+// own repo, release asset filter, tags) comes from catalog/curated-metadata.json, which we own;
+// entries without it get a minimal entry built from the list.
 //
-// The full Quiver catalogs stay available to anyone who adds them in Settings > Sources.
-//
-//   node scripts/curated-ports.js            fetch the doc and Quiver, write the file
+//   node scripts/curated-ports.js            fetch the list, write the file
 //   node scripts/curated-ports.js --check    exit 1 if the file on disk is out of date
 //
 // To add a pick or swap a source-only entry for a repo that ships builds, edit
@@ -25,11 +22,10 @@ const fs = require('fs');
 const path = require('path');
 
 const DOC_URL = process.env.CURATED_PORTS_SOURCE_URL;
-const QUIVER_BASE = 'https://raw.githubusercontent.com/tgeorgiadis/quiver-community-app-catalog/main/community-app-catalog/';
-const QUIVER_FILES = ['Nintendo.json', 'PlayStation.json', 'Xbox.json', 'OtherPlatforms.json'];
 const ROOT = path.join(__dirname, '..');
 const OUT = path.join(ROOT, 'catalog', 'curated-ports.json');
 const EXTRAS = path.join(ROOT, 'catalog', 'curated-extras.json');
+const METADATA = path.join(ROOT, 'catalog', 'curated-metadata.json');
 
 // Section headings in the doc, in the order they appear. "source-only" sections list
 // decompilations that publish source but no playable build.
@@ -95,13 +91,9 @@ async function main() {
   const docRepos = parseDoc(await getText(DOC_URL));
   if (docRepos.length < 10) throw new Error(`only ${docRepos.length} repositories found in the source list; its layout probably changed`);
 
-  const quiver = new Map();
-  for (const f of QUIVER_FILES) {
-    const cat = JSON.parse(await getText(QUIVER_BASE + f));
-    for (const app of cat.apps || []) {
-      if (!app.repository) continue;
-      quiver.set(repoKey(app.repositorySource === 'gitlab' ? 'gitlab' : 'github', app.repository), app);
-    }
+  const known = new Map();
+  for (const [repository, m] of Object.entries(JSON.parse(fs.readFileSync(METADATA, 'utf8')).ports || {})) {
+    known.set(repoKey(m.repositorySource === 'gitlab' ? 'gitlab' : 'github', repository), { ...m, repository });
   }
 
   const extras = JSON.parse(fs.readFileSync(EXTRAS, 'utf8')).apps || [];
@@ -119,7 +111,7 @@ async function main() {
     const key = repoKey(w.source, w.repository);
     if (seen.has(key)) continue;
     seen.add(key);
-    const q = quiver.get(key);
+    const q = known.get(key);
     const x = w.extra || {};
     const base = q ? { ...q } : {
       name: w.docName || w.repository.split('/').pop(),
@@ -144,8 +136,8 @@ async function main() {
     apps,
   };
   const text = JSON.stringify(catalog, null, 2) + '\n';
-  const fromQuiver = apps.filter((a) => quiver.has(repoKey(a.repositorySource === 'gitlab' ? 'gitlab' : 'github', a.repository))).length;
-  const summary = `${apps.length} ports (${docRepos.length} from the doc, ${extras.length} extras; ${fromQuiver} with Quiver metadata)`;
+  const withMeta = apps.filter((a) => known.has(repoKey(a.repositorySource === 'gitlab' ? 'gitlab' : 'github', a.repository))).length;
+  const summary = `${apps.length} ports (${docRepos.length} from the list, ${extras.length} extras; ${withMeta} with metadata)`;
 
   if (check) {
     const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
