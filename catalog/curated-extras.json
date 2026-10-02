@@ -47,6 +47,14 @@
       "releaseAssetFilter": "win-x64",
       "section": "engine",
       "note": "Doom engine (speedrunning/demo-accurate). Needs an IWAD from the user."
+    },
+    {
+      "name": "r2modman (Thunderstore mod manager)",
+      "repository": "ebkr/r2modmanPlus",
+      "folderName": "r2modman",
+      "releaseAssetFilter": "r2modman-3.",
+      "section": "launcher",
+      "note": "Thunderstore's mod manager. The filter picks the portable exe, not r2modman-Setup; update it if r2modman reaches version 4."
     }
   ]
 }

@@ -341,6 +341,17 @@
       "description": "Browses and installs Quake maps and mods from Quaddicted; point it at an engine."
     },
     {
+      "name": "r2modman (Thunderstore mod manager)",
+      "repository": "ebkr/r2modmanPlus",
+      "folderName": "r2modman",
+      "releaseAssetFilter": "r2modman-3.",
+      "tags": [
+        "launcher",
+        "owner pick"
+      ],
+      "description": "Thunderstore's mod manager. The filter picks the portable exe, not r2modman-Setup; update it if r2modman reaches version 4."
+    },
+    {
       "name": "RSDKv2-Decompilation",
       "repository": "RSDKModding/RSDKv2-Decompilation",
       "folderName": "RSDKv2Decompilation",
