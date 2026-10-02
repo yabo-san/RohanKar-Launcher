@@ -79,10 +79,11 @@ test('items: loads once and shares an in-flight load; refresh refetches', async 
 });
 
 test('items: catalog entries sit on their shelf next to the wall', async (t) => {
-  const { backend, fake } = await testBackend(t);
-  fake.routes['/ps.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'x/sm64' }])); };
-  const { catalog } = await backend.catalogs.subscribe({ url: `${fake.base}/ps.json`, name: 'PlayStation' });
-  const shelf = (await backend.items.list({ shelf: 'playstation' })).items;
+  const state = { routes: { '/curated-ports.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify([{ name: 'SM64 PC', repository: 'x/sm64' }])); } } };
+  const { backend } = await testBackend(t, { state, curated: true });
+  await backend.catalogs.warm();
+  const catalog = backend.catalogs.get('curated');
+  const shelf = (await backend.items.list({ shelf: 'curated' })).items;
   assert.equal(shelf.length, 1);
   assert.deepEqual(shelf[0].versions, []);
   assert.equal(shelf[0].installed, false);

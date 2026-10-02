@@ -84,24 +84,17 @@ test('items: sources down is a 502 with the per-source errors', async (t) => {
   assert.equal((await call('POST', '/library/scan', { dir: backend.dataDir })).status, 502);
 });
 
-test('catalogs: subscribe, list, get, refresh, review, seen, unsubscribe', async (t) => {
-  const { call, fake } = await testApi(t);
+test('catalogs: list, get, refresh, items, review, seen on the curated shelf', async (t) => {
   let apps = [{ name: 'A', repository: 'o/a' }];
-  fake.routes['/cat.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify({ apps })); };
-  const url = `${fake.base}/cat.json`;
-
-  assert.equal((await call('POST', '/catalogs', { url: 'nope' })).body.error, 'bad_url');
-  assert.equal((await call('POST', '/catalogs', {})).status, 400);
-  const sub = await call('POST', '/catalogs', { url, name: 'Other' });
-  assert.equal(sub.status, 201);
-  assert.equal((await call('POST', '/catalogs', { url })).status, 200);
-  const id = sub.body.id;
+  const state = { routes: { '/curated-ports.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify({ apps })); } } };
+  const { call } = await testApi(t, { state, curated: true });
+  const id = 'curated';
   assert.equal((await call('GET', '/catalogs')).body.catalogs.length, 1);
   assert.equal((await call('GET', `/catalogs/${id}`)).body.entries, 1);
-  assert.equal((await call('GET', '/items?shelf=Other')).body.items[0].title, 'A');
+  assert.equal((await call('GET', '/items?shelf=Curated')).body.items[0].title, 'A');
   const [a] = (await call('GET', `/catalogs/${id}/items`)).body.items;
   assert.deepEqual([a.title, a.repository, a.installed, a.library], ['A', 'o/a', false, null]);
-  assert.equal((await call('POST', '/library', { id: a.id, source: url })).status, 201);
+  assert.equal((await call('POST', '/library', { id: a.id, source: 'curated' })).status, 201);
   assert.equal((await call('GET', `/catalogs/${id}/items`)).body.items[0].library.identifier, a.id);
 
   apps = [...apps, { name: 'B', repository: 'o/b' }];
@@ -109,9 +102,10 @@ test('catalogs: subscribe, list, get, refresh, review, seen, unsubscribe', async
   assert.deepEqual((await call('GET', `/catalogs/${id}/review`)).body.new.map(e => e.name), ['B']);
   assert.equal((await call('POST', `/catalogs/${id}/seen`)).status, 204);
   assert.deepEqual((await call('GET', `/catalogs/${id}/review`)).body.new, []);
-  assert.equal((await call('DELETE', `/catalogs/${id}`)).status, 204);
-  for (const [m, p] of [['GET', ''], ['DELETE', ''], ['POST', '/refresh'], ['GET', '/items'], ['GET', '/review'], ['POST', '/seen']]) {
-    assert.equal((await call(m, `/catalogs/${id}${p}`)).status, 404, `${m} ${p}`);
+  assert.equal((await call('POST', '/catalogs', { url: 'https://example.com/c.json' })).status, 405, 'no subscribing: the shelf is fixed');
+  assert.equal((await call('DELETE', '/catalogs/curated')).status, 405);
+  for (const [m, p] of [['GET', ''], ['POST', '/refresh'], ['GET', '/items'], ['GET', '/review'], ['POST', '/seen']]) {
+    assert.equal((await call(m, `/catalogs/nope${p}`)).status, 404, `${m} ${p}`);
   }
 });
 
@@ -276,6 +270,18 @@ test('installs: start, progress over SSE, get, list, cancel, errors', async (t) 
   assert.equal((await call('DELETE', `/installs/${slow.id}`)).body.status, 'cancelled');
   assert.equal((await call('GET', '/installs/nope')).status, 404);
   assert.equal((await call('DELETE', '/installs/nope')).status, 404);
+});
+
+test('GET /catalogs: the curated shelf first, fetched on the first call, its items marked curated', async (t) => {
+  const state = { routes: {
+    '/curated-ports.json': (req, res) => { res.writeHead(200); res.end(JSON.stringify({ apps: [{ name: 'Zelda', repository: 'z/zelda' }] })); },
+  } };
+  const { call, backend } = await testApi(t, { state, curated: true });
+  const [shelf] = (await call('GET', '/catalogs')).body.catalogs;
+  assert.deepEqual([shelf.id, shelf.shelf, shelf.entries, shelf.error], ['curated', 'Curated', 1, null]);
+  const { items } = (await call('GET', '/catalogs/curated/items')).body;
+  assert.deepEqual(items.map(i => [i.title, i.curated, i.userSource]), [['Zelda', true, false]]);
+  assert.equal(backend.catalogs.list()[0].id, 'curated');
 });
 
 test('settings and Playnite export', async (t) => {
