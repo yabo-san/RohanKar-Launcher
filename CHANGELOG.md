@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0-fork.15](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.14...v1.6.0-fork.15) (2026-10-02)
+
+
+### Features
+
+* **art:** one cover and hero order; drop hero.png ([c1ebd62](https://github.com/yabo-san/RohanKar-Launcher/commit/c1ebd626f330972cb402d65613f1fb65a97375ea))
+
+
+### Bug Fixes
+
+* **catalog:** asset filters and source-only overrides for the 9 entries Live ports flagged ([4dc4c1d](https://github.com/yabo-san/RohanKar-Launcher/commit/4dc4c1dc24685c6451eff64808aa007499fd8439))
+
 ## [1.6.0-fork.14](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.13...v1.6.0-fork.14) (2026-10-02)
 
 
