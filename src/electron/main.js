@@ -37,7 +37,6 @@ if (userData.reason === 'legacy') {
 }
 
 const USER_DATA   = app.getPath('userData');
-const HEROES_DIR  = app.isPackaged ? path.join(process.resourcesPath, 'heroes') : path.join(__dirname, '../../assets/heroes');
 const BACKEND_MAIN = path.join(__dirname, '../backend/main.js');
 
 let mainWindow;
@@ -72,7 +71,7 @@ let backend = null;         // the utility process
 let backendExited = false;
 let quitting = false;
 
-const BACKEND_ARGS = ['--data-dir', USER_DATA, '--heroes-dir', HEROES_DIR];
+const BACKEND_ARGS = ['--data-dir', USER_DATA];
 
 // Answers the backend's requests for OS actions
 function answerHost(proc) {

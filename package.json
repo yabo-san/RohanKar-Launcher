@@ -38,12 +38,6 @@
       "catalog/featured.json",
       "catalog/art.json"
     ],
-    "extraResources": [
-      {
-        "from": "assets/heroes",
-        "to": "heroes"
-      }
-    ],
     "win": {
       "target": "nsis",
       "icon": "assets/icons/rk-logo.ico"

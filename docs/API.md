@@ -169,14 +169,15 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/reviews
 
 ### `GET /items/:id/cover`, `GET /items/:id/hero`
 
-Image bytes from the covers cache. The cover is the `overrides.json` art if set, else the
-archive.org thumbnail, each downloaded once. The hero is the override hero, else a `hero.*` in the
-install folder, else the `<id>.png` shipped with the app. `?from=override|install|bundled` asks
-for one of those only (`400` for anything else). `404 no_image` when there is none.
+Image bytes from the covers cache, each downloaded once. Both follow one order: the image pinned
+in `overrides.json` (`artUrl` for the cover, `hero` for the hero), else the archive.org item's own
+image, else SteamGridDB art from `catalog/art.json` (the hero takes the item's picked `banner`,
+else its first curated hero; the cover its first curated grid). A pin never falls through: a
+pinned image that won't download shows none. `404 no_image` when there is none.
 
 ```html
 <img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/cover?token=…">
-<img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/hero?from=bundled&token=…">
+<img src="http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/hero?token=…">
 ```
 
 ### `GET /catalogs`

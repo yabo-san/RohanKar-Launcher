@@ -36,6 +36,15 @@ const UPLOADERS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launc
 
 // OS actions when no Electron host is attached (standalone backend). Electron
 // replaces them with shell, dialog, window, Steam and updater calls.
+// catalog/art.json as shipped with the app; {} without one
+function readArt(appDir, log) {
+  try {
+    const art = JSON.parse(fs.readFileSync(path.join(appDir, 'catalog', 'art.json'), 'utf8'));
+    if (art && typeof art === 'object' && !Array.isArray(art)) return art;
+  } catch (e) { log(`[covers] no catalog/art.json (${e.message})`); }
+  return {};
+}
+
 function defaultHost(platform = process.platform) {
   const opener = platform === 'darwin' ? 'open' : platform === 'win32' ? 'explorer' : 'xdg-open';
   const unsupported = (what) => () => { const e = new Error(`${what} needs the desktop app`); e.code = 'unsupported'; throw e; };
@@ -56,7 +65,6 @@ function defaultHost(platform = process.platform) {
 function createBackend({
   dataDir,
   appDir = REPO_ROOT,
-  heroesDir = path.join(appDir, 'assets', 'heroes'),
   appVersion = readVersion(appDir),
   archiveBase = 'https://archive.org',
   overridesUrl = OVERRIDES_URL,
@@ -145,7 +153,7 @@ function createBackend({
     }
   })());
 
-  const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, heroesDir, archive, getOverrides, log: netlog.log });
+  const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, art: readArt(appDir, log), log: netlog.log });
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
   const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi });
@@ -238,7 +246,7 @@ function createBackend({
       rows: library.all(),
       items: byId,
       tagsFor: (id) => cols.filter(c => c.games.includes(id)).map(c => c.name),
-      art: (id, row) => covers.localArt(id, row.install_dir, overrides),
+      art: (id) => covers.localArt(id, overrides),
       exportIdFor: (id) => library.exportId(id),
       previous: playnite.readExport(file),
       launcherVersion: appVersion,
