@@ -362,7 +362,7 @@ test('GET /featured: the picks from main, else the bundled copy', async (t) => {
   const { createBackend } = require('../../src/backend');
   const other = createBackend({ dataDir: backend.dataDir + '-f', archiveBase: fake.base, featuredUrl: `${fake.base}/featured.json`, log: () => {} });
   t.after(() => { other.close(); fs.rmSync(backend.dataDir + '-f', { recursive: true, force: true }); });
-  assert.deepEqual(await other.getFeatured(), [{ identifier: 'a', blurb: 'Hi' }, { repository: 'owner/repo', blurb: null }]);
+  assert.deepEqual(await other.getFeatured(), [{ identifier: 'a', blurb: 'Hi', banner: null }, { repository: 'owner/repo', blurb: null, banner: null }]);
 });
 
 test('os: window, open-external, add-to-steam, updater go to the host; 501 standalone', async (t) => {

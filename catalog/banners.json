@@ -1,0 +1,3 @@
+{
+  "_comment": "Home banners: one SteamGridDB hero per featured pick, keyed by archive.org identifier or lowercase owner/repo. url is the CDN image; source is \"pinned\" (set by hand, never overwritten) or \"auto\" (picked by scripts/box-art/banners.py: the first hero by an artist in favorite-artists.json, in priority order, else the top-voted hero, favorite: false). See catalog/README.md."
+}
