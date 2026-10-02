@@ -1,0 +1,52 @@
+{
+  "description": "Owner picks added to the curated port shelf on top of the source list; scripts/curated-ports.js merges these in. Add \"replaces\": \"owner/repo\" to swap out a listed entry (e.g. a build repo for a source-only decomp).",
+  "apps": [
+    {
+      "name": "Star Fox 64: Recompiled",
+      "repository": "sonicdcer/Starfox64Recomp",
+      "repositorySource": "gitlab",
+      "section": "recomp port",
+      "note": "Must-have. Releases: https://gitlab.com/sonicdcer/Starfox64Recomp/-/releases"
+    },
+    {
+      "name": "Quake (ironwail)",
+      "repository": "andrei-drexler/ironwail",
+      "folderName": "ironwail",
+      "releaseAssetFilter": "win64",
+      "section": "engine",
+      "note": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from the user."
+    },
+    {
+      "name": "QuakeInjector",
+      "repository": "hrehfeld/QuakeInjector",
+      "folderName": "QuakeInjector",
+      "releaseAssetFilter": "QuakeInjector.exe",
+      "section": "launcher",
+      "note": "Browses and installs Quake maps and mods from Quaddicted; point it at an engine."
+    },
+    {
+      "name": "Doom Launcher",
+      "repository": "nstlaurent/DoomLauncher",
+      "folderName": "DoomLauncher",
+      "releaseAssetFilter": "DoomLauncher_",
+      "section": "launcher",
+      "note": "Doom front end with an /idgames browser; point it at an engine and your IWADs."
+    },
+    {
+      "name": "Doom Retro",
+      "repository": "bradharding/doomretro",
+      "folderName": "doomretro",
+      "releaseAssetFilter": "win64",
+      "section": "engine",
+      "note": "Doom engine. Needs an IWAD (doom.wad, doom2.wad) from the user."
+    },
+    {
+      "name": "DSDA-Doom",
+      "repository": "kraflab/dsda-doom",
+      "folderName": "dsda-doom",
+      "releaseAssetFilter": "win-x64",
+      "section": "engine",
+      "note": "Doom engine (speedrunning/demo-accurate). Needs an IWAD from the user."
+    }
+  ]
+}
