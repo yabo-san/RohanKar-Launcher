@@ -6,13 +6,13 @@
  *
  * Builds the web preview (scripts/preview/build.js) into preview-site/ and
  * serves it. The pages talk to scripts/preview/preview.js instead of a
- * backend: it answers the /v1 API from saved JSON (sources, catalogs,
- * collisions joined into the port shelves, a made-up library), so the
+ * backend: it answers the /v1 API from saved JSON (sources, catalogs as
+ * port shelves, a made-up library), so the
  * shelves and cards render. Favourites and Add/Remove work for the tab;
  * installs, launching and folders answer 501.
  *
  * By default the JSON is saved from the real sources, as the Pages preview
- * does: the uploader walls, Quiver's catalogs, the collision catalog, and
+ * does: the uploader walls, Quiver's catalogs, and
  * main's renames and SteamGridDB art. --offline uses the e2e fixtures
  * instead, so nothing touches the network, and is what it falls back to when
  * the real sources can't be reached. It listens on 0.0.0.0 so a devcontainer's forwarded port

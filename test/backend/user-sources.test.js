@@ -17,26 +17,25 @@ const FIX = path.join(__dirname, '..', 'fixtures', 'user-sources');
 const fixture = (name) => path.join(FIX, `${name}.json`);
 const sha1 = (b) => crypto.createHash('sha1').update(b).digest('hex');
 
-test('user.json: a valid file gives its three sections', () => {
+test('user.json: a valid file gives its two sections', () => {
   const r = us.readUserFile(fixture('valid'));
   assert.equal(r.error, null);
   assert.deepEqual(r.invalid, []);
-  assert.deepEqual(r.entries.collisions.map(c => c.repository), ['me/my-port']);
+  assert.deepEqual(Object.keys(r.entries), ['archive', 'github']);
   assert.deepEqual(r.entries.archive.map(a => a.identifier), ['my-homebrew', 'my-demo']);
-  assert.deepEqual(r.entries.github.map(g => g.repository), ['me/tool']);
-  assert.deepEqual(us.githubAsCollision(r.entries.github[0]), { repository: 'me/tool', name: 'My Tool', assetPattern: '(?i)windows' });
-  assert.deepEqual(us.githubAsCollision({ repository: 'a/b', folderName: 'B', sha1: 'A'.repeat(40) }), { repository: 'a/b', name: 'b', folderName: 'B', sha1: 'a'.repeat(40) });
+  assert.deepEqual(r.entries.github.map(g => g.repository), ['me/tool', 'me/my-port']);
 });
 
 test('user.json: every invalid entry is named with why; the good ones still load', () => {
   const r = us.readUserFile(fixture('invalid'));
   assert.equal(r.error, null);
-  assert.deepEqual(r.entries.collisions.map(c => c.repository), ['me/fine-port']);
+  assert.equal(r.entries.collisions, undefined, 'collisions are parked, never read');
   assert.deepEqual(r.entries.archive.map(a => a.identifier), ['ok-item']);
   assert.deepEqual(r.entries.github, []);
   const at = (section, index) => r.invalid.find(i => i.section === section && i.index === index);
-  assert.equal(r.invalid.length, 6);
-  assert.deepEqual(at('collisions', 0).errors, ['repository must be owner/repo']);
+  assert.equal(r.invalid.length, 7);
+  assert.deepEqual(at('collisions', 0).errors, ['collisions are no longer supported; list the repo under github instead']);
+  assert.deepEqual([at('collisions', 1).key, at('collisions', 1).errors.length], ['me/fine-port', 1]);
   assert.deepEqual(at('archive', 0).errors, ['identifier must be an archive.org identifier']);
   assert.deepEqual(at('archive', 1), { section: 'archive', index: 1, key: 'my-demo', errors: ['files[0].sha1 must be 40 hex characters'] });
   assert.deepEqual(at('archive', 3).errors, ['repeats OK-item, listed earlier in archive']);
@@ -57,7 +56,7 @@ test('user.json: a file that is not one says why', (t) => {
   assert.match(us.readUserFile(write('v2.json', '{"schemaVersion":2}')).error, /schemaVersion must be 1 \(found 2\)/);
   assert.match(us.readUserFile(write('arr.json', '[]')).error, /must be an object/);
   assert.equal(us.validateUserFile({ schemaVersion: 1, archive: {}, github: 'x' }).error, 'archive, github must be arrays');
-  assert.equal(us.validateUserFile({ schemaVersion: 1, collisions: 1 }).error, 'collisions must be an array');
+  assert.deepEqual(us.validateUserFile({ schemaVersion: 1, collisions: 1 }).invalid, [], 'a stray collisions key is not a list to report');
   assert.deepEqual(us.dropCurated('archive', [{ identifier: 'A' }, { identifier: 'b' }], new Set(['a'])),
     { kept: [{ identifier: 'b' }], conflicts: [{ section: 'archive', key: 'A' }] });
 });
@@ -158,7 +157,7 @@ test('API: off by default, the file is still checked, and turning it on shows yo
   const { call, backend } = await userApi(t, 'valid');
   const ids = async () => (await call('GET', '/items')).body.items.map(i => i.id);
   let us1 = (await call('GET', '/user-sources')).body;
-  assert.deepEqual([us1.enabled, us1.error, us1.invalid, us1.entries, us1.conflicts], [false, null, [], { collisions: 1, archive: 2, github: 1 }, []]);
+  assert.deepEqual([us1.enabled, us1.error, us1.invalid, us1.entries, us1.conflicts], [false, null, [], { archive: 2, github: 2 }, []]);
   assert.equal((await ids()).includes('my-demo'), false);
   assert.equal((await call('GET', '/catalogs/local/items')).status, 404);
 
@@ -170,7 +169,6 @@ test('API: off by default, the file is still checked, and turning it on shows yo
   assert.equal(items.find(i => i.id === 'rk-e2e-halo-ce').userSource, false, 'curated cards never carry the flag');
   const ports = (await call('GET', '/catalogs/local/items')).body.items;
   assert.deepEqual(ports.map(p => [p.repository, p.userSource]).sort(), [['me/my-port', true], ['me/tool', true]]);
-  assert.equal((await call('GET', `/collisions/${encodeURIComponent('me/tool')}`)).body.origin, 'user.json');
 
   // Off again: hidden, and nothing on disk is touched
   backend.library.recordInstall('my-demo', '/g/demo', null);
@@ -196,8 +194,8 @@ test('API: uploaders not in the curated list load only with additional sources o
 test('API: an invalid file lists each bad entry; a bad path or a URL is refused', async (t) => {
   const { call } = await userApi(t, 'invalid');
   const r = (await call('GET', '/user-sources')).body;
-  assert.equal(r.invalid.length, 6);
-  assert.deepEqual(r.entries, { collisions: 1, archive: 1, github: 0 });
+  assert.equal(r.invalid.length, 7);
+  assert.deepEqual(r.entries, { archive: 1, github: 0 });
   const refused = await call('PUT', '/settings', { userSourcesFile: 'https://example.com/user.json' });
   assert.deepEqual([refused.status, refused.body.detail], [400, 'user.json must be a file on this computer, not a URL']);
   assert.equal((await call('PUT', '/settings', { userSourcesFile: 'user.json' })).status, 400);
@@ -207,7 +205,7 @@ test('API: an invalid file lists each bad entry; a bad path or a URL is refused'
   assert.equal((await call('GET', '/user-sources')).body.file, null);
 });
 
-test('API: curated wins; a user entry for a curated repo or identifier is a conflict', async (t) => {
+test('API: curated wins; a user entry for a curated identifier is a conflict', async (t) => {
   const { call } = await userApi(t, 'conflicting');
   await call('PUT', '/settings', { allowAdditionalSources: true });
   const items = (await call('GET', '/items')).body.items;
@@ -216,13 +214,8 @@ test('API: curated wins; a user entry for a curated repo or identifier is a conf
   assert.equal(items.find(i => i.id === 'my-demo').userSource, true);
   const { conflicts } = (await call('GET', '/user-sources')).body;
   assert.deepEqual(conflicts.map(c => [c.from, c.key, c.reason]), [
-    ['user.json collisions', 'BanjoRecomp/BanjoRecomp', 'the curated collisions have it'],
-    ['user.json github', 'perfect-dark-pc-port/perfect_dark', 'the curated collisions have it'],
     ['user.json archive', 'rk-e2e-halo-ce', 'a curated uploader has it'],
   ]);
-  assert.equal((await call('GET', `/collisions/${encodeURIComponent('BanjoRecomp/BanjoRecomp')}`)).body.origin, 'bundled');
-  const put = await call('PUT', `/collisions/${encodeURIComponent('banjorecomp/banjorecomp')}`, { sources: [{ ia: 'x', path: 'a' }] });
-  assert.deepEqual([put.status, put.body.error], [409, 'curated']);
 });
 
 test('API: installs from user.json check the sha1 given, else pin it and ask before a changed file', async (t) => {

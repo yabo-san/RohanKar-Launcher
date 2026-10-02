@@ -4,12 +4,12 @@
  * a plain browser against the standalone backend.
  *
  * - The wall holds the shipped uploaders' games, grouped by title.
- * - A Ports shelf comes from a Quiver list, joined to the bundled
- *   collisions.json; a list that can't be fetched shows as unreachable.
+ * - A Ports shelf comes from a Quiver list; a list that can't be fetched
+ *   shows as unreachable.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
- * - A port installs: the Windows build from its GitHub release, then its game
- *   data from archive.org, staged and sha1-checked (Perfect Dark).
+ * - A port installs the Windows build from its GitHub release, and only that
+ *   (Perfect Dark); game data is the user's job.
  * - Home's rows have no scrollbar; they scroll with the header arrows, a drag and
  *   the Left/Right keys, and a drag doesn't open a card.
  * - New leads with the featured picks (a wall game and a port), then a
@@ -30,7 +30,6 @@ const fs   = require('fs');
 const path = require('path');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 const { startStack } = require('./fixture-server');
-const { PD_ROM } = require('./fixtures');
 const fixtures = require('./fixtures/search.json');
 
 const ENABLED = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
@@ -126,11 +125,10 @@ test('New leads with the picks, then the latest uploads newest first', async () 
   await page.keyboard.press('Escape');
 });
 
-test('a Ports shelf comes from its Quiver list, joined to the collision catalog', async () => {
+test('a Ports shelf comes from its Quiver list, with no game data on its cards', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
   await expect(page.locator('#body .port-card')).toHaveCount(3);
-  await expect(page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).locator('.tag.data')).toBeVisible();
-  await expect(page.locator('.port-card', { hasText: 'Mario Kart 64' }).locator('.tag.data')).toHaveCount(0);
+  await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
 
   await page.locator('#nav-shelves .navitem', { hasText: 'Xbox' }).click();
   await expect(page.locator('#body .notice')).toContainText("Couldn't fetch the Xbox catalog");
@@ -139,7 +137,7 @@ test('a Ports shelf comes from its Quiver list, joined to the collision catalog'
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Nintendo' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
-  await expect(page.locator('#detail-panel .srcline')).toContainText('archive.org');
+  await expect(page.locator('#detail-panel .srcline')).toHaveText('Binary: GitHub release from BanjoRecomp/BanjoRecomp');
   await page.locator('#detail-panel [data-toggle-port]').click();
   await expect(page.locator('#detail-panel [data-toggle-port]')).toHaveText('Remove from library');
   await page.keyboard.press('Escape');
@@ -180,15 +178,14 @@ test('An installed upload with a newer one on archive.org gets the Newer release
   await page.keyboard.press('Escape');
 });
 
-test('Perfect Dark installs: GitHub build, archive.org data, sha1-checked', async () => {
+test('Perfect Dark installs its GitHub build only', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Test ports' }).click();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'PerfectDark-PerfectDarkPCPort');
-  // The ROM lands in data/ beside the exe the collision names, not beside the release folder
-  expect(fs.readFileSync(path.join(dir, 'data', 'pd.ntsc-final.z64'), 'utf8')).toBe(PD_ROM);
   expect(fs.existsSync(path.join(dir, 'pd.x86_64.exe'))).toBe(true);
+  expect(fs.readdirSync(path.join(dir, 'data'))).toEqual(['put_your_rom_here.txt']);
   await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
 });
@@ -201,7 +198,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeVisible();
   // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options',
-    'Remove from Library', 'Game Data…', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Game Data on archive.org', 'Copy Link', 'Delete']);
+    'Remove from Library', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Copy Link', 'Delete']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
   await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
   await expect(menu.locator('.has-sub > .mi .chev')).toBeVisible();
@@ -395,7 +392,7 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await expect(page.locator('#toast')).toContainText('not a URL');
   await page.locator('#setting-user-file').fill(file);
   await page.locator('[data-action="user-file-save"]').click();
-  await expect(page.locator('#user-file-counts')).toHaveText('Loaded: 0 collisions, 2 archive.org downloads, 1 GitHub release.');
+  await expect(page.locator('#user-file-counts')).toHaveText('Loaded: 2 archive.org downloads, 1 GitHub release.');
   await expect(page.locator('#user-invalid')).toContainText('github[1] not a repo: repository must be owner/repo');
   await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a curated uploader has it');
 
@@ -446,53 +443,22 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await expect(toggle).toBeChecked();
 });
 
-test('Game data: add a GitHub repo, browse an archive.org item, pick a file and a folder, preview, save', async () => {
+test('Add a GitHub repo: it lands on Your ports, and can be removed', async () => {
   await page.locator('#nav-add-repo').click();
   await expect(page.locator('#heading')).toHaveText('Add a GitHub repo');
-  await page.locator('#ed-repo').fill('someone/banjo-fork');
-  await page.locator('#ed-name').fill('Banjo Fork');
+  await page.locator('#repo-repository').fill('someone/banjo-fork');
+  await page.locator('#repo-name').fill('Banjo Fork');
+  await page.locator('#btn-add-repo').click();
+  await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toBeVisible();
+  const saved = JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'catalogs', 'repos.local.json'), 'utf8'));
+  expect(saved).toEqual([{ repository: 'someone/banjo-fork', name: 'Banjo Fork' }]);
 
-  // Browse the item: bookkeeping files are hidden, folders come first
-  await page.locator('[data-src="0"][data-key="ia"]').fill('rk-e2e-romset');
-  await page.locator('[data-action="ed-browse"]').click();
-  await expect(page.locator('#browse-list .pick')).toHaveCount(6);
-  await expect(page.locator('#browse-list')).not.toContainText('_meta.xml');
-  await page.locator('#ed-filter').fill('banjo');
-  await expect(page.locator('#browse-list .pick')).toHaveCount(1);
-  await page.locator('#browse-list .pick').click();
-  await expect(page.locator('[data-src="0"][data-key="path"]')).toHaveValue('Nintendo 64/Banjo-Kazooie (USA).z64');
-  await expect(page.locator('[data-src="0"][data-key="sha1"]')).toHaveValue('1fe1632098865f639e22c11b9a81ee8f29c75d7a');
-
-  // A second source: a whole folder into textures/
-  await page.locator('[data-action="ed-add-source"]').click();
-  await page.locator('[data-src="1"][data-key="ia"]').fill('rk-e2e-romset');
-  await page.locator('[data-action="ed-browse"][data-i="1"]').click();
-  await page.locator('#browse-list .pick[data-path="Nintendo 64/Textures/*"]').click();
-  await page.locator('[data-src="1"][data-key="target"]').fill('textures');
-  await page.locator('[data-action="ed-preview"]').click();
-  await expect(page.locator('#ed-preview')).toContainText('Nintendo 64/Textures/bk-hd.png → textures/bk-hd.png');
-  await expect(page.locator('#ed-preview')).toContainText('16 MB');
-
-  await page.locator('#btn-save-collision').click();
-  await expect(page.locator('#detail')).toContainText('Banjo Fork');
-  await page.keyboard.press('Escape');
-  const saved = JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'catalogs', 'collisions.local.json'), 'utf8'));
-  expect(saved).toEqual([{
-    repository: 'someone/banjo-fork', name: 'Banjo Fork',
-    sources: [
-      { ia: 'rk-e2e-romset', path: 'Nintendo 64/Banjo-Kazooie (USA).z64', sha1: '1fe1632098865f639e22c11b9a81ee8f29c75d7a' },
-      { ia: 'rk-e2e-romset', path: 'Nintendo 64/Textures/*', target: 'textures' },
-    ],
-  }]);
-  await expect(page.locator('#nav-shelves .navitem', { hasText: 'Your ports' })).toBeVisible();
-
-  // A bad entry names its problems instead of saving
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await page.locator('.port-card', { hasText: 'Banjo Fork' }).click({ button: 'right' });
-  await page.locator('#ctxmenu [data-menu="collision"]').click();
-  await page.locator('[data-src="0"][data-key="target"]').fill('../escape');
-  await page.locator('#btn-save-collision').click();
-  await expect(page.locator('.editor .notice')).toContainText('sources[0].target must be a relative folder');
+  await expect(page.locator('.port-card', { hasText: 'Banjo Fork' }).locator('.user-badge')).toBeVisible();
+
+  await page.locator('#nav-add-repo').click();
+  await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();
+  await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toHaveCount(0);
 });
 
 test('Settings imports a Quiver library: preview, import, then the library and Your ports show it', async () => {
@@ -560,38 +526,6 @@ test('Library: add your own app, drop files in its folder, play; rename; remove'
   await expect(detail).toBeHidden();
   await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
   expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
-});
-
-test('Settings feeds: subscribe, trust its uploader, copy your feed, import a feed file', async () => {
-  const before = await page.evaluate(() => api.getSources());
-  await page.locator('#btn-settings').click();
-  await page.locator('#feed-url').fill(`${stack.base}/feed.json`);
-  await page.locator('[data-action="feed-add"]').click();
-  const row = page.locator('#feed-list .feed-row', { hasText: 'feed' });
-  await expect(row.locator('.feed-uploader')).toContainText('gomes.samuel@gmail.com');
-  await row.locator('[data-action="feed-trust"]').click();
-  await expect(row.locator('.feed-uploader .trusted')).toHaveText('Trusted');
-  await expect(page.locator('#setting-sources')).toHaveValue(/^gomes\.samuel@gmail\.com, /m);
-
-  await page.evaluate(() => {
-    globalThis.copied = null;
-    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t) => { globalThis.copied = t; } } });
-  });
-  await page.locator('[data-action="ed-export"]').first().click();
-  await expect.poll(() => page.evaluate(() => globalThis.copied)).not.toBeNull();
-  const copied = JSON.parse(await page.evaluate(() => globalThis.copied));
-  expect(copied.uploaders.map(u => u.uploader)).toContain('gomes.samuel@gmail.com');
-
-  await page.locator('#feed-file').setInputFiles({ name: 'mine.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify({
-    collisions: [{ repository: 'me/imported-port', name: 'Imported Port', sources: [{ ia: 'rk-e2e-feed-data', path: 'x.bin' }] }],
-    uploaders: [{ uploader: 'lawlessb991@gmail.com', label: 'lawless' }],
-  })) });
-  await expect(page.locator('#setting-sources')).toHaveValue(/^lawlessb991@gmail\.com, /m);
-  const col = await page.evaluate(() => api.getCollision('me/imported-port'));
-  expect(col.origin).toBe('local');
-
-  // put the uploaders back, so the rest of the run sees the shipped wall
-  await page.evaluate((s) => api.saveSettings({ sources: s.sources }), before);
 });
 
 test('Settings switches to the classic UI and back, and remembers the choice', async () => {

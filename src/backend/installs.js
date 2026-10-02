@@ -2,8 +2,7 @@
 /**
  * Install engine: download an archive.org file, extract it, find its
  * executable, record it in library.db. Ports (catalog items) take the latest
- * GitHub release's Windows build and, when the collision catalog names one,
- * stage their game data from archive.org and check its sha1 (ports.js).
+ * GitHub release's Windows build (ports.js); game data is the user's job.
  * Files from additional sources are checked against the user's sha1, or
  * pinned on first install (pins); a changed file stops with hashChange set.
  */
@@ -15,7 +14,6 @@ const { getFollow, getText } = require('./net');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
-const { applyBps, BpsError } = require('./bps');
 const { checkPin } = require('./user-sources');
 
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
@@ -133,7 +131,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   // ─── Jobs (POST /installs) ────────────────────────────────────────────────
 
-  // step: 'binary' or 'data' while a port installs, null for archive.org items
+  // step: 'binary' while a port installs, null for archive.org items
   const view = (job) => ({
     id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
@@ -258,236 +256,50 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return release;
   }
 
-  // The recent releases of a repository, for the admin console's release
-  // picker: each asset with the pattern that would keep picking it
-  async function releases(repository, { pattern = null } = {}) {
-    const r = await getText(`${githubApi}/repos/${repository}/releases?per_page=10`, {
-      kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
-    });
-    if (r.status !== 200) return { ok: false, error: `Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})` };
-    const list = JSON.parse(r.body);
-    const latest = ports.pickRelease(list);
-    const picked = latest ? ports.pickAsset(latest.assets, { pattern }).asset?.name || null : null;
-    return {
-      ok: true, latest: latest?.tag_name || null, picked,
-      releases: list.filter(x => !x.draft).map(x => ({
-        tag: x.tag_name, name: x.name || x.tag_name, prerelease: !!x.prerelease, published: x.published_at || null,
-        assets: (x.assets || []).map(a => ({ name: a.name, size: a.size || 0, pattern: ports.assetPatternFor(a.name) })),
-      })),
-    };
-  }
-
-  // base "binary" (the default): the release lays down first and the data goes
-  // into it. base "data": the data lays down first and the release unpacks
-  // into binaryTarget on top of it. See docs/COLLISIONS.md.
+  // The latest release's Windows build, unpacked into the port's folder
   async function runPortJob(job, item) {
     const entry = item.entry || {};
-    const data = item.data || {};
     const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
     const dest = path.join(installDir(), folderName);
     const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
-    const downloads = new Set();
-    const fail = (error) => { update(job, { status: 'error', error }); return false; };
-    const binDest = ports.inside(dest, data.binaryTarget || '');
-    if (!binDest) return fail(`${item.title}'s binaryTarget would land outside the install folder`);
+    const fail = (error) => update(job, { status: 'error', error });
     fs.mkdirSync(dest, { recursive: true });
 
-    // The binary: the latest release's Windows build, unpacked into binDest
-    async function binary() {
-      update(job, { status: 'downloading', step: 'binary', percent: 0 });
-      const release = await latestRelease(item.repository);
-      const pick = ports.pickAsset(release.assets, { pattern: data.assetPattern, filter: entry.releaseAssetFilter });
-      if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
-      update(job, { file: pick.asset.name });
-      const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
-      if (job.status === 'cancelled') return false;
-      if (!bin.ok) return fail(bin.error);
-      downloads.add(bin.filePath);
-      if (item.userSource) {
-        const ok = await checkUserFile(job, { pinKey: `github:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
-        if (!ok) return false;
-      }
-      update(job, { status: 'extracting', percent: 100 });
-      fs.mkdirSync(binDest, { recursive: true });
-      if (ports.ARCHIVE_EXT.test(bin.filePath)) {
-        // Unpacked beside the download first: a release that is one folder
-        // (pd-x86_64-windows/) lays down that folder's contents, so the data
-        // stages next to the exe, unless the entry says keepReleaseFolder
-        const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
-        fs.rmSync(staging, { recursive: true, force: true });
-        const x = await extractTo(bin.filePath, staging);
-        if (!x.ok) { fs.rmSync(staging, { recursive: true, force: true }); return fail(x.error); }
-        fs.cpSync(data.keepReleaseFolder ? staging : ports.releaseRoot(staging), binDest, { recursive: true, force: true });
-        fs.rmSync(staging, { recursive: true, force: true });
-      } else {
-        fs.copyFileSync(bin.filePath, path.join(binDest, path.basename(bin.filePath)));
-      }
-      for (const f of [].concat(entry.filesToAdd || [])) {
-        const target = ports.inside(binDest, f);
-        if (target && !fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, ''); }
-      }
-      return true;
+    update(job, { status: 'downloading', step: 'binary', percent: 0 });
+    const release = await latestRelease(item.repository);
+    const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter });
+    if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
+    update(job, { file: pick.asset.name });
+    const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
+    if (job.status === 'cancelled') return;
+    if (!bin.ok) return fail(bin.error);
+    if (item.userSource) {
+      const ok = await checkUserFile(job, { pinKey: `github:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
+      if (!ok) return;
     }
-
-    // dataFiles: named files picked out of one archive.org download (contentUrl)
-    async function dataFiles() {
-      const wanted = data.dataFiles || [];
-      if (!wanted.length) return true;
-      const src = ports.archiveFile(data.contentUrl);
-      if (!src) throw new Error(`The collision catalog's data link for ${item.title} isn't an archive.org download`);
-      update(job, { status: 'downloading', step: 'data', percent: 0, file: path.basename(src.file) });
-      const got = await download({ key: job.id, identifier: src.identifier, url: archive.downloadUrl(src.identifier, src.file), fileName: src.file, onProgress: progress });
-      if (job.status === 'cancelled') return false;
-      if (!got.ok) return fail(got.error);
-      downloads.add(got.filePath);
-      update(job, { status: 'extracting', percent: 100 });
-      let staging = null;
-      if (ports.ARCHIVE_EXT.test(got.filePath)) {
-        staging = path.join(path.dirname(got.filePath), '_staging');
-        fs.rmSync(staging, { recursive: true, force: true });
-        const x = await extractTo(got.filePath, staging);
-        if (!x.ok) return fail(x.error);
-      }
-      try {
-        update(job, { status: 'verifying' });
-        for (const df of wanted) {
-          const found = (staging && ports.findFile(staging, df.name))
-            || (path.basename(got.filePath).toLowerCase() === String(df.name).toLowerCase() ? got.filePath : null);
-          if (!found) {
-            if (df.optional) continue;
-            const has = staging ? ports.largestFiles(staging, 5) : [];
-            return fail(`${df.name} isn't in ${src.file}${has.length ? ` (it holds ${has.join(', ')})` : ''}`);
-          }
-          const target = ports.inside(dest, df.targetSubpath, df.name);
-          if (!target) return fail(`${df.name} would land outside the install folder`);
-          fs.mkdirSync(path.dirname(target), { recursive: true });
-          if (df.patch) {
-            const p = await patchFile(String(df.patch), staging, src.identifier);
-            if (job.status === 'cancelled') return false;
-            if (!p.ok) return fail(`${df.name}'s patch ${df.patch}: ${p.error}`);
-            update(job, { status: 'verifying' });
-            try {
-              fs.writeFileSync(target, applyBps(fs.readFileSync(found), fs.readFileSync(p.filePath)));
-            } catch (e) {
-              if (!(e instanceof BpsError)) throw e;
-              return fail(`${df.name} couldn't be patched with ${path.basename(p.filePath)}: ${e.message}`);
-            }
-          } else {
-            fs.copyFileSync(found, target);
-          }
-          if (df.sha1) {
-            const sum = await ports.sha1File(target);
-            if (sum !== String(df.sha1).toLowerCase()) {
-              fs.rmSync(target, { force: true });
-              return fail(`${df.name} doesn't match the catalog (sha1 ${sum}, expected ${df.sha1})`);
-            }
-          }
-        }
-      } finally {
-        if (staging) fs.rmSync(staging, { recursive: true, force: true });
-      }
-      return true;
+    update(job, { status: 'extracting', percent: 100 });
+    if (ports.ARCHIVE_EXT.test(bin.filePath)) {
+      // Unpacked beside the download first: a release that is one folder
+      // (pd-x86_64-windows/) lays down that folder's contents
+      const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
+      fs.rmSync(staging, { recursive: true, force: true });
+      const x = await extractTo(bin.filePath, staging);
+      if (!x.ok) { fs.rmSync(staging, { recursive: true, force: true }); return fail(x.error); }
+      fs.cpSync(ports.releaseRoot(staging), dest, { recursive: true, force: true });
+      fs.rmSync(staging, { recursive: true, force: true });
+    } else {
+      fs.copyFileSync(bin.filePath, path.join(dest, path.basename(bin.filePath)));
     }
-
-    // A dataFiles[].patch: a URL, else a path in the unpacked data download,
-    // the install folder (a release can ship its patch) or, failing both, the
-    // same archive.org item. { ok, filePath } or { ok: false, error }
-    async function patchFile(ref, staging, identifier) {
-      const get = async (url, fileName) => {
-        update(job, { status: 'downloading', step: 'data', percent: 0, file: path.basename(fileName) });
-        const got = await download({ key: job.id, identifier, url, fileName, onProgress: progress });
-        if (got.ok) downloads.add(got.filePath);
-        return got;
-      };
-      if (/^https?:\/\//i.test(ref)) {
-        const ia = ports.archiveFile(ref);
-        if (ia) return get(archive.downloadUrl(ia.identifier, ia.file), ia.file);
-        let name;
-        try { name = decodeURIComponent(path.posix.basename(new URL(ref).pathname)); } catch { name = ''; }
-        return get(ref, name || 'patch.bps');
-      }
-      for (const root of [staging, dest].filter(Boolean)) {
-        const exact = ports.inside(root, ref);
-        if (exact && exact !== path.resolve(root) && fs.existsSync(exact) && fs.statSync(exact).isFile()) return { ok: true, filePath: exact };
-        const found = ports.findFile(root, path.basename(ref));
-        if (found) return { ok: true, filePath: found };
-      }
-      return get(archive.downloadUrl(identifier, ref.replace(/^\/+/, '')), ref);
+    for (const f of [].concat(entry.filesToAdd || [])) {
+      const target = ports.inside(dest, f);
+      if (target && !fs.existsSync(target)) { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, ''); }
     }
-
-    // sources: files, folders (dir/*) or whole archives straight from archive.org
-    // items, each checked against the entry's sha1 or else archive.org's own
-    async function sources() {
-      const list = data.sources || [];
-      if (!list.length) return true;
-      const listed = new Map();
-      for (const s of list) {
-        if (!listed.has(s.ia)) {
-          update(job, { status: 'downloading', step: 'data', percent: 0, file: s.ia });
-          const r = await archive.fileList(s.ia);
-          if (!r.ok) return fail(`Couldn't list ${s.ia} on archive.org (${r.error})`);
-          listed.set(s.ia, r.files);
-        }
-        const x = ports.expandSource(s, listed.get(s.ia));
-        if (x.error) { if (s.optional) continue; return fail(x.error); }
-        const root = ports.inside(dest, s.target || '');
-        if (!root) return fail(`${s.path} would land outside the install folder`);
-        for (const f of x.files) {
-          const to = ports.inside(root, f.rel);
-          if (!to) return fail(`${f.name} would land outside the install folder`);
-          update(job, { status: 'downloading', step: 'data', percent: 0, file: f.name });
-          const got = await download({ key: job.id, identifier: s.ia, url: archive.downloadUrl(s.ia, f.name), fileName: f.name, onProgress: progress });
-          if (job.status === 'cancelled') return false;
-          if (!got.ok) return fail(`${f.name}: ${got.error}`);
-          downloads.add(got.filePath);
-          const want = (x.single && s.sha1) || f.sha1;
-          if (want) {
-            update(job, { status: 'verifying' });
-            const sum = await ports.sha1File(got.filePath);
-            if (sum !== String(want).toLowerCase()) {
-              fs.rmSync(got.filePath, { force: true });
-              return fail(`${f.name} doesn't match ${x.single && s.sha1 ? 'the catalog' : 'archive.org'} (sha1 ${sum}, expected ${want})`);
-            }
-          }
-          if (s.extract && ports.ARCHIVE_EXT.test(f.name) && s.as) {
-            // A ROM zip: its one file (the biggest, past any readme) lands as `as`
-            update(job, { status: 'extracting', percent: 100 });
-            const staging = path.join(root, `.unpack-${job.id}`);
-            try {
-              const xr = await extractTo(got.filePath, staging);
-              if (!xr.ok) return fail(xr.error);
-              const [biggest] = ports.largestFiles(staging, 1);
-              if (!biggest) return fail(`${f.name} is empty`);
-              fs.mkdirSync(path.dirname(to), { recursive: true });
-              fs.copyFileSync(path.join(staging, biggest), to);
-              if (/\.z64$/i.test(to)) ports.toZ64(to); // TOSEC's .n64 is byteswapped
-            } finally {
-              fs.rmSync(staging, { recursive: true, force: true });
-            }
-          } else if (s.extract && ports.ARCHIVE_EXT.test(f.name)) {
-            update(job, { status: 'extracting', percent: 100 });
-            const xr = await extractTo(got.filePath, root);
-            if (!xr.ok) return fail(xr.error);
-          } else {
-            fs.mkdirSync(path.dirname(to), { recursive: true });
-            fs.copyFileSync(got.filePath, to);
-            if (/\.z64$/i.test(to)) ports.toZ64(to);
-          }
-        }
-      }
-      return true;
-    }
-
-    const order = data.base === 'data' ? [sources, dataFiles, binary] : [binary, dataFiles, sources];
-    for (const stage of order) if (!(await stage())) return;
 
     // Record it against the catalog item, keeping its library row
-    if (settings.load().deleteAfterInstall) for (const f of downloads) fs.rmSync(f, { force: true });
+    if (settings.load().deleteAfterInstall) fs.rmSync(bin.filePath, { force: true });
     disk.unblockDirectory(dest, { platform, log });
-    // The collision's exe when it names one (Perfect Dark ships one per region)
-    const named = data.exe && ports.inside(dest, data.exe);
     const exes = disk.findExes(dest);
-    const exePath = named && fs.existsSync(named) ? named : exes.length === 1 ? exes[0] : null;
+    const exePath = exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     update(job, { status: 'done', step: null, installDir: dest, exePath });
   }
@@ -523,7 +335,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { found };
   }
 
-  return { download, cancelDownload, extract, extractTo, start, startPort, releases, get, list, wait, cancel, scan };
+  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
 }
 
 module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API };

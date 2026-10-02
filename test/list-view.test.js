@@ -30,10 +30,9 @@ test('gameStatus: downloading, newer release, installed, nothing', () => {
 });
 
 test('portStatus and isFavorite read the library row', () => {
-  const p = { id: 'quiver:x', data: { status: 'available' } };
+  const p = { id: 'quiver:x' };
   const c = (lib) => ({ kind: 'port', library: lib, downloads: new Map() });
-  assert.equal(LV.portStatus(p, c({})).label, 'Game data');
-  assert.equal(LV.portStatus({ ...p, data: { status: 'missing' } }, c({})).label, 'Needs data');
+  assert.equal(LV.portStatus(p, c({})).label, '');
   assert.equal(LV.portStatus(p, c({ 'quiver:x': {} })).label, 'In library');
   assert.equal(LV.portStatus(p, c({ 'quiver:x': { install_dir: '/p' } })).label, 'Installed');
   assert.equal(LV.isFavorite(p, c({ 'quiver:x': { is_favorite: 1 } })), true);
@@ -104,7 +103,7 @@ test('column cells: dates, numbers, sizes and missing data', () => {
   assert.equal(col('name').text(g), 'A');
   const bare = game('b', { addeddate: null, _sourceLabel: undefined });
   for (const id of ['released', 'added', 'downloads', 'size', 'platform', 'uploader']) assert.equal(col(id).text(bare), '', id);
-  const port = { name: 'P', project: 'Proj', repository: 'o/r', shelfName: 'Nintendo', data: { status: 'none' } };
+  const port = { name: 'P', project: 'Proj', repository: 'o/r', shelfName: 'Nintendo' };
   assert.deepEqual(LV.PORT_COLUMNS.map(c => c.text(port, { library: {}, downloads: new Map() })), ['P', 'Proj', 'o/r', 'Nintendo', '']);
 });
 
@@ -129,10 +128,10 @@ test('row actions: sections in group order, filtered by kind and when, submenus,
   assert.deepEqual(opts.children.map(c => c.id), ['exe']);
   assert.deepEqual(reg.sections({}, { kind: 'game' }).at(-1)[0], { id: 'del', label: 'Delete', icon: 'trash', danger: true, children: null });
 
-  // Another thread adds an admin action without touching the rest
-  reg.register({ id: 'make-collision', label: 'Make collision', group: 'admin', icon: 'box' });
-  assert.deepEqual(labels({ installed: true }, 'game').at(-2), ['Make collision']);
-  assert.deepEqual(LV.MENU_GROUPS, ['pin', 'collection', 'play', 'manage', 'goto', 'admin', 'remove']);
+  // Another thread adds an action without touching the rest
+  reg.register({ id: 'source', label: 'Go to Source', group: 'goto', icon: 'globe' });
+  assert.deepEqual(labels({ installed: true }, 'game').at(-2), ['Go to Source']);
+  assert.deepEqual(LV.MENU_GROUPS, ['pin', 'collection', 'play', 'manage', 'goto', 'remove']);
 
   reg.register({ id: 'del', label: 'Remove', group: 'remove' });
   assert.deepEqual(labels({ installed: true }, 'game').at(-1), ['Remove']);

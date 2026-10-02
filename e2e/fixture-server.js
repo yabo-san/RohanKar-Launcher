@@ -5,8 +5,7 @@
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
  *     pointed at that server for archive.org, overrides.json, uploaders.json,
- *     featured.json and GitHub's releases, with the collision catalog from
- *     fixtures/
+ *     featured.json and GitHub's releases
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -44,12 +43,9 @@ async function startFixtures() {
 // Fixtures + backend on a fresh data dir holding `settings`.
 //   page:     the page to open under src/frontend/ (index.html is the classic UI)
 //   catalogs: Quiver list files to subscribe to first, as [{ file, shelf }]
-//   admin:    admin mode, on a copy of the fixture collisions (dataDir/collisions.json)
 // Resolves { dataDir, pageUrl, base, close }; pageUrl opens the page on that backend.
-async function startStack(settings, { page = 'index.html', catalogs = [], admin = false } = {}) {
+async function startStack(settings, { page = 'index.html', catalogs = [] } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-e2e-'));
-  const collisionsFile = path.join(__dirname, 'fixtures', 'collisions.json');
-  if (admin) fs.copyFileSync(collisionsFile, path.join(dataDir, 'collisions.json'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings, null, 2));
   const fixtures = await startFixtures();
   const backend = await run([
@@ -58,10 +54,8 @@ async function startStack(settings, { page = 'index.html', catalogs = [], admin 
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
-    '--collisions-file', admin ? path.join(dataDir, 'collisions.json') : collisionsFile,
     '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
-    ...(admin ? ['--admin'] : []),
   ], {}, () => {});
   for (const c of catalogs) {
     await backend.backend.catalogs.subscribe({ url: `${fixtures.base}/quiver/${c.file}`, name: c.shelf, shelf: c.shelf });
