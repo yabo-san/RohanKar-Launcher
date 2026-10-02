@@ -46,6 +46,7 @@
         "recomp port",
         "curated"
       ],
+      "releaseAssetFilter": "win-amd64.zip",
       "repository": "zolaware/reblue"
     },
     {
@@ -78,7 +79,7 @@
         "nintendo",
         "nintendo 64",
         "recompilation",
-        "recomp port",
+        "source only",
         "curated"
       ],
       "filesToAdd": [
@@ -132,7 +133,8 @@
       "tags": [
         "recomp port",
         "curated"
-      ]
+      ],
+      "releaseAssetFilter": "doaxbv-"
     },
     {
       "name": "Donkey Kong 64",
@@ -233,7 +235,7 @@
       "repository": "sonicnext-dev/MarathonRecomp",
       "folderName": "MarathonRecomp",
       "tags": [
-        "recomp port",
+        "source only",
         "curated"
       ]
     },
@@ -400,7 +402,7 @@
       "repository": "SAT-R/sa2",
       "folderName": "SA2",
       "tags": [
-        "decomp port",
+        "source only",
         "curated"
       ]
     },
@@ -418,7 +420,7 @@
       "repository": "sm64-port/sm64-port",
       "folderName": "SM64Port",
       "tags": [
-        "decomp port",
+        "source only",
         "curated"
       ]
     },
@@ -429,7 +431,8 @@
       "tags": [
         "decomp port",
         "curated"
-      ]
+      ],
+      "releaseAssetFilter": "sm64plus"
     },
     {
       "name": "Sonic CD (2011)",
@@ -522,6 +525,7 @@
         "decomp port",
         "curated"
       ],
+      "releaseAssetFilter": "smw_",
       "repository": "snesrev/smw"
     },
     {
@@ -550,7 +554,8 @@
       "tags": [
         "decomp port",
         "curated"
-      ]
+      ],
+      "releaseAssetFilter": "zelda3_"
     }
   ]
 }

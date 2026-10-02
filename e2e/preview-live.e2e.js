@@ -1,7 +1,8 @@
 'use strict';
 /**
  * The web preview reads the JSON feeds live: a fixtures build pointed at a
- * local "main" (PREVIEW_FEED) shows today's overrides, picks and announcement
+ * local "main" (PREVIEW_FEED) shows today's overrides, picks (with art.json
+ * banners) and announcement
  * instead of the ones saved at build time, and falls back to the saved ones
  * when a feed can't be fetched.
  */
@@ -45,7 +46,9 @@ test.afterAll(async () => {
 test('the preview shows the feeds on main, not the build-time copies', async ({ page }) => {
   feed['overrides.json'] = { 'rk-e2e-halo-ce': { title: 'Halo, renamed on main' } };
   feed['catalog/featured.json'] = { picks: [{ identifier: 'rk-e2e-the-sims', blurb: 'Picked after the build.' }] };
+  feed['catalog/art.json'] = { 'rk-e2e-the-sims': { banner: { url: 'https://cdn2.steamgriddb.com/hero/e2e000000000000000000000000live.png', source: 'auto' } } };
   feed['announcement.json'] = { id: 'live-1', message: 'Posted after the build' };
+  await page.route('https://cdn2.steamgriddb.com/**', r => r.fulfill({ contentType: 'image/png', body: fs.readFileSync(path.join(__dirname, 'fixtures', 'hero.png')) }));
 
   await page.goto(`${base}/new/index.html`);
   await expect(page.locator('#announce')).toContainText('Posted after the build');
@@ -54,6 +57,8 @@ test('the preview shows the feeds on main, not the build-time copies', async ({ 
   await page.locator('[data-view="home"]').first().click();
   await expect(page.locator('#body')).toContainText('Picked after the build.');
   await expect(page.locator('#body')).not.toContainText('The one that started it all.');
+  // Its banner comes from the art.json feed's banner field
+  await expect(page.locator('.feature-card .art.banner img').first()).toHaveAttribute('src', 'https://cdn2.steamgriddb.com/hero/e2e000000000000000000000000live.png');
   await expect(page.locator('body')).toContainText('feeds live');
 });
 

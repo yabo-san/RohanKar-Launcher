@@ -90,13 +90,18 @@ through our one Playnite extension. Keep it small. Every feature is something th
    `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
    source has a newer release, with an Update button that reinstalls into the same folder. No
    automatic updates.
-9. **Live ports job, binaries only.** Bring back a non-blocking scheduled CI job (nightly plus
-   workflow_dispatch) that really installs the Acceptance tiles below into a temp folder with the
-   app's own install engine, against the real GitHub and GitLab: pick the release asset, download,
-   extract, list what landed. No game data. It catches a port renaming its release files or
-   breaking its filter. Report results in the job summary; failures never block PRs. The old
-   collision version lives on `parked/collisions` (`scripts/live-port.js`,
-   `.github/workflows/live-ports.yml`) and can be the starting point.
+9. **Live ports job, binaries only.** A non-blocking workflow (`.github/workflows/live-ports.yml`,
+   `scripts/live-port.js`) against the real GitHub, GitLab and archive.org; failures never block PRs.
+   - **Nightly check** (also on PRs that touch the catalogs or download code, and by hand): for
+     every entry in `catalog/curated-ports.json` except "source only", resolve the release asset
+     the app would pick and download only its first 4 KB; do the same for one item per curated
+     archive.org uploader (the ones the app turns on). Report a table in the job summary: entry,
+     asset picked, and OK / renamed / no match / HTTP error. It catches a port renaming its
+     repository or release files, or breaking its filter, without downloading a game.
+   - **Full installs** (workflow_dispatch only, run by hand before a release, not nightly):
+     install the five Acceptance ports below (Zelda 64: Recompiled, Star Fox 64, ironwail,
+     Doom Launcher, r2modman) into a temp folder with the app's own install engine: pick the
+     asset, download, extract, list what landed. No game data. Results in the job summary.
 10. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
 11. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled

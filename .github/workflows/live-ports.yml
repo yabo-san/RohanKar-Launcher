@@ -1,29 +1,67 @@
 name: Live ports
 
-# A real port install against the real GitHub (scripts/live-port.js), which
-# the fixture tests can only imitate. Not a required check: an upstream
-# release or a GitHub outage can turn it red without anything in this repo
-# being wrong.
+# Checks against the real GitHub, GitLab and archive.org (scripts/live-port.js),
+# which the fixture tests can only imitate. Never a required check: a GitHub or
+# archive.org outage can turn it red without anything in this repo being wrong.
+#
+# check (nightly, on PRs that touch the catalogs or the download code, or by
+# hand): every curated port's release asset and one item per turned-on
+# archive.org uploader, downloading only the first 4 KB of each.
+# install (by hand only, before a release): full installs of the brief's
+# Acceptance ports with the app's own install engine. No game data.
+# Both write a results table to the job summary.
 on:
+  schedule:
+    - cron: '0 4 * * *'
   pull_request:
     branches: [main]
     paths:
       - 'catalog/curated-ports.json'
+      - 'catalog/uploaders.json'
       - 'scripts/live-port.js'
+      - 'src/backend/archive.js'
       - 'src/backend/installs.js'
+      - 'src/backend/net.js'
       - 'src/backend/ports.js'
       - '.github/workflows/live-ports.yml'
   workflow_dispatch:
     inputs:
+      mode:
+        description: 'check: first 4 KB of every curated port and uploader. install: full installs of the Acceptance ports'
+        type: choice
+        options: [check, install]
+        default: check
       repos:
-        description: 'Repositories from catalog/curated-ports.json, space separated (default: the script''s list)'
+        description: 'Only these repositories from catalog/curated-ports.json, space separated (default: all for check, the Acceptance ports for install)'
         required: false
 
 permissions:
   contents: read
 
+# Job names must not clash with ci.yml's required `check` and `build`
 jobs:
-  install:
+  live-check:
+    name: live ports (first 4 KB)
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.mode == 'check' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: First 4 KB of every curated port and uploader
+        env:
+          REPOS: ${{ inputs.repos }}
+          # Only so GitHub's API doesn't rate limit the runner's shared IP
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/live-port.js $REPOS --summary "$GITHUB_STEP_SUMMARY"
+
+  live-install:
+    name: live ports (full installs)
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'install' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -32,8 +70,8 @@ jobs:
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
-      - name: Install the ports for real
+      - run: npm ci --ignore-scripts
+      - name: Install the Acceptance ports for real
         env:
           REPOS: ${{ inputs.repos }}
-        run: node scripts/live-port.js $REPOS
+        run: node scripts/live-port.js --install $REPOS --summary "$GITHUB_STEP_SUMMARY"

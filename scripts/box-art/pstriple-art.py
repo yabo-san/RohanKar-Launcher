@@ -116,6 +116,11 @@ with CANDIDATES.open("w", newline="", encoding="utf-8") as f:
     w.writerows(candidates)
 
 # The art catalog: everything found, curated or not, keyed by archive.org identifier.
+# Home banners (the `banner` field, scripts/box-art/banners.py) carry over as they were.
+old_art = json.loads(args.art.read_text(encoding="utf-8")) if args.art.exists() else {}
+for key, entry in old_art.items():
+    if isinstance(entry, dict) and entry.get("banner"):
+        art.setdefault(key, {})["banner"] = entry["banner"]
 args.art.write_text(json.dumps(dict(sorted(art.items())), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 # Approved rows into overrides.json; art already there (curated by hand or an earlier batch) wins.

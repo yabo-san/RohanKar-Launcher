@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { FEATURED_URL, heroUrl, parseFeatured, parseBanners, loadFeatured } = require('../src/backend/featured.js');
+const { FEATURED_URL, heroUrl, parseFeatured, parseArtBanners, loadFeatured } = require('../src/backend/featured.js');
 
 test('parseFeatured keeps picks in order and drops ones with no key', () => {
   assert.deepEqual(parseFeatured(JSON.stringify({ picks: [
@@ -28,7 +28,7 @@ test('the bundled featured.json parses and has picks', () => {
 test('loadFeatured: fetched copy, then bundled, then none', async () => {
   const logs = [];
   const log = (m) => logs.push(m);
-  const fetched = await loadFeatured({ fetchText: async (url) => { if (url.endsWith('banners.json')) throw new Error('404'); assert.equal(url, FEATURED_URL); return '{"picks":[{"identifier":"a"}]}'; }, readBundled: () => { throw new Error('unused'); }, log });
+  const fetched = await loadFeatured({ fetchText: async (url) => { if (url.endsWith('art.json')) throw new Error('404'); assert.equal(url, FEATURED_URL); return '{"picks":[{"identifier":"a"}]}'; }, readBundled: () => { throw new Error('unused'); }, log });
   assert.deepEqual(fetched, [{ identifier: 'a', blurb: null, banner: null }]);
 
   const bundled = await loadFeatured({ fetchText: async () => { throw new Error('offline'); }, readBundled: () => '{"picks":[{"identifier":"b"}]}', log });
@@ -57,34 +57,41 @@ test('parseFeatured keeps a pinned CDN banner and drops a page link', () => {
   ] })).map(p => p.banner), [HERO, null]);
 });
 
-test('parseBanners maps keys to CDN URLs, lowercases repos, skips comments and page links', () => {
-  const m = parseBanners(JSON.stringify({
+test('parseArtBanners maps keys to banner CDN URLs, lowercases repos, skips comments, page links and entries with none', () => {
+  const m = parseArtBanners(JSON.stringify({
     _comment: 'x',
-    dmc4: { url: HERO, source: 'auto', artist: 'Julia', hero: 1 },
-    'Owner/Repo': { url: HERO, source: 'pinned' },
-    page: { url: 'https://www.steamgriddb.com/hero/12345', source: 'pinned' },
+    dmc4: { title: 'DMC4', grids: [], banner: { url: HERO, source: 'auto', artist: 'Julia', hero: 1 } },
+    'Owner/Repo': { banner: { url: HERO, source: 'pinned' } },
+    page: { banner: { url: 'https://www.steamgriddb.com/hero/12345', source: 'pinned' } },
+    cover: { title: 'Covers only', grids: [{ url: HERO }], heroes: [{ url: HERO }] },
+    flat: { banner: HERO },
     junk: 'nope',
   }));
   assert.deepEqual([...m], [['dmc4', HERO], ['owner/repo', HERO]]);
-  assert.throws(() => parseBanners('[]'), /object/);
+  assert.throws(() => parseArtBanners('[]'), /object/);
 });
 
-test('loadFeatured: a pick\'s own banner wins over banners.json, which fills the rest', async () => {
+test('loadFeatured: a pick\'s own banner wins over art.json\'s, which fills the rest', async () => {
   const other = HERO.replace('0123', '9999');
   const texts = {
     'https://x/featured.json': JSON.stringify({ picks: [{ identifier: 'a', banner: HERO }, { identifier: 'b' }, { repository: 'O/R' }, { identifier: 'c' }] }),
-    'https://x/banners.json': JSON.stringify({ a: { url: other, source: 'auto' }, b: { url: other, source: 'auto' }, 'o/r': { url: HERO, source: 'pinned' } }),
+    'https://x/art.json': JSON.stringify({
+      a: { banner: { url: other, source: 'auto' } },
+      b: { title: 'B', grids: [], banner: { url: other, source: 'auto' } },
+      'o/r': { banner: { url: HERO, source: 'pinned' } },
+      c: { title: 'C', grids: [], heroes: [{ url: other }] },
+    }),
   };
   const picks = await loadFeatured({ url: 'https://x/featured.json', fetchText: async (u) => texts[u], readBundled: () => { throw new Error('unused'); } });
   assert.deepEqual(picks.map(p => p.banner), [HERO, other, HERO, null]);
 
-  // banners.json unreachable: the bundled copy
+  // art.json unreachable: the bundled copy
   const bundled = await loadFeatured({ url: 'https://x/featured.json',
-    fetchText: async (u) => { if (u.endsWith('banners.json')) throw new Error('offline'); return texts[u]; },
-    readBundled: () => { throw new Error('unused'); }, readBundledBanners: () => texts['https://x/banners.json'] });
+    fetchText: async (u) => { if (u.endsWith('art.json')) throw new Error('offline'); return texts[u]; },
+    readBundled: () => { throw new Error('unused'); }, readBundledArt: () => texts['https://x/art.json'] });
   assert.deepEqual(bundled.map(p => p.banner), [HERO, other, HERO, null]);
 });
 
-test('the bundled banners.json parses', () => {
-  parseBanners(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'banners.json'), 'utf8'));
+test('the bundled art.json parses for banners', () => {
+  parseArtBanners(fs.readFileSync(path.join(__dirname, '..', 'catalog', 'art.json'), 'utf8'));
 });
