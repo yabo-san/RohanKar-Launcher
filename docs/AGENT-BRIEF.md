@@ -81,9 +81,18 @@ through our one Playnite extension. Keep it small. Every feature is something th
    `releaseAssetFilter`. Fixture of GitLab's response; no network in tests.
 6. **Art:** drop the `hero.png` special case. Cover and banner order: `overrides.json` artUrl,
    else the archive.org item's own image, else `catalog/art.json`.
-7. **README**: replace it with exactly the text in "README" below; move Development and Releases
+7. **Optional API tokens.** Settings fields "GitHub token" and "GitLab token" (optional, empty by
+   default), stored in the user's settings, never logged. When set, send them on GitHub/GitLab API
+   requests; when empty, keep working unauthenticated. Explain in Settings why: GitHub allows 60
+   API requests an hour without one, and a big shelf or an update check can hit that. Show a clear
+   message when the limit is hit, suggesting the token.
+8. **"Newer release" badge in the launcher.** The logic exists (`src/backend/playnite.js`
+   `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
+   source has a newer release, with an Update button that reinstalls into the same folder. No
+   automatic updates.
+9. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
-8. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
+10. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
    community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
    community-supported. PRs that add sources, catalog entries or asset filters for other
    platforms are welcome."
