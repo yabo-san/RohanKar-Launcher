@@ -1,0 +1,16 @@
+{
+  "rk-e2e-halo-ce": {
+    "url": "https://cdn2.steamgriddb.com/hero/e2e00000000000000000000000000auto.png",
+    "source": "auto",
+    "artist": "Someone",
+    "hero": 1,
+    "favorite": false
+  },
+  "not-on-the-wall": {
+    "url": "https://cdn2.steamgriddb.com/hero/e2e0000000000000000000000000skip.png",
+    "source": "auto",
+    "artist": "Someone",
+    "hero": 2,
+    "favorite": false
+  }
+}

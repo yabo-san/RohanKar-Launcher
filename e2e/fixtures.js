@@ -9,8 +9,10 @@
  *   - GitLab, for Star Fox 64: Recompiled: /projects/sonicdcer%2FStarfox64Recomp/releases is
  *     test/fixtures/gitlab's copy of the real response, its links pointing here; the Windows
  *     link is a zip with no extension, as on GitLab
- *   - /featured.json is fixtures/featured.json: a wall game, a port and a pick
- *   - /curated-ports.json is fixtures/curated-ports.json: the curated shelf, one port
+ *   - /featured.json is fixtures/featured.json: a wall game (with a pinned
+ *     banner), a port and a pick not on the wall; /banners.json is
+ *     fixtures/banners.json, whose entry for the wall game the pin overrides
+ *   - /curated-ports.json is fixtures/curated-ports.json: the curated shelf
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -67,8 +69,8 @@ function answer(url, base = '') {
   if (url.pathname === '/curated-ports.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'curated-ports.json')), 'application/json');
   }
-  if (url.pathname === '/featured.json') {
-    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'featured.json')), 'application/json');
+  if (url.pathname === '/featured.json' || url.pathname === '/banners.json') {
+    return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', url.pathname.slice(1))), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');
   if (kind === 'metadata' && id === 'rk-e2e-user-demo') {
