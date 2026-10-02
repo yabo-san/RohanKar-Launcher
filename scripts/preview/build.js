@@ -172,7 +172,7 @@ async function build(opts) {
     const ids = [...new Set([...(wall?.items || []), ...more].flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
     step(`fetching covers and file lists for ${ids.length} items`);
     let done = 0;
-    await pool(ids, 12, async (id) => {
+    await pool(ids, 6, async (id) => {
       const enc = encodeURIComponent(id);
       await save(`/items/${enc}/cover`, {}, { binary: true });
       await save(`/items/${enc}/files`);
