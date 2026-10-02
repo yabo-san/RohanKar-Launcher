@@ -222,10 +222,6 @@ button { font: inherit; color: inherit; }
 .field textarea:focus, .field input:focus { border-color: var(--key); }
 .inline { display: flex; gap: 8px; }
 .inline input { flex: 1; }
-.import-list { list-style: none; margin: 0 0 10px; padding: 0; max-height: 260px; overflow: auto; border: 1px solid var(--border); border-radius: var(--rad-ctl); background: var(--fill); }
-.import-list li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 10px; font-size: 13px; }
-.import-list li + li { border-top: 1px solid var(--border); }
-.import-list li span { color: var(--text2); white-space: nowrap; }
 
 /* ---- toast ---- */
 .toast {
@@ -749,6 +745,22 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .modal-footer { display: flex; gap: 8px; justify-content: flex-end; padding: 0 16px 16px; }
 .modal-footer .md-btn { flex: 1; }
 .modal-footer .md-btn:focus-visible { outline: 2px solid rgb(250 45 72 / 60%); outline-offset: 1px; }
+
+/* ---- port badges: curated, source only, work in progress, engine/launcher ---- */
+.badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.titles .badges { margin-top: 8px; }
+.curated-badge, .state-badge {
+  display: inline-block; padding: 1px 6px; border-radius: 4px;
+  font: 600 10px/1.5 var(--font); letter-spacing: .1px; white-space: nowrap;
+  color: #30d158; background: rgb(48 209 88 / 12%); box-shadow: inset 0 0 0 .5px rgb(48 209 88 / 30%);
+}
+.state-badge.source-only { color: #c7c7cc; background: rgb(255 255 255 / 8%); box-shadow: inset 0 0 0 .5px rgb(255 255 255 / 22%); }
+.state-badge.wip { color: #ff9f0a; background: rgb(255 159 10 / 12%); box-shadow: inset 0 0 0 .5px rgb(255 159 10 / 30%); }
+.state-badge.role { color: #64d2ff; background: rgb(100 210 255 / 12%); box-shadow: inset 0 0 0 .5px rgb(100 210 255 / 30%); }
+.source-only-note { align-self: center; font-size: 13px; color: var(--text2); }
+.port-desc { margin: 14px 0; font-size: 13px; line-height: 1.5; color: var(--text2); }
+.lv-badge.wip { color: #ff9f0a; background: rgb(255 159 10 / 13%); }
+.lv-badge.curated { color: #30d158; background: rgb(48 209 88 / 13%); }
 
 /* ---- additional sources: the badge, the switch and the user.json panel ---- */
 .user-badge {
