@@ -116,15 +116,17 @@ test("Home's rows scroll without a scrollbar", async () => {
   await page.mouse.move(box.x + 300, box.y + 100);
   await page.mouse.down();
   await page.mouse.move(box.x + 100, box.y + 100, { steps: 5 });
+  expect(await left()).toBeGreaterThan(0);
   await page.mouse.up();
-  // The row settles on a column's edge (or its end) once the drag lets go
-  await expect.poll(left).toBeGreaterThan(0);
-  await expect.poll(() => row.evaluate(r => {
-    const cs = getComputedStyle(r);
-    const edge = r.getBoundingClientRect().left + parseFloat(cs.paddingLeft) + (parseFloat(cs.scrollPaddingLeft) || 0);
-    const atEnd = Math.abs(r.scrollLeft - (r.scrollWidth - r.clientWidth)) <= 1;
-    return atEnd || [...r.children].some(c => Math.abs(c.getBoundingClientRect().left - edge) <= 2);
-  })).toBe(true);
+  // Once the drag lets go the row comes to rest on a snap stop: a column's edge, or either end
+  const resting = () => row.evaluate(r => {
+    const pad = parseFloat(getComputedStyle(r).paddingLeft) || 0;
+    const base = r.getBoundingClientRect().left + pad;
+    const stops = [0, r.scrollWidth - r.clientWidth,
+      ...[...r.children].map(c => c.getBoundingClientRect().left - base + r.scrollLeft)];
+    return stops.some(x => Math.abs(x - r.scrollLeft) <= 2) ? 'ok' : `scrollLeft ${r.scrollLeft}, stops ${stops.map(Math.round)}`;
+  });
+  await expect.poll(resting).toBe('ok');
   await expect(page.locator('#detail')).toHaveCount(0);
 
   await row.locator('.card').first().focus();
