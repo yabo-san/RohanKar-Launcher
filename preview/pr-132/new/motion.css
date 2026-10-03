@@ -1,0 +1,230 @@
+/* y4bo new UI: the motion and polish pass, after Cider 2.
+   Loaded after app.css and overrides it; kept in its own file so the pass
+   stays one place to read. Sections:
+     - layout: frosted sidebar and title row, content scrolling under them
+     - page transitions
+     - shelf rows: snap, edge fades, hover arrows
+     - hover and press feedback, cover fade-in
+     - the details page (Cider's album page)
+     - reduced motion */
+
+/* ---- layout: frosted sidebar and title row over the content ---- */
+.app {
+  --sbw: 240px;          /* sidebar width */
+  --chrome-h: 50px;      /* title row height */
+  --pl: 48px; --pr: 52px; /* page gutters */
+}
+@media (max-width: 860px) { .app { --sbw: 64px; --pl: 24px; --pr: 24px; } }
+.app.no-sidebar { --sbw: 0px; }
+
+.sidebar {
+  position: absolute; top: 0; bottom: 0; left: 0; z-index: 30; width: var(--sbw);
+  background: rgb(31 32 31 / 64%); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
+  box-shadow: inset -.5px 0 0 rgb(0 0 0 / 55%), inset -14px 0 14px -14px rgb(0 0 0 / 35%);
+}
+.main { width: 100%; }
+.chrome {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 25; height: var(--chrome-h); padding-left: calc(var(--sbw) + 16px);
+  background: rgb(22 22 22 / 66%); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
+  box-shadow: 0 .5px 0 transparent; transition: box-shadow .2s var(--ease), background .2s var(--ease);
+}
+.main.scrolled .chrome { background: rgb(26 26 26 / 72%); box-shadow: 0 .5px 0 rgb(255 255 255 / 10%); }
+.body { padding: var(--chrome-h) var(--pr) 72px calc(var(--sbw) + var(--pl)); overflow-x: hidden; }
+.announce { margin: calc(var(--chrome-h) + 4px) var(--pr) 8px calc(var(--sbw) + var(--pl)); }
+.announce:not(.hidden) + .body { padding-top: 0; }
+.nowbar { left: calc(50% + var(--sbw) / 2); width: min(600px, calc(100% - var(--sbw) - 96px)); }
+
+/* ---- page transitions: a short fade and rise, transform and opacity only ---- */
+.body.page-enter > * { animation: page-in 220ms var(--ease-out) both; }
+@keyframes page-in { from { opacity: 0; transform: translateY(10px); } }
+
+/* ---- shelf rows: snap to cards, fade the edges with more to see, arrows on hover ---- */
+.row-wrap { position: relative; margin: -8px 0 -16px; }
+.row-wrap > .row {
+  --fl: 0px; --fr: 0px;
+  padding: 8px 0 20px; margin: 0; scroll-snap-type: x proximity;
+  -webkit-mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+  mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
+}
+/* The compact list and the picks carousel keep their own mandatory snap; no snap mid-drag */
+.row-wrap > .row.list, .row-wrap > .row.feature { scroll-snap-type: x mandatory; }
+.row-wrap > .row.dragging, .row-wrap > .row.settling { scroll-snap-type: none; }
+.row-wrap.more-left > .row { --fl: 44px; }
+.row-wrap.more-right > .row { --fr: 44px; }
+.row-wrap > .row > .card { scroll-snap-align: start; }
+.row-wrap > .row.list { padding: 0; }
+.row-wrap:has(> .row.list) { margin: 0; }
+.section-head:has(+ .row-wrap > .row.list) { margin-bottom: 2px; }
+
+.row-edge {
+  position: absolute; z-index: 3; top: calc(50% - 38px); width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer;
+  background: rgb(36 36 36 / 70%); backdrop-filter: blur(16px) saturate(180%); -webkit-backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: inset 0 0 0 .5px rgb(255 255 255 / 16%), 0 6px 18px rgb(0 0 0 / 45%);
+  opacity: 0; transform: scale(.88); pointer-events: none;
+  transition: opacity .2s var(--ease), transform .2s var(--ease-out), background .15s var(--ease);
+}
+.row-wrap:has(> .row.list) .row-edge { top: calc(50% - 20px); }
+.row-edge.prev { left: 10px; }
+.row-edge.next { right: 10px; }
+.row-edge::before {
+  content: ''; width: 17px; height: 17px; background: currentColor;
+  -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat;
+  --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 5.5 6.5 6.5-6.5 6.5'/%3E%3C/svg%3E");
+}
+.row-edge.prev::before { transform: scaleX(-1); }
+.row-wrap:hover > .row-edge:not(:disabled), .row-wrap:focus-within > .row-edge:not(:disabled) { opacity: 1; transform: none; pointer-events: auto; }
+.row-edge:hover { background: rgb(60 60 60 / 80%); }
+.row-wrap > .row-edge:active:not(:disabled) { transform: scale(.9); }
+
+/* ---- hover and press feedback ---- */
+.card { transition: transform .24s var(--ease-out); }
+.card:hover { transform: translateY(-4px); }
+.card:active { transform: translateY(-1px) scale(.97); transition-duration: .1s; }
+.card .art { transition: box-shadow .24s var(--ease-out), filter .2s var(--ease); }
+.card:hover .art { box-shadow: 0 16px 32px rgb(0 0 0 / 50%); filter: brightness(.94); }
+.card.skel, .card.skel:hover, .card.skel:active { transform: none; }
+.feature-card:hover { transform: none; }
+.feature-card:active { transform: scale(.985); }
+.feature-card:hover .art { box-shadow: 0 16px 36px rgb(0 0 0 / 45%); }
+.list-item:hover { transform: none; }
+.list-item:active { transform: scale(.985); background: var(--press); }
+.list-item .art, .list-item:hover .art { box-shadow: none; filter: none; }
+.list-row:active, .track:active { background: var(--press); }
+
+.btn, .md-btn { transition: background .15s var(--ease), transform .12s var(--ease), filter .15s var(--ease); }
+.btn:active:not(:disabled), .md-btn:active:not(:disabled) { transform: scale(.96); }
+.tb, .reload-btn, .row-nav button, .album-more, .seg button, .chip { transition: background .15s var(--ease), opacity .15s var(--ease), transform .12s var(--ease); }
+.tb:active:not(:disabled), .reload-btn:active, .row-nav button:active:not(:disabled), .album-more:active, .seg button:active { transform: scale(.9); }
+.chip:active, .md-select:active { transform: scale(.96); }
+.navitem { transition: background .15s var(--ease), transform .12s var(--ease); }
+.navitem:active:not(.active) { transform: scale(.98); }
+.art .play-btn:active, .art .menu-btn:active { transform: scale(.88); }
+.art .play-btn, .art .menu-btn { transition: opacity .2s var(--ease), background .15s var(--ease), transform .12s var(--ease); }
+
+/* covers fade in the first time they load */
+img.fade-in { animation: img-in .45s var(--ease-out) both; }
+@keyframes img-in { from { opacity: 0; } }
+
+/* menus open with a small scale from their corner */
+.ctxmenu:not(.hidden) { animation: menu-in .14s var(--ease-out); transform-origin: top left; }
+@keyframes menu-in { from { opacity: 0; transform: scale(.96); } }
+
+/* ---- the details page, after Cider's album page ---- */
+.album-page { position: relative; isolation: isolate; padding-top: 44px; }
+.album-wash-clip {
+  position: absolute; z-index: -1; top: calc(-1 * var(--chrome-h)); left: calc(-1 * (var(--sbw) + var(--pl))); right: calc(-1 * var(--pr));
+  height: 640px; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(#000 35%, transparent); mask-image: linear-gradient(#000 35%, transparent);
+}
+.album-wash {
+  position: absolute; inset: -140px; background-size: cover; background-position: center;
+  filter: blur(90px) saturate(1.8) brightness(.6); opacity: .9; transform: scale(1.15);
+  animation: wash-in .6s var(--ease-out) both;
+}
+@keyframes wash-in { from { opacity: 0; } }
+
+.album-head { display: flex; align-items: flex-end; gap: 36px; }
+.album-cover {
+  position: relative; flex: none; width: clamp(190px, 20vw, 290px); aspect-ratio: 2 / 3; border-radius: 8px; overflow: hidden;
+  box-shadow: 0 24px 60px rgb(0 0 0 / 55%), 0 2px 8px rgb(0 0 0 / 30%);
+}
+.album-cover::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 0 .5px rgb(255 255 255 / 14%); pointer-events: none; }
+.album-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.album-cover.square { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
+.album-cover.square img { width: 62%; height: 62%; object-fit: contain; filter: drop-shadow(0 10px 24px rgb(0 0 0 / 50%)); }
+.album-cover .noart { padding: 16px; font: 700 20px/1.2 var(--font-display); text-align: center; color: #fff; text-shadow: 0 1px 8px rgb(0 0 0 / 50%); }
+
+.album-info { flex: 1; min-width: 0; padding-bottom: 2px; }
+.album-kind { font: 600 11px/1.3 var(--font); letter-spacing: .6px; text-transform: uppercase; color: rgb(255 255 255 / 58%); }
+.album-title { margin: 6px 0 2px; font: 700 34px/1.12 var(--font-display); letter-spacing: -.7px; color: #fff; text-wrap: balance; }
+.album-sub {
+  display: inline-block; max-width: 100%; padding: 0; border: 0; background: none; text-align: left;
+  font: 500 22px/1.3 var(--font-display); letter-spacing: -.3px; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+button.album-sub { cursor: pointer; }
+button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px; }
+.album-meta { margin-top: 8px; font: 600 11.5px/1.4 var(--font); letter-spacing: .4px; text-transform: uppercase; color: rgb(255 255 255 / 55%); }
+.album-meta .sep { margin: 0 6px; }
+.album-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
+.album-pill {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-width: 118px; height: 34px; padding: 0 20px;
+  border-radius: 999px; font: 600 13.5px var(--font);
+}
+.album-pill .ico { width: 14px; height: 14px; }
+.album-pill:not(.primary) { background: rgb(255 255 255 / 11%); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); }
+.album-pill:not(.primary):hover { background: rgb(255 255 255 / 17%); }
+.album-more {
+  width: 34px; height: 34px; flex: none; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 50%;
+  background: rgb(255 255 255 / 11%); color: var(--accent); cursor: pointer;
+}
+.album-more:hover { background: rgb(255 255 255 / 17%); }
+.album-more .ico { width: 18px; height: 18px; }
+.album-info .progress { max-width: 420px; }
+.album-info .user-note, .album-info .newer-note, .album-info .srcline, .album-info .manual-note { max-width: 640px; margin: 14px 0 0; }
+.album-info .h3 { margin-top: 18px; }
+.album-info .versions { max-width: 640px; }
+.album-desc { max-width: 640px; margin-top: 16px; }
+.album-desc p {
+  margin: 0; font-size: 13px; line-height: 1.5; color: rgb(255 255 255 / 72%); white-space: pre-line;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden;
+}
+.album-desc.open p { display: block; }
+.album-desc-more { display: none; margin-top: 4px; padding: 0; border: 0; background: none; font: 700 11.5px var(--font); letter-spacing: .4px; text-transform: uppercase; color: var(--text); cursor: pointer; }
+.album-desc.clamped:not(.open) .album-desc-more { display: inline-block; }
+
+/* versions / what installs: a dense track list with hairline dividers */
+.album-tracks { margin-top: 40px; }
+.tracklist { display: flex; flex-direction: column; }
+.tracklist .num { text-align: right; font-variant-numeric: tabular-nums; }   /* app.css's generic .num went with the old list rows */
+.track-head, .track {
+  display: grid; grid-template-columns: 36px minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(90px, auto);
+  align-items: center; gap: 16px; padding: 0 12px;
+}
+.ports-tracks .track-head, .ports-tracks .track { grid-template-columns: 36px minmax(0, 2fr) minmax(0, 2.2fr) minmax(0, 1.2fr); }
+.track-head { height: 30px; font-size: 12px; font-weight: 500; color: var(--text2); box-shadow: inset 0 -.5px 0 var(--hair2); }
+.track {
+  position: relative; width: 100%; min-height: 46px; border: 0; border-radius: 6px; background: none; color: inherit;
+  font: inherit; text-align: left; transition: background .15s var(--ease);
+}
+.track + .track::before { content: ''; position: absolute; top: 0; left: 64px; right: 12px; border-top: .5px solid var(--hair); }
+.track:nth-child(2)::before { content: none; }
+button.track { cursor: pointer; }
+button.track:hover { background: var(--hover); }
+.track:hover::before, .track:hover + .track::before { opacity: 0; }
+.track .tn { text-align: center; color: var(--text2); font-variant-numeric: tabular-nums; }
+.track .tn .ico { width: 14px; height: 14px; vertical-align: middle; }
+.track.on .tn, .track.on .tt b { color: var(--accent); }
+.tt { display: flex; flex-direction: column; min-width: 0; }
+.tt b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt small { margin-top: 1px; font-size: 11px; color: var(--text3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc { font-size: 12.5px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tc.ok { color: #6ee38f; }
+.tc.warn { color: var(--warn); }
+.tflags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.tflags .tag { position: static; }
+.tflags .user-badge { margin: 0; }
+.track-sum { margin: 14px 12px 0; font-size: 12px; color: var(--text2); }
+.album-foot { margin: 22px 12px 0; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }
+.album-foot dd { color: #b8b8b8; }
+.album-page .section.has-row { margin-top: 44px; }
+
+@media (max-width: 860px) {
+  .album-head { flex-direction: column; align-items: flex-start; gap: 22px; }
+  .album-title { font-size: 28px; }
+  .track-head, .track { grid-template-columns: 30px minmax(0, 1fr) minmax(0, auto); }
+  .track-head > :nth-child(n+4), .track > :nth-child(n+4) { display: none; }
+}
+
+/* ---- reduced motion: no transforms, transitions or animations ---- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+    transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important;
+  }
+  .card:hover, .card:active, .feature-card:active, .list-item:active, .btn:active, .md-btn:active, .tb:active, .reload-btn:active,
+  .row-nav button:active, .album-more:active, .seg button:active, .chip:active, .md-select:active, .navitem:active,
+  .art .play-btn:active, .art .menu-btn:active, .row-edge, .row-wrap > .row-edge:active, .h2link:hover .ico,
+  .feature-card:hover .art img, .reload-btn:active::before { transform: none !important; }
+  .body.page-enter > *, img.fade-in, .album-wash { animation: none !important; }
+}
