@@ -3,6 +3,8 @@
 A launcher that downloads and installs games and ports from archive.org and GitHub.
 It's a semi-curated list: my picks are built in, and you can add your own.
 
+![The launcher: an uploader's games, a game's page and the list view](docs/media/demo.gif)
+
 I made this to test a CI/CD pipeline (see the commit history), not to show what a
 proper frontend looks like. **The frontend is vibecoded.**
 
