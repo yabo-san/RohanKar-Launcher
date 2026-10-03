@@ -417,6 +417,19 @@
       "releaseAssetFilter": "sm64plus"
     },
     {
+      "name": "snesrev launcher (Zelda 3, Super Metroid, Super Mario World)",
+      "repository": "yabo-san/snesrev-launcher",
+      "folderName": "snesrev-launcher",
+      "releaseAssetFilter": "snesrev-launcher-",
+      "tags": [
+        "launcher",
+        "snes",
+        "nintendo",
+        "super nintendo entertainment system"
+      ],
+      "description": "One launcher for snesrev's PC ports of Zelda 3 (A Link to the Past), Super Metroid and Super Mario World. Needs your own SNES ROM of each game you play (A Link to the Past USA, Super Metroid Japan/USA, Super Mario World USA); point it at your ROM folder and it builds the game."
+    },
+    {
       "name": "Sonic CD (2011)",
       "folderName": "SonicCD-RSDKv3Decompilation",
       "appIconUrl": "https://raw.githubusercontent.com/RSDKModding/RSDKv3-Decompilation/refs/heads/master/RSDKv3/RSDKv3%20Decomp%20Icon.ico",

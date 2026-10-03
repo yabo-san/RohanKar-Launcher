@@ -7,7 +7,7 @@ fallback. Every file changes by pull request.
 | --- | --- | --- |
 | `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
-| `curated-ports.json` | the port shelf, edited by hand (see Port shelf below) | 45 |
+| `curated-ports.json` | the port shelf, edited by hand (see Port shelf below) | 46 |
 | `featured.json` | the Home page's hand-picked games and ports, in display order: `{ picks: [{ identifier \| repository, blurb?, banner? }] }` (see Home banners below) | per pick |
 | `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Also each featured pick's Home banner, keyed by archive.org identifier or lowercase `owner/repo`: `banner: { url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API; pinned banners are never overwritten | per item |
 
