@@ -3,6 +3,7 @@
  * y4bo — details.js
  * The model behind the new UI's album-style details page and its history:
  * what goes on the meta line, the versions track list, the "More from" row,
+ * the series albums (several games as one card),
  * and the back/forward stack that remembers each page's scroll position.
  * Pure: no DOM, no network. Loaded as a plain <script> before new/app.js,
  * and required as CommonJS by the node:test suite.
@@ -105,6 +106,96 @@ function morePorts(items, port, { limit = 20 } = {}) {
     .slice(0, limit);
 }
 
+// ─── series ──────────────────────────────────────────────────────────────────
+// overrides.json can put an upload in a series ("series": "FIFA"); the wall
+// then shows the series as one card (an album) and its games as the tracks.
+
+const seriesCardId = (name) => `series:${name}`;
+
+// The wall's titles with each series folded into one card, where its first
+// game was. A series with one game here stays that game's own card.
+// The card: { _seriesCard, identifier, title, _games, _sourceLabel, addeddate, date, downloads, platform, _cover }
+function collapseSeries(games) {
+  const by = new Map();
+  for (const g of games || []) {
+    if (!g._series) continue;
+    if (!by.has(g._series)) by.set(g._series, []);
+    by.get(g._series).push(g);
+  }
+  const out = [];
+  const done = new Set();
+  for (const g of games || []) {
+    const list = g._series && by.get(g._series);
+    if (!list || list.length < 2) { out.push(g); continue; }
+    if (done.has(g._series)) continue;
+    done.add(g._series);
+    out.push(seriesCard(g._series, list));
+  }
+  return out;
+}
+
+function seriesCard(name, games) {
+  const newest = games.map(g => String(g.addeddate || '')).sort().pop() || null;
+  const top = games.slice().sort((a, b) => (Number(b.downloads) || 0) - (Number(a.downloads) || 0))[0];
+  const labels = [...new Set(games.map(g => g._sourceLabel).filter(Boolean))];
+  const platforms = [...new Set(games.map(g => g.platform || ''))];
+  return {
+    _seriesCard: true,
+    identifier: seriesCardId(name),
+    title: name,
+    _games: games,
+    _sourceLabel: labels.length === 1 ? labels[0] : `${labels.length} uploaders`,
+    addeddate: newest,
+    date: games.map(g => g.date).filter(Boolean).map(String).sort()[0] || null,
+    downloads: games.reduce((n, g) => n + (Number(g.downloads) || 0), 0),
+    platform: platforms.length === 1 ? platforms[0] : '',
+    // the most downloaded game's art stands for the series
+    _cover: top.identifier,
+  };
+}
+
+// The shelf ports that are this game (overrides.json "port": "owner/repo"),
+// matched on the repository, case-insensitively
+function linkedPorts(game, ports) {
+  const repo = String(game?._port || '').toLowerCase();
+  if (!repo) return [];
+  return (ports || []).filter(p => String(p.repository || '').toLowerCase() === repo);
+}
+
+// The wall games a port is (the reverse of linkedPorts)
+function gamesForPort(port, games) {
+  const repo = String(port?.repository || '').toLowerCase();
+  if (!repo) return [];
+  return (games || []).filter(g => String(g._port || '').toLowerCase() === repo);
+}
+
+// A series' games as tracks: oldest first (by the game's own year, then
+// title), numbered. `titleOf` names a game; `library` is keyed by identifier.
+function seriesRows(games, { titleOf = (g) => g.title, library = {} } = {}) {
+  const rows = (games || []).map(g => {
+    const versions = g._versions || [g];
+    return {
+      identifier: g.identifier,
+      title: titleOf(g),
+      year: yearOf(g),
+      uploader: g._sourceLabel || g._uploader || '',
+      downloads: versions.reduce((n, v) => n + (Number(v.downloads) || 0), 0),
+      versions: versions.length,
+      installed: versions.some(v => library[v.identifier]?.install_dir),
+    };
+  });
+  rows.sort((a, b) => a.year.localeCompare(b.year) || a.title.localeCompare(b.title, 'en', { numeric: true, sensitivity: 'base' }));
+  return rows.map((r, i) => ({ n: i + 1, ...r }));
+}
+
+// The series' meta line: years, games, downloads
+function seriesMeta(rows) {
+  const years = rows.map(r => r.year).filter(Boolean).sort();
+  const span = years.length ? (years[0] === years[years.length - 1] ? years[0] : `${years[0]}–${years[years.length - 1]}`) : '';
+  const downloads = rows.reduce((n, r) => n + r.downloads, 0);
+  return [span, countLabel(rows.length, 'game'), downloads ? countLabel(downloads, 'download') : ''].filter(Boolean);
+}
+
 // Back and forward through the pages visited. An entry is whatever the
 // caller shows ({ name, arg, query, scroll }); leaving a page records where
 // it was scrolled to, so going back lands in the same place.
@@ -131,5 +222,8 @@ function createHistory() {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory };
+  module.exports = {
+    platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory,
+    seriesCardId, collapseSeries, seriesRows, seriesMeta, linkedPorts, gamesForPort,
+  };
 }
