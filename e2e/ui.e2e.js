@@ -279,12 +279,24 @@ test('Card states from tags: source only links the repository, work in progress 
   await page.keyboard.press('Escape');
 });
 
+test('A title with one upload has no track list: one track is no album', async () => {
+  await page.locator('[data-view="wall"]').click();
+  await page.locator('#body .game-card', { hasText: 'The Sims' }).click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.album-title')).toHaveText('The Sims');
+  await expect(detail.locator('.album-kind')).toHaveText('Game');
+  await expect(detail.locator('.tracklist')).toHaveCount(0);
+  await expect(detail.locator('.album-foot')).toContainText('rk-e2e-the-sims');
+  await page.keyboard.press('Escape');
+});
+
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
-  // What installs: the release binary, and only that
-  await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
-  await expect(page.locator('#detail .tracklist .track')).toContainText('GitHub release from BanjoRecomp/BanjoRecomp');
+  // One thing installs, so no track list: the release binary in the info at the foot
+  await expect(page.locator('#detail .tracklist')).toHaveCount(0);
+  await expect(page.locator('#detail .album-foot')).toContainText('The Windows build from the latest GitHub release');
+  await expect(page.locator('#detail .album-foot')).toContainText('BanjoRecomp/BanjoRecomp');
   await expect(page.locator('#detail .album-cover')).toHaveClass(/square/);
   await page.locator('#detail [data-toggle-port]').click();
   await expect(page.locator('#detail [data-toggle-port]')).toHaveText('Remove from library');
@@ -378,7 +390,8 @@ test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab r
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
   const detail = page.locator('#detail');
-  await expect(detail.locator('.tracklist .track')).toContainText('GitLab release from sonicdcer/Starfox64Recomp');
+  await expect(detail.locator('.album-foot')).toContainText('The Windows build from the latest GitLab release');
+  await expect(detail.locator('.album-foot')).toContainText('sonicdcer/Starfox64Recomp');
   await detail.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'StarFox64-StarFox64Recompiled');

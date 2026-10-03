@@ -1143,8 +1143,10 @@ function render() {
 // A game or a port is a page of its own ('game' / 'port' views): the cover
 // at left over a wash of its colours, title, uploader, the meta line
 // (details.js), the Play/Install pill, a second pill and ⋯, the description,
-// then the versions (or what installs) as a track list and more from the same
-// uploader or shelf. Back returns to the page it was opened from.
+// then, for a title with several uploads, the versions as a track list, and
+// more from the same uploader or shelf. A title with one upload, and a port,
+// has no track list: one track is no album. Back returns to the page it was
+// opened from.
 
 const DETAIL_VIEWS = new Set(['game', 'port']);
 const onDetailPage = () => !state.query && DETAIL_VIEWS.has(state.view.name);
@@ -1333,7 +1335,7 @@ function gameDetail(d) {
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
     desc,
-  }) + versionsTable(d) + albumFoot([
+  }) + (versions.length > 1 ? versionsTable(d) : '') + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
     `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
@@ -1365,18 +1367,6 @@ function portProgress(p) {
     <div class="progress-label">${esc(PORT_STEPS[dl.step] || '')} · ${dl.percent || 0}%</div>`;
 }
 
-// What a port's install brings down, as a track list: the release binary, and only that
-function portTracks(p) {
-  const rows = p.sourceOnly
-    ? [['No download', 'The project publishes its source only', '']]
-    : [['Windows build', `${p.host} release from ${p.repository}`, p.releaseAssetFilter ? `matches ${p.releaseAssetFilter}` : 'latest release']];
-  return `<section class="section album-tracks"><div class="tracklist ports-tracks" role="list">
-    <div class="track-head"><span class="num">#</span><span>What installs</span><span>From</span><span></span></div>
-    ${rows.map(([name, from, note, cls = ''], i) => `<div class="track" role="listitem"><span class="num tn">${i + 1}</span>
-      <span class="tt"><b>${esc(name)}</b></span><span class="tc ${cls}">${esc(from)}</span><span class="tc">${esc(note)}</span></div>`).join('')}
-  </div></section>`;
-}
-
 function portDetail(d) {
   const p = d.port;
   const added = inPortLibrary(p);
@@ -1393,8 +1383,9 @@ function portDetail(d) {
     extra: `${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       ${portProgress(p)}${exePicker(d)}`,
-  }) + portTracks(p) + albumFoot([
+  }) + albumFoot([
     `<dt>Repository</dt><dd><a data-href="${esc(p.repositoryUrl)}">${esc(p.repository)}</a></dd>`,
+    p.sourceOnly ? '' : `<dt>Installs</dt><dd>The Windows build from the latest ${esc(p.host)} release</dd>`,
     `<dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>`,
     p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : '',
     p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : '',
