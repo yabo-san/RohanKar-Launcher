@@ -7,8 +7,8 @@ const fs = require('fs');
 const path = require('path');
 
 const FILE = path.join(__dirname, '..', 'catalog', 'curated-ports.json');
-const SECTIONS = ['recomp port', 'decomp port', 'work in progress', 'source only', 'engine', 'launcher'];
-const FIELDS = ['name', 'repository', 'repositorySource', 'folderName', 'releaseAssetFilter', 'appIconUrl', 'description', 'tags', 'filesToAdd', 'more'];
+const SECTIONS = ['recomp port', 'decomp port', 'work in progress', 'source only', 'engine', 'launcher', 'download page'];
+const FIELDS = ['name', 'repository', 'repositorySource', 'folderName', 'releaseAssetFilter', 'appIconUrl', 'description', 'tags', 'filesToAdd', 'more', 'pageUrl'];
 
 const catalog = JSON.parse(fs.readFileSync(FILE, 'utf8'));
 
@@ -17,12 +17,19 @@ test('the shelf is a Quiver-style catalog with apps', () => {
   assert.ok(Array.isArray(catalog.apps) && catalog.apps.length > 0);
 });
 
+// A "download page" entry lives outside GitHub and GitLab: an https pageUrl and no repository
+const isPage = (a) => Array.isArray(a.tags) && a.tags.includes('download page');
+
 test('every entry has a name, an owner/repo, a folder and known fields only', () => {
   for (const a of catalog.apps) {
     const at = a.name || JSON.stringify(a);
     assert.ok(typeof a.name === 'string' && a.name.trim(), `${at}: name`);
-    assert.match(a.repository, /^[^/\s]+(\/[^/\s]+)+$/, `${at}: repository is owner/repo`);
-    if (a.repositorySource !== 'gitlab') assert.match(a.repository, /^[^/\s]+\/[^/\s]+$/, `${at}: a GitHub repository is owner/repo`);
+    if (isPage(a)) {
+      assert.match(a.pageUrl, /^https:\/\/\S+$/, `${at}: a download page entry has an https pageUrl`);
+      assert.equal(a.repository, undefined, `${at}: a download page entry has no repository`);
+    } else assert.equal(a.pageUrl, undefined, `${at}: pageUrl is only for download page entries`);
+    if (!isPage(a)) assert.match(a.repository, /^[^/\s]+(\/[^/\s]+)+$/, `${at}: repository is owner/repo`);
+    if (!isPage(a) && a.repositorySource !== 'gitlab') assert.match(a.repository, /^[^/\s]+\/[^/\s]+$/, `${at}: a GitHub repository is owner/repo`);
     assert.ok(a.repositorySource === undefined || a.repositorySource === 'gitlab', `${at}: repositorySource is "gitlab" or left out`);
     assert.match(a.folderName, /^[A-Za-z0-9._-]+$/, `${at}: folderName`);
     for (const k of ['releaseAssetFilter', 'appIconUrl', 'description']) {
@@ -44,7 +51,7 @@ test('every entry has exactly one section tag', () => {
 });
 
 test('no repository or folder is listed twice', () => {
-  const repos = catalog.apps.map((a) => `${a.repositorySource || 'github'}:${a.repository.toLowerCase()}`);
+  const repos = catalog.apps.map((a) => (isPage(a) ? `page:${a.pageUrl}` : `${a.repositorySource || 'github'}:${a.repository.toLowerCase()}`));
   const folders = catalog.apps.map((a) => a.folderName.toLowerCase());
   assert.deepEqual(repos.filter((r, i) => repos.indexOf(r) !== i), []);
   assert.deepEqual(folders.filter((f, i) => folders.indexOf(f) !== i), []);

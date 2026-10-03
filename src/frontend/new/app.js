@@ -131,7 +131,8 @@ const CURATED_BADGE = '<span class="curated-badge" title="On the y4bo curated li
 // A port's state from its tags (core's portTraits), as small badges on cards and details
 const ROLE_LABEL = { engine: 'Engine', launcher: 'Launcher' };
 const portBadges = (p) => (p.curated ? CURATED_BADGE : '')
-  + (p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
+  + (p.downloadPage ? '<span class="state-badge source-only" title="Not on GitHub or GitLab: download it from its page">Download page</span>'
+    : p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
   + (p.workInProgress ? '<span class="state-badge wip" title="Not finished yet; installs if a release exists">Work in progress</span>' : '')
   + (p.role ? `<span class="state-badge role" title="A plain app: bring your own game data">${ROLE_LABEL[p.role]}</span>` : '');
 const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
@@ -258,6 +259,8 @@ function portFromItem(it, cat) {
     // the curated list has this repository, whichever shelf lists it
     curated:            !!it.curated,
     sourceOnly:         !!it.sourceOnly,
+    // not on GitHub or GitLab: the page to download it from by hand
+    downloadPage:       it.downloadPage || null,
     workInProgress:     !!it.workInProgress,
     role:               it.role || null,
     description:        it.description || '',
@@ -422,16 +425,19 @@ function gameCard(g) {
   </button>`;
 }
 
+// The line under a port's title: its project, else owner/repo, else the download page's site
+const portBy = (p) => p.project || p.repository || (p.downloadPage ? new URL(p.downloadPage).hostname.replace(/^www\./, '') : '');
+
 function portCard(p) {
   const added = inPortLibrary(p);
   const art = p.iconUrl
     ? `<img loading="lazy" src="${esc(p.iconUrl)}" alt=""><div class="noart fallback">${esc(p.name)}</div>`
     : `<div class="noart">${esc(p.name)}</div>`;
   return `<button class="card port-card" data-open="port" data-id="${esc(p.id)}" title="${esc(p.name)}">
-    <div class="art icon" style="background:${tint(p.repository)}">${art}
+    <div class="art icon" style="background:${tint(p.repository || p.name)}">${art}
       ${p.sourceOnly ? '' : `<span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span>`}<span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
-    <div class="sub">${esc(p.project || p.repository)}</div>
+    <div class="sub">${esc(portBy(p))}</div>
     ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.userSource ? USER_BADGE : ''}
   </button>`;
 }
@@ -1353,6 +1359,9 @@ function portActions(p) {
   if (state.library[p.id]?.install_dir) {
     return pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"');
   }
+  if (p.downloadPage) {
+    return `<span class="source-only-note">Not on GitHub, install it by hand</span>` + pill('Open download page', `data-href="${esc(p.downloadPage)}"`, { primary: true });
+  }
   if (p.sourceOnly) {
     return `<span class="source-only-note">Source only, no download</span>` + pill('Open repository', `data-href="${esc(p.repositoryUrl)}"`, { primary: true });
   }
@@ -1367,7 +1376,9 @@ function portProgress(p) {
 
 // What a port's install brings down, as a track list: the release binary, and only that
 function portTracks(p) {
-  const rows = p.sourceOnly
+  const rows = p.downloadPage
+    ? [['No download', `Download it from ${portBy(p)}`, '']]
+    : p.sourceOnly
     ? [['No download', 'The project publishes its source only', '']]
     : [['Windows build', `${p.host} release from ${p.repository}`, p.releaseAssetFilter ? `matches ${p.releaseAssetFilter}` : 'latest release']];
   return `<section class="section album-tracks"><div class="tracklist ports-tracks" role="list">
@@ -1385,17 +1396,18 @@ function portDetail(d) {
   return albumHead({
     kind: `Port · Source: ${p.sourceLabel}`,
     title: p.name,
-    cover: `<div class="album-cover square" style="background:${tint(p.repository)}">${icon}</div>`,
-    wash: `background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}`,
-    sub: `<button class="album-sub by" data-href="${esc(p.repositoryUrl)}">${esc(p.project || p.repository)}</button>`,
+    cover: `<div class="album-cover square" style="background:${tint(p.repository || p.name)}">${icon}</div>`,
+    wash: `background:${tint(p.repository || p.name)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}`,
+    sub: `<button class="album-sub by" data-href="${esc(p.repositoryUrl)}">${esc(portBy(p))}</button>`,
     meta: portMeta(p),
     actions: portActions(p) + (p.sourceOnly && !added ? '' : pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`)) + moreBtn('data-detail-menu'),
     extra: `${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       ${portProgress(p)}${exePicker(d)}`,
   }) + portTracks(p) + albumFoot([
-    `<dt>Repository</dt><dd><a data-href="${esc(p.repositoryUrl)}">${esc(p.repository)}</a></dd>`,
-    `<dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>`,
+    p.downloadPage ? `<dt>Download page</dt><dd><a data-href="${esc(p.downloadPage)}">${esc(p.downloadPage)}</a></dd>`
+      : `<dt>Repository</dt><dd><a data-href="${esc(p.repositoryUrl)}">${esc(p.repository)}</a></dd>`,
+    p.downloadPage ? '' : `<dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>`,
     p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : '',
     p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : '',
     p.tags.length ? `<dt>Tags</dt><dd>${esc(p.tags.join(', '))}</dd>` : '',
@@ -1701,7 +1713,7 @@ const ROW_ACTIONS = [
     when: (g) => state.sources.some(s => s.uploader === g._uploader && s.enabled !== false), run: (g) => go('uploader', g._uploader) },
   { id: 'shelf', label: 'Go to Shelf', icon: 'wall', group: 'goto', kinds: ['port'],
     when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
-  { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
+  { id: 'repo', label: (p) => (p.downloadPage ? 'Go to Download Page' : 'Go to Source Repo'), icon: 'code', group: 'goto', kinds: ['port'],
     run: (p) => api.openExternal(p.repositoryUrl) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
     when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },

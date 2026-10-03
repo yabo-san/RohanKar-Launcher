@@ -268,7 +268,8 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return shelves().flatMap(sub => shown(sub.id).map(e => ({
       // not reviewed by us: a "Your ports" entry
       userSource:  !!sub.local,
-      curated:     curated.has(repoKey(e.repository)),
+      // (a download page entry has no repository: curated when the curated shelf lists it)
+      curated:     curated.has(repoKey(e.repository)) || (!e.repository && sub.id === CURATED_ID),
       id:          `quiver:${sub.id}:${entryKey(e)}`,
       title:       e.name || e.repository,
       source:      { type: 'quiver', catalog: sub.id, name: sub.name, url: sub.url },
