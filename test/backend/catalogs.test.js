@@ -63,7 +63,7 @@ test('curated: the only shelf, from the bundled copy until a fetch lands, then c
   let fetches = 0;
   fake.routes['/curated.json'] = (req, res) => { fetches++; res.writeHead(200); res.end(JSON.stringify(catalog)); };
   await catalogs.warm();
-  assert.equal(fetches, 0, 'warm only fetches a shelf never fetched');
+  assert.equal(fetches, 0, 'warm fetches once per launch');
 
   catalog.apps[0].tags = ['n64', 'recomp'];
   catalog.apps.pop();
@@ -80,6 +80,31 @@ test('curated: the only shelf, from the bundled copy until a fetch lands, then c
   assert.equal(await catalogs.refresh('nope'), null);
   assert.equal(catalogs.review('nope'), null);
   assert.equal(catalogs.markSeen('nope'), false);
+});
+
+test('curated: a new launch fetches again, so entries added on main replace a stale cache', async (t) => {
+  const { catalogs, fake, catalog, dir, settings, library } = await setup(t);
+  await catalogs.warm();
+  assert.deepEqual(catalogs.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian']);
+
+  // main gains an entry after the cache was written; the next start picks it up
+  catalog.apps.push({ name: 'snesrev launcher', repository: 'yabo-san/snesrev-launcher', tags: ['launcher'] });
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); };
+  const relaunch = () => createCatalogs({
+    dir: path.join(dir, 'catalogs'), settings, curatedUrl: `${fake.base}/curated.json`,
+    curatedFile: path.join(dir, 'bundled-curated.json'), libraryIds: () => library,
+  });
+  const next = relaunch();
+  assert.equal(next.items().length, 2, 'the cached copy until the fetch lands');
+  await Promise.all([next.warm(), next.warm()]);
+  assert.deepEqual(next.items().map(i => i.title), ['Banjo Recomp', 'Ship of Harkinian', 'snesrev launcher']);
+  assert.deepEqual(next.review('curated').new.map(e => e.name), ['snesrev launcher'], 'shows as new on Home');
+
+  // offline at the next start: the cached copy stays
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(503); res.end(); };
+  const offline = relaunch();
+  await offline.warm();
+  assert.deepEqual([offline.items().length, offline.list()[0].error], [3, 'HTTP 503']);
 });
 
 test('curated: offline on a first run, the bundled copy stands and is cached with the error', async (t) => {

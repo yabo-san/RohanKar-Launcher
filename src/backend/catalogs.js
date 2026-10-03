@@ -2,8 +2,8 @@
 /**
  * The port shelves, in Quiver's catalog format ({ apps: [...] } or a bare
  * array):
- *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched on
- *     demand, cached under catalogs/, and diffed against the copy the user
+ *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched at
+ *     each launch and on demand, cached under catalogs/, and diffed against the copy the user
  *     last reviewed. The copy bundled with the app (curatedFile) stands in
  *     until a fetch succeeds. Entries marked "more": true show only while
  *     Settings > More ports is on, or once the library holds them.
@@ -229,9 +229,14 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return describe(sub);
   }
 
-  // Fetches the curated shelf if it has never been fetched (a first run)
-  async function warm() {
-    if (CURATED && !fs.existsSync(file(CURATED_ID, 'cache'))) await refresh(CURATED_ID);
+  // Fetches the curated shelf once per launch, so an edit to the list on main
+  // reaches installed copies at their next start. A failed fetch keeps the
+  // cached copy (or the bundled one on a first run) until the next launch.
+  let warming = null;
+  function warm() {
+    if (!CURATED) return Promise.resolve();
+    if (!warming) warming = refresh(CURATED_ID).then(() => {}, (e) => log(`[catalogs] curated ports fetch failed (${e.message})`));
+    return warming;
   }
 
   // The curated shelf falls back to the bundled copy until a fetch has succeeded
