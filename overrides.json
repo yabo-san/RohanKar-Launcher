@@ -564,5 +564,14 @@
   },
   "harry-potter-1-2_202607": {
     "series": "Harry Potter"
+  },
+  "banjo-kazooie-recompiled.-7z": {
+    "port": "BanjoRecomp/BanjoRecomp"
+  },
+  "bomberman-64_recompiled": {
+    "port": "RevoSucks/BM64Recomp"
+  },
+  "sonic-unleashed-recompiled_202603": {
+    "port": "hedge-dev/UnleashedRecomp"
   }
 }

@@ -204,6 +204,7 @@ button.track:hover { background: var(--hover); }
 .tc.warn { color: var(--warn); }
 .tflags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .tflags .tag { position: static; }
+.tflags .tag.port { background: rgb(255 255 255 / 16%); color: #fff; }
 .tflags .user-badge { margin: 0; }
 .track-sum { margin: 14px 12px 0; font-size: 12px; color: var(--text2); }
 .album-foot { margin: 22px 12px 0; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }

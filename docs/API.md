@@ -64,6 +64,7 @@ item. Library state is joined in on every read.
   "subject": ["pc", "tycoon"],
   "override": null,
   "series": null,
+  "port": null,
   "versions": [
     { "id": "rk-e2e-zoo-tycoon", "title": "Zoo Tycoon (Complete Collection)", "source": { "…": "…" }, "addeddate": "…" },
     { "id": "rk-e2e-zoo-tycoon-pstriple", "title": "Zoo Tycoon [v1.0]", "source": { "label": "pstriple", "…": "…" } }
@@ -79,6 +80,8 @@ item. Library state is joined in on every read.
   An upload whose entry has `"hidden": true` is left out of every list unless it's installed.
 - `series` is the `"series"` name from any of the item's versions' `overrides.json` entries, else
   null. The new UI's wall folds every item of a series into one card that opens its games as tracks.
+- `port` is the `"port"` repository (`owner/repo`) from the versions' `overrides.json` entries, else
+  null: the shelf port that is the same game. The game's album lists it as a track beside the uploads.
 - `library` is the library row of the installed version if any, else of the first version.
 
 A catalog item has `id` `quiver:<catalog id>:<repository>`, `source`

@@ -4,5 +4,8 @@
   },
   "rk-e2e-age-of-empires-2": {
     "series": "Fixture Classics"
+  },
+  "rk-e2e-rollercoaster-tycoon": {
+    "port": "BanjoRecomp/BanjoRecomp"
   }
 }

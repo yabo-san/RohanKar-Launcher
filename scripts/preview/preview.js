@@ -88,8 +88,8 @@
   const overridesFeed = () => feed('overrides.json').then(o => (o && typeof o === 'object' && !Array.isArray(o) ? o : null));
 
   // A wall list with today's overrides in place of the ones saved at build.
-  // Hidden uploads drop out unless installed, and series come from the
-  // overrides, as src/backend/items.js does.
+  // Hidden uploads drop out unless installed, and series and ports come from
+  // the overrides, as src/backend/items.js does.
   function withOverrides(body, ov, lib = {}) {
     const patch = (v) => ({ ...v, override: ov[v.id] || null });
     const shown = (v) => !ov[v.id]?.hidden || lib[v.id]?.install_dir;
@@ -99,8 +99,9 @@
       const versions = (it.versions || []).filter(shown).map(patch);
       if (!versions.length) continue;
       const series = versions.map(v => v.override?.series).find(x => typeof x === 'string' && x.trim())?.trim() || null;
-      if (versions[0].id === it.id) items.push({ ...patch(it), versions, series });
-      else items.push({ ...it, ...versions[0], shelf: it.shelf, versions, installed: it.installed, library: it.library, series });
+      const port = versions.map(v => v.override?.port).find(x => typeof x === 'string' && x.includes('/'))?.trim() || null;
+      if (versions[0].id === it.id) items.push({ ...patch(it), versions, series, port });
+      else items.push({ ...it, ...versions[0], shelf: it.shelf, versions, installed: it.installed, library: it.library, series, port });
     }
     return { ...body, items };
   }

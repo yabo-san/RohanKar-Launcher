@@ -221,7 +221,7 @@ async function loadWall({ refresh = false } = {}) {
     const { items, errors } = await api.getItems(refresh ? { shelf: 'wall', refresh: 'true' } : { shelf: 'wall' });
     state.games = items.map(item => {
       const versions = item.versions.map(versionFromItem);
-      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource, _series: item.series || null });
+      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource, _series: item.series || null, _port: item.port || null });
       state.versions.push(...versions);
       return versions[0];
     });
@@ -407,6 +407,7 @@ function gameCard(g) {
   if (g._seriesCard) return seriesCardHtml(g);
   const title = getTitle(g);
   const n = g._versions?.length || 1;
+  const port = linkedPorts(g, state.ports?.items).length > 0;
   const installed = isInstalled(g);
   const dl = state.downloads.get(g.identifier);
   const update = installed && outdated(g);
@@ -414,7 +415,7 @@ function gameCard(g) {
     <div class="art" data-thumb="${esc(g.identifier)}" style="background:${tint(title)}">
       <div class="noart"><small>${esc(g._sourceLabel)}</small>${esc(title)}</div>
       ${update ? '<span class="tag installed update">NEWER RELEASE</span>' : installed ? '<span class="tag installed">INSTALLED</span>' : dl ? `<span class="tag installed">${dl.percent || 0}%</span>` : ''}
-      ${n > 1 ? `<span class="tag versions">${n} VERSIONS</span>` : ''}
+      ${port ? `<span class="tag versions">${n > 1 ? `${n} VERSIONS` : 'UPLOAD'} + PORT</span>` : n > 1 ? `<span class="tag versions">${n} VERSIONS</span>` : ''}
       <span class="play-btn${installed ? '' : ' get'}" aria-hidden="true"></span>
     </div>
     <div class="title">${esc(title)}</div>
@@ -1323,6 +1324,7 @@ function manualDetail(d) {
 // The versions of a title as a track list
 function versionsTable(d) {
   const rows = versionRows(d.game._versions || [d.game], { selected: d.version.identifier, library: state.library });
+  const ports = linkedPorts(d.game, state.ports?.items);
   return `<section class="section album-tracks"><div class="tracklist" role="list">
     <div class="track-head"><span class="num">#</span><span>Version</span><span>Added</span><span class="num">Downloads</span><span></span></div>
     ${rows.map(r => `<button class="track ${r.on ? 'on' : ''}" data-version="${esc(r.identifier)}" role="listitem">
@@ -1332,7 +1334,14 @@ function versionsTable(d) {
       <span class="tc num">${fmtNum(r.downloads)}</span>
       <span class="tflags">${r.user ? USER_BADGE : ''}${r.installed ? '<span class="tag installed">INSTALLED</span>' : ''}${r.newer ? '<span class="tag installed update">NEWER</span>' : ''}</span>
     </button>`).join('')}
-  </div><div class="track-sum">${rows.length === 1 ? '1 version' : `${rows.length} versions`}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
+    ${ports.map((p, i) => `<button class="track port-track" data-open="port" data-id="${esc(p.id)}" role="listitem">
+      <span class="num tn">${rows.length + i + 1}</span>
+      <span class="tt"><b>${esc(p.name)}</b><small>${esc(p.repository)} · the Windows build from the latest ${esc(p.host)} release</small></span>
+      <span class="tc">${esc(p.host)}</span>
+      <span class="tc num"></span>
+      <span class="tflags"><span class="tag port">PORT</span>${state.library[p.id]?.install_dir ? '<span class="tag installed">INSTALLED</span>' : ''}</span>
+    </button>`).join('')}
+  </div><div class="track-sum">${[rows.length === 1 ? '1 upload' : `${rows.length} uploads`, ports.length ? (ports.length === 1 ? '1 port' : `${ports.length} ports`) : ''].filter(Boolean).join(' · ')}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
 }
 
 function gameDetail(d) {
@@ -1357,7 +1366,7 @@ function gameDetail(d) {
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   const more = moreFrom(state.games, v._uploader, { except: g });
   return albumHead({
-    kind: versions.length > 1 ? `Game · ${versions.length} versions` : 'Game',
+    kind: ['Game', versions.length > 1 ? `${versions.length} versions` : '', linkedPorts(g, state.ports?.items).length ? 'and a port' : ''].filter(Boolean).join(' · '),
     title,
     cover: `<div class="album-cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>`,
     wash: `background:${tint(title)}`,
@@ -1374,7 +1383,7 @@ function gameDetail(d) {
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
     desc,
-  }) + (versions.length > 1 ? versionsTable(d) : '') + albumFoot([
+  }) + (versions.length > 1 || linkedPorts(g, state.ports?.items).length ? versionsTable(d) : '') + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
     `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
@@ -1444,7 +1453,8 @@ function portDetail(d) {
     sub: `<button class="album-sub by" data-href="${esc(p.repositoryUrl)}">${esc(p.project || p.repository)}</button>`,
     meta: portMeta(p),
     actions: portActions(p) + (p.sourceOnly && !added ? '' : pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`)) + moreBtn('data-detail-menu'),
-    extra: `${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
+    extra: `${gamesForPort(p, state.games).map(g => `<button class="album-series" data-open="game" data-id="${esc(g.identifier)}">Also on archive.org: ${esc(getTitle(g))}</button>`).join('')}
+      ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       ${portProgress(p)}${exePicker(d)}`,
   }) + albumFoot([

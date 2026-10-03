@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory,
-  collapseSeries, seriesRows, seriesMeta,
+  collapseSeries, seriesRows, seriesMeta, linkedPorts, gamesForPort,
 } = require('../src/frontend/details.js');
 
 test('platformOf: the first subject naming a platform', () => {
@@ -132,4 +132,16 @@ test('seriesMeta: years, games, downloads', () => {
   assert.deepEqual(seriesMeta([{ year: '2007', downloads: 1000 }, { year: '2017', downloads: 234 }]), ['2007–2017', '2 games', '1,234 downloads']);
   assert.deepEqual(seriesMeta([{ year: '2007', downloads: 0 }, { year: '2007', downloads: 0 }]), ['2007', '2 games']);
   assert.deepEqual(seriesMeta([{ year: '', downloads: 1 }]), ['1 game', '1 download']);
+});
+
+test('linkedPorts and gamesForPort: an upload and the shelf port that is the same game, by repository', () => {
+  const ports = [{ id: 'p1', repository: 'BanjoRecomp/BanjoRecomp' }, { id: 'p2', repository: 'Other/Repo' }];
+  const banjo = { identifier: 'banjo-7z', _port: 'banjorecomp/banjorecomp' };
+  const games = [banjo, { identifier: 'halo' }];
+  assert.deepEqual(linkedPorts(banjo, ports).map(p => p.id), ['p1']);
+  assert.deepEqual(linkedPorts({ identifier: 'halo' }, ports), []);
+  assert.deepEqual(linkedPorts(banjo, null), []);
+  assert.deepEqual(gamesForPort(ports[0], games), [banjo]);
+  assert.deepEqual(gamesForPort(ports[1], games), []);
+  assert.deepEqual(gamesForPort({}, games), []);
 });

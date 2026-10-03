@@ -16,7 +16,8 @@
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - /overrides.json is fixtures/overrides.json: Spider-Man and Age of Empires II
- *     in one series, so the wall shows a series card
+ *     in one series, so the wall shows a series card, and RollerCoaster Tycoon
+ *     linked to the Banjo port, so its album lists a port
  *   - anything else (covers, uploaders.json) is a 404, so the bundled copies are used
  * Shared by archive-stub.js (inside Electron) and fixture-server.js (over HTTP).
  */

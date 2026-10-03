@@ -11,7 +11,9 @@
  *
  * An upload whose overrides.json entry has hidden: true is left out of every
  * list (wall, shelves, search) unless it's installed. One with "series": "<name>"
- * gives its item that series, which the new UI's wall folds into one card.
+ * gives its item that series, which the new UI's wall folds into one card; one
+ * with "port": "<owner/repo>" links the shelf port that is the same game, and
+ * the game's album lists it beside the uploads.
  */
 const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
 const { platformOf } = require('./playnite');
@@ -140,6 +142,8 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
       override:  docs[0]._override || null,
       // overrides.json "series": the wall folds a series into one card
       series:    docs.map(d => d._override?.series).find(x => typeof x === 'string' && x.trim())?.trim() || null,
+      // overrides.json "port": the shelf port ("owner/repo") that is this same game
+      port:      docs.map(d => d._override?.port).find(x => typeof x === 'string' && x.includes('/'))?.trim() || null,
       // every version from an additional source: the card says so
       userSource: versions.every(v => v.user),
       versions,

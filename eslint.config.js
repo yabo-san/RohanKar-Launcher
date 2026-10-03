@@ -48,7 +48,7 @@ module.exports = [
         // ../details.js
         installBytes: 'readonly', gameMeta: 'readonly', portMeta: 'readonly', versionRows: 'readonly',
         moreFrom: 'readonly', morePorts: 'readonly', createHistory: 'readonly',
-        collapseSeries: 'readonly', seriesRows: 'readonly', seriesMeta: 'readonly',
+        collapseSeries: 'readonly', seriesRows: 'readonly', seriesMeta: 'readonly', linkedPorts: 'readonly', gamesForPort: 'readonly',
       },
     },
   },

@@ -154,6 +154,21 @@ function seriesCard(name, games) {
   };
 }
 
+// The shelf ports that are this game (overrides.json "port": "owner/repo"),
+// matched on the repository, case-insensitively
+function linkedPorts(game, ports) {
+  const repo = String(game?._port || '').toLowerCase();
+  if (!repo) return [];
+  return (ports || []).filter(p => String(p.repository || '').toLowerCase() === repo);
+}
+
+// The wall games a port is (the reverse of linkedPorts)
+function gamesForPort(port, games) {
+  const repo = String(port?.repository || '').toLowerCase();
+  if (!repo) return [];
+  return (games || []).filter(g => String(g._port || '').toLowerCase() === repo);
+}
+
 // A series' games as tracks: oldest first (by the game's own year, then
 // title), numbered. `titleOf` names a game; `library` is keyed by identifier.
 function seriesRows(games, { titleOf = (g) => g.title, library = {} } = {}) {
@@ -209,6 +224,6 @@ function createHistory() {
 if (typeof module !== 'undefined') {
   module.exports = {
     platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory,
-    seriesCardId, collapseSeries, seriesRows, seriesMeta,
+    seriesCardId, collapseSeries, seriesRows, seriesMeta, linkedPorts, gamesForPort,
   };
 }

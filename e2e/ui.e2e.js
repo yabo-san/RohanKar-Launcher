@@ -322,6 +322,25 @@ test('A series is one card on the wall; it opens an album of its games, each ope
   await page.locator('#lib-search').fill('');
 });
 
+test('An upload linked to a shelf port: one album with both, and the port leads back', async () => {
+  await page.locator('[data-view="wall"]').click();
+  const card = page.locator('#body .game-card', { hasText: 'RollerCoaster Tycoon' });
+  await expect(card.locator('.tag.versions')).toHaveText('UPLOAD + PORT');
+  await card.click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.album-kind')).toHaveText('Game · and a port');
+  await expect(detail.locator('.tracklist .track')).toHaveCount(2);
+  const port = detail.locator('.port-track');
+  await expect(port).toContainText('BanjoRecomp/BanjoRecomp');
+  await expect(port.locator('.tag.port')).toHaveText('PORT');
+  await expect(detail.locator('.track-sum')).toContainText('1 upload · 1 port');
+  await port.click();
+  await expect(detail.locator('.album-title')).toHaveText('Banjo-Kazooie');
+  await detail.locator('.album-series', { hasText: 'Also on archive.org: RollerCoaster Tycoon' }).click();
+  await expect(detail.locator('.album-title')).toHaveText('RollerCoaster Tycoon');
+  await page.keyboard.press('Escape');
+});
+
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
