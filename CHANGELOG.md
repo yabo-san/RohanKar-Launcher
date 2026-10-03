@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.0-fork.18](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.17...v1.6.0-fork.18) (2026-10-03)
+
+
+### Features
+
+* **catalog:** add the snesrev launcher fork to the port shelf ([3ce0de1](https://github.com/yabo-san/RohanKar-Launcher/commit/3ce0de1dd44df5121178500cb7e738c83981d3f4))
+* **catalog:** add the snesrev launcher fork to the port shelf ([6e75f48](https://github.com/yabo-san/RohanKar-Launcher/commit/6e75f480fb6d52b094a282802548ddd36e3a24f2))
+* **overrides:** hide hailstormttv's last 3 uploads with a "hidden" flag ([269e2b6](https://github.com/yabo-san/RohanKar-Launcher/commit/269e2b6780992ebeb67b7203d1a50833a0c21267))
+* **overrides:** hide uploads with "hidden": true; hide pstriple's three Pokémon uploads ([440fe43](https://github.com/yabo-san/RohanKar-Launcher/commit/440fe43882473b56f37880be0938a427f8ce2410))
+
 ## [1.6.0-fork.17](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.16...v1.6.0-fork.17) (2026-10-02)
 
 
