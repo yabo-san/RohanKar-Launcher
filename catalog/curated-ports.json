@@ -504,22 +504,6 @@
       "repository": "coop-deluxe/sm64coopdx"
     },
     {
-      "name": "Super Mario World",
-      "folderName": "SuperMarioWorld-SnesrevSmw",
-      "appIconUrl": "https://raw.githubusercontent.com/snesrev/smw/refs/heads/main/src/platform/switch/icon.jpg",
-      "tags": [
-        "decomp",
-        "snes",
-        "mario",
-        "nintendo",
-        "super nintendo entertainment system",
-        "decompilation",
-        "decomp port"
-      ],
-      "releaseAssetFilter": "smw_",
-      "repository": "snesrev/smw"
-    },
-    {
       "name": "The Legend of Zelda: Majora's Mask and Ocarina of Time",
       "folderName": "TheLegendOfZeldaMajorasMaskAndOcarinaOfTime-Zelda64Recompiled",
       "appIconUrl": "https://raw.githubusercontent.com/Zelda64Recomp/Zelda64Recomp/refs/heads/dev/icons/512.png",
@@ -538,13 +522,100 @@
       "repository": "Zelda64Recomp/Zelda64Recomp"
     },
     {
-      "name": "Zelda3",
-      "repository": "snesrev/zelda3",
-      "folderName": "Zelda3",
+      "name": "TheXTech (SMBX engine)",
+      "repository": "TheXTech/TheXTech",
+      "folderName": "TheXTech",
+      "releaseAssetFilter": "plain-runtime",
       "tags": [
-        "decomp port"
+        "engine",
+        "mario",
+        "smbx"
       ],
-      "releaseAssetFilter": "zelda3_"
+      "description": "The Super Mario Bros. X engine, ported to C++ and SDL2. Runtime only: bring your SMBX game assets (the release also ships ready bundles)."
+    },
+    {
+      "name": "Viva Pinata: Trouble in Paradise (TIP-Recomp)",
+      "repository": "solarcookies/TIP-Recomp",
+      "folderName": "VivaPinata-TIP-Recomp",
+      "releaseAssetFilter": "_windows.zip",
+      "tags": [
+        "recomp",
+        "x360",
+        "xbox 360",
+        "recompilation",
+        "recomp port"
+      ]
+    },
+    {
+      "name": "Dragon Ball Z: Budokai HD (DBZ1)",
+      "repository": "wistfulhopes/DBZ1",
+      "folderName": "DBZ1-Recomp",
+      "releaseAssetFilter": "dbz1.exe",
+      "tags": [
+        "recomp",
+        "x360",
+        "xbox 360",
+        "recompilation",
+        "recomp port"
+      ]
+    },
+    {
+      "name": "rexglue SDK (Xbox 360 recompilation runtime)",
+      "repository": "rexglue/rexglue-sdk",
+      "folderName": "rexglue-sdk",
+      "tags": [
+        "work in progress",
+        "x360",
+        "xbox 360",
+        "rexglue"
+      ],
+      "more": true,
+      "description": "Nightly prereleases only; the launcher installs stable releases, so this stays under More ports until the project tags one."
+    },
+    {
+      "name": "Touhou 6 (th06 decompilation)",
+      "repository": "GensokyoClub/th06",
+      "folderName": "th06",
+      "tags": [
+        "source only"
+      ],
+      "more": true
+    },
+    {
+      "name": "Spider-Man: Edge of Time (recomp)",
+      "repository": "goliathret/EdgeOfTimeRecomp",
+      "folderName": "EdgeOfTimeRecomp",
+      "tags": [
+        "source only"
+      ],
+      "more": true
+    },
+    {
+      "name": "LARecomp",
+      "repository": "mzzvxm/LARecomp",
+      "folderName": "LARecomp",
+      "tags": [
+        "source only"
+      ],
+      "more": true
+    },
+    {
+      "name": "Paper Mario (decompilation)",
+      "repository": "pmret/papermario",
+      "folderName": "PaperMario-decomp",
+      "tags": [
+        "source only"
+      ],
+      "more": true
+    },
+    {
+      "name": "The Wind Waker (decompilation)",
+      "repository": "zeldaret/tww",
+      "folderName": "WindWaker-decomp",
+      "tags": [
+        "source only"
+      ],
+      "more": true
     }
   ]
 }
