@@ -86,7 +86,8 @@
     "title": "Battlefield: Bad Company"
   },
   "gen-1-recomp-guide-dramatic-shape-mod": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/accaf235b0edc5850498425a0c0fb36f.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/accaf235b0edc5850498425a0c0fb36f.png",
+    "hidden": true
   },
   "heavenly-sword-rpcs-3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/544e022ea5e99bc80269d7640419bf9f.png",
@@ -141,7 +142,8 @@
   },
   "pokemon-red-version-usa-europe_202608": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/963c0fb9a6ba92ee1ab254c5b8f8926c.png",
-    "title": "Pokémon Red Version"
+    "title": "Pokémon Red Version",
+    "hidden": true
   },
   "uncharted-2-rpcs-3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/7f8d79e1bfaa36d8cd59830d559c5df3.png",
@@ -188,6 +190,7 @@
   },
   "Pokestadia": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png",
-    "title": "Pokémon Stadium"
+    "title": "Pokémon Stadium",
+    "hidden": true
   }
 }

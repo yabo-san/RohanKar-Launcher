@@ -1,7 +1,8 @@
 'use strict';
 /**
  * y4bo — overrides.js
- * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero? }.
+ * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero?, hidden? }.
+ * hidden: true leaves the upload out of the launcher unless it's installed (items.js).
  * The copy on main is fetched at launch; the one bundled with the app is the fallback.
  */
 const path = require('path');
