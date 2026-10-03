@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0-fork.19](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.18...v1.6.0-fork.19) (2026-10-03)
+
+
+### Bug Fixes
+
+* **overrides:** show "Underrated Gem by Square Enix" as The Last Remnant ([5c32fee](https://github.com/yabo-san/RohanKar-Launcher/commit/5c32feec09812117fcd91ac4a0a1982bb3d385bb))
+* **overrides:** show square_enix_2025 as The Last Remnant ([455ddfc](https://github.com/yabo-san/RohanKar-Launcher/commit/455ddfc00e6c6aa28481d69f7a7fcbabf8fbdaad))
+* **ports:** fetch the curated shelf at every launch ([5c74ebf](https://github.com/yabo-san/RohanKar-Launcher/commit/5c74ebf8757e197f4953f6a13b3b2d1deb63d083))
+* **ports:** fetch the curated shelf at every launch ([3ca6b93](https://github.com/yabo-san/RohanKar-Launcher/commit/3ca6b93689728a7898187179304aa23d6dde353a))
+* **ui:** sidebar search box takes clicks on Windows ([1e28e70](https://github.com/yabo-san/RohanKar-Launcher/commit/1e28e70bc3f29074d153d823c1ab18211475e801))
+* **ui:** sidebar search box takes clicks on Windows ([d198779](https://github.com/yabo-san/RohanKar-Launcher/commit/d1987797c3ccd170a1774351ce02fb1de400b572))
+
 ## [1.6.0-fork.18](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.17...v1.6.0-fork.18) (2026-10-03)
 
 
