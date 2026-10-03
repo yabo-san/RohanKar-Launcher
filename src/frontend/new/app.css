@@ -24,10 +24,11 @@ button { font: inherit; color: inherit; }
 .sidebar {
   width: 236px; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 8px 10px 12px;
   background: var(--sidebar); backdrop-filter: var(--glass); -webkit-backdrop-filter: var(--glass);
-  border-right: 1px solid var(--border); overflow-y: auto; -webkit-app-region: drag;
+  border-right: 1px solid var(--border); overflow-y: auto;
 }
-.sidebar > * { -webkit-app-region: no-drag; }
-.brand { font-weight: 800; font-size: 18px; letter-spacing: -.6px; padding: 12px 10px 2px; -webkit-app-region: drag; }
+/* No window drag in the sidebar: on Windows a drag region on this scrolling
+   column swallowed clicks on the search box at its top. The title row drags. */
+.brand { font-weight: 800; font-size: 18px; letter-spacing: -.6px; padding: 12px 10px 2px; }
 .brand span { color: var(--key); }
 .navgroup { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; color: var(--text2); text-transform: uppercase; padding: 16px 10px 6px; }
 .navitem {

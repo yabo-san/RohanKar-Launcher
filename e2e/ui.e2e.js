@@ -531,6 +531,15 @@ test('Sidebar groups fold and stay folded', async () => {
 });
 
 /* global document, getComputedStyle, MutationObserver -- page.evaluate callbacks run in the page */
+test('The sidebar is no window drag region, so its search box takes clicks on Windows', async () => {
+  const dragging = await page.evaluate(() => [...document.querySelectorAll('#sidebar, #sidebar *')]
+    .filter(el => getComputedStyle(el).getPropertyValue('-webkit-app-region') === 'drag')
+    .map(el => el.id || el.className));
+  expect(dragging).toEqual([]);
+  // the title row still moves the window
+  await expect(page.locator('.chrome')).toHaveCSS('-webkit-app-region', 'drag');
+});
+
 test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
   await page.locator('[data-view="home"]').click();
   const card = page.locator('#body .row .game-card').first();
