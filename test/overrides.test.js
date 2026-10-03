@@ -84,5 +84,6 @@ test('the bundled overrides.json parses', () => {
     for (const field of ['artUrl', 'hero']) {
       if (entry[field] != null) assert.ok(artSource(entry[field]), `${field} ${entry[field]} is usable`);
     }
+    if ('hidden' in entry) assert.equal(entry.hidden, true, 'hidden is only ever true');
   }
 });

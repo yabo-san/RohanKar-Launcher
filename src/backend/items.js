@@ -8,6 +8,9 @@
  * Curated uploaders (catalog/uploaders.json) always load. Any other uploader,
  * and user.json's "archive" entries, load only while additional sources are
  * allowed; their versions carry user: true (user-sources.js).
+ *
+ * An upload whose overrides.json entry has hidden: true is left out of every
+ * list (wall, shelves, search) unless it's installed.
  */
 const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
 const { platformOf } = require('./playnite');
@@ -152,8 +155,13 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
   async function list(filters = {}) {
     const { groups, errors } = await load({ refresh: truthy(filters.refresh) });
     const lib = library.all();
+    // An upload overrides.json marks hidden is left out unless it's installed,
+    // so an installed copy keeps its card; a group with none left goes away
+    const shown = groups
+      .map(g => g.filter(d => !d._override?.hidden || lib[d.identifier]?.install_dir))
+      .filter(g => g.length);
     let items = [
-      ...groups.map(g => archiveItem(g, lib)),
+      ...shown.map(g => archiveItem(g, lib)),
       ...catalogs.items().map(it => catalogItem(it, lib)),
     ];
     if (filters.source) {

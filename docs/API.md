@@ -75,6 +75,7 @@ item. Library state is joined in on every read.
 - `shelf` is `wall` for archive.org items and the shelf name (Curated, Your ports)
   for catalog items.
 - `override` is the item's `overrides.json` entry; its `title` already replaced `title`.
+  An upload whose entry has `"hidden": true` is left out of every list unless it's installed.
 - `library` is the library row of the installed version if any, else of the first version.
 
 A catalog item has `id` `quiver:<catalog id>:<repository>`, `source`

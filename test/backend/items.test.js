@@ -33,6 +33,37 @@ test('items: shipped sources grouped by title, overrides applied, library joined
   assert.equal(backend.items.loadedVersions().length, 7);
 });
 
+test('items: hidden uploads are left out unless installed', async (t) => {
+  const { backend, fake } = await testBackend(t);
+  fake.routes['/overrides.json'] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      'rk-e2e-halo-ce': { hidden: true },
+      'rk-e2e-zoo-tycoon': { hidden: true },
+      'rk-e2e-zoo-tycoon-pstriple': { hidden: true },
+      'rk-e2e-the-sims': { hidden: true },
+    }));
+  };
+  // Installed: keeps its card, and only the installed version of its group
+  backend.library.recordInstall('rk-e2e-zoo-tycoon-pstriple', '/g/zoo', null);
+  backend.library.setFavorite('rk-e2e-the-sims', true);
+
+  const ids = async (f) => (await backend.items.list(f)).items.map(i => i.id).sort();
+  const all = await ids();
+  assert.equal(all.length, 4);
+  assert.ok(!all.includes('rk-e2e-halo-ce'));
+  // In the library but not installed is still hidden
+  assert.ok(!all.includes('rk-e2e-the-sims'));
+  assert.deepEqual(await ids({ search: 'halo' }), []);
+  const zoo = (await backend.items.list()).items.find(i => i.id === 'rk-e2e-zoo-tycoon-pstriple');
+  assert.deepEqual(zoo.versions.map(v => v.id), ['rk-e2e-zoo-tycoon-pstriple']);
+  assert.equal(zoo.installed, true);
+  assert.equal((await backend.items.get('rk-e2e-zoo-tycoon-pstriple')).installed, true);
+  assert.equal(await backend.items.get('rk-e2e-halo-ce'), null);
+  // The installed-folder scan still knows every upload
+  assert.equal(backend.items.loadedVersions().length, 7);
+});
+
 test('items: filters by source, shelf, search, installed, inLibrary', async (t) => {
   const { backend } = await testBackend(t);
   backend.library.recordInstall('rk-e2e-halo-ce', '/g/halo', null);
