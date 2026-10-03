@@ -221,7 +221,7 @@ async function loadWall({ refresh = false } = {}) {
     const { items, errors } = await api.getItems(refresh ? { shelf: 'wall', refresh: 'true' } : { shelf: 'wall' });
     state.games = items.map(item => {
       const versions = item.versions.map(versionFromItem);
-      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource });
+      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource, _series: item.series || null });
       state.versions.push(...versions);
       return versions[0];
     });
@@ -404,6 +404,7 @@ function show(name, arg, { query = '', scroll = 0 } = {}) {
 const outdated = (g) => ListView.outdated(g, { library: state.library });
 
 function gameCard(g) {
+  if (g._seriesCard) return seriesCardHtml(g);
   const title = getTitle(g);
   const n = g._versions?.length || 1;
   const installed = isInstalled(g);
@@ -419,6 +420,20 @@ function gameCard(g) {
     <div class="title">${esc(title)}</div>
     <div class="sub">${esc([g._sourceLabel, g.addeddate ? new Date(g.addeddate).getFullYear() : ''].filter(Boolean).join(' · '))}</div>
     ${g._userItem ? USER_BADGE : ''}
+  </button>`;
+}
+
+// A series (overrides.json "series") as one card; it opens the series album
+function seriesCardHtml(c) {
+  const installed = c._games.some(g => isInstalled(g));
+  return `<button class="card game-card series-card" data-open="series" data-id="${esc(c.title)}" title="${esc(c.title)}">
+    <div class="art" data-thumb="${esc(c._cover)}" style="background:${tint(c.title)}">
+      <div class="noart"><small>Series</small>${esc(c.title)}</div>
+      ${installed ? '<span class="tag installed">INSTALLED</span>' : ''}
+      <span class="tag versions">${c._games.length} GAMES</span>
+    </div>
+    <div class="title">${esc(c.title)}</div>
+    <div class="sub">${esc(['Series', `${c._games.length} games`].join(' · '))}</div>
   </button>`;
 }
 
@@ -784,6 +799,7 @@ function listHead(page, kind, cols, list, ctx) {
 }
 
 function listRow(kind, x, cols, ctx) {
+  if (x._seriesCard) return seriesRow(x, cols, ctx);
   const port = kind === 'port';
   const id = port ? x.id : x.identifier;
   const title = port ? x.name : getTitle(x);
@@ -806,6 +822,21 @@ function listRow(kind, x, cols, ctx) {
     ${cols.map(cell).join('')}
     <span class="lv-end" role="cell"><button type="button" class="lr-more" data-row-menu="${kind}" data-id="${esc(id)}" tabindex="-1"
       aria-label="More for ${esc(title)}" aria-haspopup="menu" title="More"><i class="ico" data-ico="more"></i></button></span>
+  </div>`;
+}
+
+// A series in the list view: its name and game count; the row opens its album
+function seriesRow(x, cols, ctx) {
+  const cell = (c) => {
+    if (c.id === 'name') return `<span class="lv-td lv-name" role="cell"><span class="lv-title">${esc(x.title)}</span><span class="lv-badge">${x._games.length} games</span></span>`;
+    const text = c.id === 'status' ? '' : c.text(x, ctx);
+    return `<span class="lv-td${c.num ? ' num' : ''}" role="cell"${text ? ` title="${esc(text)}"` : ''}>${esc(text)}</span>`;
+  };
+  return `<div class="list-row lv-row" role="row" tabindex="0" data-open="series" data-id="${esc(x.title)}" aria-label="${esc(x.title)}">
+    <span class="lv-star" role="cell"></span>
+    <span class="lv-play" role="cell"><button type="button" class="lv-go" data-open="series" data-id="${esc(x.title)}" tabindex="-1"
+      aria-label="Open the ${esc(x.title)} series" title="Open"><i class="ico" data-ico="play"></i></button></span>
+    ${cols.map(cell).join('')}<span class="lv-end" role="cell"></span>
   </div>`;
 }
 
@@ -833,6 +864,8 @@ function viewWall(uploader) {
   const who = uploader || p.uploader || null;
   let list = state.games.filter(g => !who || (g._versions || [g]).some(v => v._uploader === who));
   list = ciderSearch(list, state.libSearch, g => [getTitle(g), g._sourceLabel, g.identifier, ...(g._versions || []).map(v => getTitle(v))]);
+  // A series is one card; a search shows its games one by one
+  if (!state.libSearch) list = collapseSeries(list);
   list = ListView.sortRows(list, p, [GAME_SORTS], 'dateAdded', listCtx('game'));
   const extra = uploader ? '' : prefDropdown('wall', 'uploader', 'Uploader', 'person',
     [['', 'All uploaders'], ...enabled.map(s => [s.uploader, sourceName(s)])]);
@@ -1148,11 +1181,15 @@ function render() {
 // has no track list: one track is no album. Back returns to the page it was
 // opened from.
 
-const DETAIL_VIEWS = new Set(['game', 'port']);
+const DETAIL_VIEWS = new Set(['game', 'port', 'series']);
 const onDetailPage = () => !state.query && DETAIL_VIEWS.has(state.view.name);
 const fileSizes = new Map();   // identifier -> bytes an install downloads (null while asked)
 
 function detailFor(kind, id) {
+  if (kind === 'series') {
+    const games = state.games.filter(g => g._series === id);
+    return games.length ? { kind, id, games, exes: null } : null;
+  }
   if (kind === 'game') {
     const g = state.games.find(x => x.identifier === id) || state.versions.find(x => x.identifier === id)
       || (state.library[id] ? rowGame(state.library[id]) : null);
@@ -1189,8 +1226,8 @@ function renderDetail() {
 
 function viewDetail(v) {
   const d = ensureDetail(v.name, v.arg);
-  if (d) return `<div class="album-page" id="detail">${d.kind === 'game' ? gameDetail(d) : portDetail(d)}</div>`;
-  const loading = v.name === 'game' ? state.wall.loading : !state.ports;
+  if (d) return `<div class="album-page" id="detail">${d.kind === 'game' ? gameDetail(d) : d.kind === 'series' ? seriesDetail(d) : portDetail(d)}</div>`;
+  const loading = v.name === 'port' ? !state.ports : state.wall.loading;
   return loading ? section('', skeletons(6), { cls: 'row' }) : `<p class="empty">That isn't on the wall or a shelf any more.</p>`;
 }
 
@@ -1329,7 +1366,9 @@ function gameDetail(d) {
       : `<div class="album-sub by">archive.org</div>`,
     meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
     actions,
-    extra: `${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
+    extra: `${g._series && state.games.filter(x => x._series === g._series).length > 1
+      ? `<button class="album-series" data-open="series" data-id="${esc(g._series)}">Part of the ${esc(g._series)} series</button>` : ''}
+      ${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
       ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
@@ -1342,6 +1381,31 @@ function gameDetail(d) {
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
     lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : '',
   ]) + (more.length ? section(`More from ${v._sourceLabel || v._uploader}`, more.map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', v._uploader] }) : '');
+}
+
+// A series: its games as the album's tracks; a track opens that game's page
+function seriesDetail(d) {
+  const rows = seriesRows(d.games, { titleOf: getTitle, library: state.library });
+  const cover = collapseSeries(d.games)[0]._cover || d.games[0].identifier;
+  const labels = [...new Set(d.games.map(g => g._sourceLabel).filter(Boolean))];
+  return albumHead({
+    kind: 'Series',
+    title: d.id,
+    cover: `<div class="album-cover" data-cover="${esc(cover)}" style="background:${tint(d.id)}"></div>`,
+    wash: `background:${tint(d.id)}`,
+    sub: `<div class="album-sub by">${esc(labels.join(', '))}</div>`,
+    meta: seriesMeta(rows),
+    actions: '',
+  }) + `<section class="section album-tracks"><div class="tracklist series-tracks" role="list">
+    <div class="track-head"><span class="num">#</span><span>Game</span><span>Year</span><span class="num">Downloads</span><span></span></div>
+    ${rows.map(r => `<button class="track" data-open="game" data-id="${esc(r.identifier)}" role="listitem">
+      <span class="num tn">${r.n}</span>
+      <span class="tt"><b>${esc(r.title)}</b><small>${esc(r.uploader)}${r.versions > 1 ? ` · ${r.versions} versions` : ''}</small></span>
+      <span class="tc">${esc(r.year)}</span>
+      <span class="tc num">${fmtNum(r.downloads)}</span>
+      <span class="tflags">${r.installed ? '<span class="tag installed">INSTALLED</span>' : ''}</span>
+    </button>`).join('')}
+  </div><div class="track-sum">${rows.length} games</div></section>`;
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
@@ -1403,7 +1467,7 @@ function detailMenuItem(d) {
 }
 function openDetailMenu(x, y, opts = {}) {
   const d = state.detail;
-  if (!d || !onDetailPage()) return;
+  if (!d || !onDetailPage() || d.kind === 'series') return;
   openMenu(d.kind, detailMenuItem(d), x, y, { ...opts, onDetail: true });
 }
 

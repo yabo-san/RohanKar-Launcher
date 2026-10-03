@@ -15,8 +15,9 @@
  *   - /curated-ports.json is fixtures/curated-ports.json: the curated shelf
  *   - /announcement.json is fixtures/announcement.json: one message with a link
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
- *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
- *     bundled copies are used
+ *   - /overrides.json is fixtures/overrides.json: Spider-Man and Age of Empires II
+ *     in one series, so the wall shows a series card
+ *   - anything else (covers, uploaders.json) is a 404, so the bundled copies are used
  * Shared by archive-stub.js (inside Electron) and fixture-server.js (over HTTP).
  */
 const fs   = require('fs');
@@ -69,7 +70,7 @@ function answer(url, base = '') {
   if (url.pathname === '/curated-ports.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', 'curated-ports.json')), 'application/json');
   }
-  if (url.pathname === '/featured.json' || url.pathname === '/art.json') {
+  if (url.pathname === '/featured.json' || url.pathname === '/art.json' || url.pathname === '/overrides.json') {
     return reply(200, fs.readFileSync(path.join(__dirname, 'fixtures', url.pathname.slice(1))), 'application/json');
   }
   const [, kind, id, file] = url.pathname.split('/');

@@ -64,6 +64,26 @@ test('items: hidden uploads are left out unless installed', async (t) => {
   assert.equal(backend.items.loadedVersions().length, 7);
 });
 
+test('items: overrides.json series names the item\'s series, from any of its versions', async (t) => {
+  const { backend, fake } = await testBackend(t);
+  fake.routes['/overrides.json'] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      'rk-e2e-zoo-tycoon-pstriple': { series: ' Tycoon ' },
+      'rk-e2e-rollercoaster-tycoon': { series: 'Tycoon' },
+      'rk-e2e-halo-ce': { series: '' },
+    }));
+  };
+  const { items } = await backend.items.list();
+  const series = Object.fromEntries(items.filter(i => i.shelf === 'wall').map(i => [i.id, i.series]));
+  assert.equal(series['rk-e2e-zoo-tycoon'], 'Tycoon');
+  assert.equal(series['rk-e2e-rollercoaster-tycoon'], 'Tycoon');
+  assert.equal(series['rk-e2e-halo-ce'], null);
+  assert.equal(series['rk-e2e-the-sims'], null);
+  // Still one item per title: the series only labels them
+  assert.equal(items.filter(i => i.shelf === 'wall').length, 6);
+});
+
 test('items: filters by source, shelf, search, installed, inLibrary', async (t) => {
   const { backend } = await testBackend(t);
   backend.library.recordInstall('rk-e2e-halo-ce', '/g/halo', null);

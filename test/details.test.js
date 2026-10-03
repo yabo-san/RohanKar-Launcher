@@ -3,6 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory,
+  collapseSeries, seriesRows, seriesMeta,
 } = require('../src/frontend/details.js');
 
 test('platformOf: the first subject naming a platform', () => {
@@ -88,4 +89,47 @@ test('createHistory: back returns the page with its scroll, forward redoes, a ne
   assert.equal(h.canForward, false);
   // A search is its own page
   assert.equal(h.push({ name: 'home', query: 'halo' }, { name: 'home' }), true);
+});
+
+const titled = (id, extra = {}) => ({ identifier: id, title: id, _sourceLabel: 'rohanjackson071', platform: 'PC', ...extra });
+
+test('collapseSeries: a series is one card where its first game was; one game alone stays itself', () => {
+  const games = [
+    titled('halo'),
+    titled('fifa-18', { _series: 'FIFA', addeddate: '2025-02-01', downloads: 10, date: '2017' }),
+    titled('wwe-2k20', { _series: 'WWE 2K' }),
+    titled('fifa-08', { _series: 'FIFA', addeddate: '2025-06-01', downloads: 90, date: '2007', _sourceLabel: 'r4zel1ght' }),
+  ];
+  const out = collapseSeries(games);
+  assert.deepEqual(out.map(x => x.identifier), ['halo', 'series:FIFA', 'wwe-2k20']);
+  const fifa = out[1];
+  assert.equal(fifa._seriesCard, true);
+  assert.equal(fifa.title, 'FIFA');
+  assert.deepEqual(fifa._games.map(g => g.identifier), ['fifa-18', 'fifa-08']);
+  assert.equal(fifa.downloads, 100);
+  assert.equal(fifa.addeddate, '2025-06-01');
+  assert.equal(fifa.date, '2007');
+  assert.equal(fifa.platform, 'PC');
+  assert.equal(fifa._sourceLabel, '2 uploaders');
+  // the most downloaded game's art
+  assert.equal(fifa._cover, 'fifa-08');
+  assert.deepEqual(collapseSeries(null), []);
+});
+
+test('seriesRows: oldest first, numbered, versions and installs counted per game', () => {
+  const a = titled('fifa-18', { date: '2017', downloads: 5 });
+  const b1 = titled('fifa-08', { date: '2007', downloads: 3 });
+  const b2 = titled('fifa-08-pstriple', { downloads: 4 });
+  b1._versions = [b1, b2];
+  const c = titled('fifa-17', { date: '2017' });
+  const rows = seriesRows([a, b1, c], { titleOf: g => g.title.toUpperCase(), library: { 'fifa-08-pstriple': { install_dir: '/g' } } });
+  assert.deepEqual(rows.map(r => [r.n, r.title, r.year]), [[1, 'FIFA-08', '2007'], [2, 'FIFA-17', '2017'], [3, 'FIFA-18', '2017']]);
+  assert.deepEqual(rows[0], { n: 1, identifier: 'fifa-08', title: 'FIFA-08', year: '2007', uploader: 'rohanjackson071', downloads: 7, versions: 2, installed: true });
+  assert.equal(rows[2].installed, false);
+});
+
+test('seriesMeta: years, games, downloads', () => {
+  assert.deepEqual(seriesMeta([{ year: '2007', downloads: 1000 }, { year: '2017', downloads: 234 }]), ['2007–2017', '2 games', '1,234 downloads']);
+  assert.deepEqual(seriesMeta([{ year: '2007', downloads: 0 }, { year: '2007', downloads: 0 }]), ['2007', '2 games']);
+  assert.deepEqual(seriesMeta([{ year: '', downloads: 1 }]), ['1 game', '1 download']);
 });

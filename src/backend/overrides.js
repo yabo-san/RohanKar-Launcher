@@ -1,8 +1,9 @@
 'use strict';
 /**
  * y4bo — overrides.js
- * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero?, hidden? }.
- * hidden: true leaves the upload out of the launcher unless it's installed (items.js).
+ * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero?, hidden?, series? }.
+ * hidden: true leaves the upload out of the launcher unless it's installed (items.js);
+ * series names the series the wall folds the title into (one card, its games as tracks).
  * The copy on main is fetched at launch; the one bundled with the app is the fallback.
  */
 const path = require('path');

@@ -1,10 +1,13 @@
 {
   "Spider-ManEOT": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png",
+    "series": "Spider-Man",
+    "title": "Spider-Man: Edge of Time"
   },
   "infamous-festival-of-blood-rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/ccaab67c9ace343c21defc58bfed28f1.png",
-    "title": "Infamous: Festival of Blood"
+    "title": "Infamous: Festival of Blood",
+    "series": "inFAMOUS"
   },
   "fat-princess-rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/9317d9227c0bff46239c8d01cf64b870.jpg",
@@ -39,7 +42,8 @@
   },
   "INFAMOUS1RPCS3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/9198689b820fc4a59bdcaa334b8cfbd5.png",
-    "title": "Infamous"
+    "title": "Infamous",
+    "series": "inFAMOUS"
   },
   "rpcs-3-latest-mod-nation-racers-online": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/2be66c4e7b31c5a3190826521f5fef26.png",
@@ -67,7 +71,8 @@
   },
   "SpidermanWOS": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/0fc85db957133bc497e287f3f8797c88.png",
-    "title": "Spider-Man: Web of Shadows"
+    "title": "Spider-Man: Web of Shadows",
+    "series": "Spider-Man"
   },
   "dragons-crown-rpcs-3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/ce9542d0ca697892fa4a86fb6bacfc79.png",
@@ -83,7 +88,8 @@
   },
   "battlefield-bad-company-RPCS3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/c9fd7a90e9a62c6fb2ec4ad91fa9dc1c.jpg",
-    "title": "Battlefield: Bad Company"
+    "title": "Battlefield: Bad Company",
+    "series": "Battlefield"
   },
   "gen-1-recomp-guide-dramatic-shape-mod": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/accaf235b0edc5850498425a0c0fb36f.png",
@@ -114,7 +120,9 @@
     "title": "Heavenly Sword"
   },
   "Spider-manedgeoftime": {
-    "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png"
+    "artUrl": "https://cdn2.steamgriddb.com/grid/61c6ddc8fa35f40c7eb51fc06d66499a.png",
+    "series": "Spider-Man",
+    "title": "Spider-Man: Edge of Time"
   },
   "GRFork": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/aa2a0ebe0de8c6f13f677ff6be223138.png",
@@ -151,7 +159,8 @@
   },
   "infamous-2-rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/e238cbc37c2ce28891d7187fb2ef7c58.png",
-    "title": "Infamous 2"
+    "title": "Infamous 2",
+    "series": "inFAMOUS"
   },
   "fight-night-champion-rpcs3": {
     "artUrl": "https://cdn2.steamgriddb.com/grid/6ad929516b3ae9c2ad3b07f60612b1bb.jpg",
@@ -192,5 +201,368 @@
     "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png",
     "title": "Pokémon Stadium",
     "hidden": true
+  },
+  "mlb-2k11": {
+    "series": "MLB 2K"
+  },
+  "need-for-speed-the-run_202512": {
+    "series": "Need for Speed"
+  },
+  "colin-mcrae-rally-04-repack": {
+    "series": "Colin McRae"
+  },
+  "return-of-the-king_202601": {
+    "series": "The Lord of the Rings"
+  },
+  "f-1-race-stars_202512": {
+    "series": "F1"
+  },
+  "need-for-speed-iv-high-stakes.-7z": {
+    "series": "Need for Speed"
+  },
+  "need-for-speed-most-wanted-repack-rohankar": {
+    "series": "Need for Speed"
+  },
+  "e-football-pes-2020-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "dirt-showdown-repack": {
+    "series": "DiRT"
+  },
+  "test-drive-unlimited-2.7z": {
+    "series": "Test Drive"
+  },
+  "project-cars_202508": {
+    "series": "Project CARS"
+  },
+  "pro-evolution-soccer-2013_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "pro-evolution-soccer-2016-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "pro-evolution-soccer-2009_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "need-for-speed-v-porsche-unleashed.-7z": {
+    "series": "Need for Speed"
+  },
+  "to-ca-race-driver": {
+    "series": "ToCA Race Driver"
+  },
+  "nba-2k12_202603": {
+    "series": "NBA 2K"
+  },
+  "colin-mcrae-rally-2005_202606": {
+    "series": "Colin McRae"
+  },
+  "colin-mcrae-rally-repack_202606": {
+    "series": "Colin McRae"
+  },
+  "to-ca-race-driver-2": {
+    "series": "ToCA Race Driver"
+  },
+  "battlefield-2_202509": {
+    "series": "Battlefield"
+  },
+  "f-1-2020": {
+    "series": "F1"
+  },
+  "dirt-4-repack": {
+    "series": "DiRT"
+  },
+  "battlefield_1942_202509": {
+    "series": "Battlefield"
+  },
+  "fifa-08-steam-deck.-7z": {
+    "series": "FIFA"
+  },
+  "lord-of-the-rings-war-in-the-north-repack": {
+    "series": "The Lord of the Rings"
+  },
+  "tony-hawks-pro-skater-hd_202604": {
+    "series": "Tony Hawk's"
+  },
+  "fifa-18-repack": {
+    "series": "FIFA"
+  },
+  "nba-2k11202603": {
+    "series": "NBA 2K"
+  },
+  "colin-mcrae-rally-2.0_repack": {
+    "series": "Colin McRae"
+  },
+  "fall_of_cybertron": {
+    "series": "Transformers"
+  },
+  "f-1-2013_202512": {
+    "series": "F1"
+  },
+  "transformers-rise-of-the-dark-spark_202601": {
+    "series": "Transformers"
+  },
+  "need-for-speed-underground_202512": {
+    "series": "Need for Speed"
+  },
+  "mlb-2-k-9": {
+    "series": "MLB 2K"
+  },
+  "project-cars-2_202508": {
+    "series": "Project CARS"
+  },
+  "grid-autosport_202601": {
+    "series": "GRID"
+  },
+  "nba-2k13": {
+    "series": "NBA 2K"
+  },
+  "wwe-2k20": {
+    "series": "WWE 2K"
+  },
+  "f1-2014-repack": {
+    "series": "F1"
+  },
+  "the-need-for-speed-special-edition.-7z_202512": {
+    "series": "Need for Speed"
+  },
+  "transformers-revenge-of-the-fallen.-7z": {
+    "series": "Transformers"
+  },
+  "tony-hawks-pro-skater-2_202604": {
+    "series": "Tony Hawk's"
+  },
+  "fifa-11_202603": {
+    "series": "FIFA"
+  },
+  "need-for-speed-shift_202512": {
+    "series": "Need for Speed"
+  },
+  "to-ca-race-driver-3_202601": {
+    "series": "ToCA Race Driver"
+  },
+  "fifa-12_202603": {
+    "series": "FIFA"
+  },
+  "dirt-3_202511": {
+    "series": "DiRT"
+  },
+  "pro-evolution-soccer-2008_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "f1-2018-repack": {
+    "series": "F1"
+  },
+  "transformers-war-for-cybertron.-7z": {
+    "series": "Transformers"
+  },
+  "need-for-speed-shift-2-unleashed_202512": {
+    "series": "Need for Speed"
+  },
+  "pro-evolution-soccer-4_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "e-football-pes-2021-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "colin-mcrae-rally-3-repack": {
+    "series": "Colin McRae"
+  },
+  "dirt-rally-repack": {
+    "series": "DiRT"
+  },
+  "wwe-2k22_202603": {
+    "series": "WWE 2K"
+  },
+  "pro-evolution-soccer-2017-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "wwe-2k16": {
+    "series": "WWE 2K"
+  },
+  "fifa-14_202603": {
+    "series": "FIFA"
+  },
+  "wwe-2k18": {
+    "series": "WWE 2K"
+  },
+  "need-for-speed-carbon_202512": {
+    "series": "Need for Speed"
+  },
+  "fifa-10-steam-deck.-7z": {
+    "series": "FIFA"
+  },
+  "test-drive-unlimited.-7z_202506": {
+    "series": "Test Drive"
+  },
+  "fifa-19-repack": {
+    "series": "FIFA"
+  },
+  "f-1-2011_202512": {
+    "series": "F1"
+  },
+  "f-1-2012_202512": {
+    "series": "F1"
+  },
+  "the-lord-of-the-rings-the-fellowship-of-the-ring.-7z": {
+    "series": "The Lord of the Rings"
+  },
+  "need-for-speed-ii-special-edition_202512": {
+    "series": "Need for Speed"
+  },
+  "need-for-speed-iii-hot-pursuit.-7z_202512": {
+    "series": "Need for Speed"
+  },
+  "pro-evolution-soccer-2014-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "need-for-speed-pro-street_202512": {
+    "series": "Need for Speed"
+  },
+  "nba-2k14": {
+    "series": "NBA 2K"
+  },
+  "nba-2k10202603": {
+    "series": "NBA 2K"
+  },
+  "nba-2k9_202603": {
+    "series": "NBA 2K"
+  },
+  "wwe-2k23": {
+    "series": "WWE 2K"
+  },
+  "pro-evolution-soccer-2015-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "the-lord-of-the-rings-war-of-the-ring_202603": {
+    "series": "The Lord of the Rings"
+  },
+  "pro-evolution-soccer-2011": {
+    "series": "Pro Evolution Soccer"
+  },
+  "pro-evolution-soccer-5_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "pro-evolution-soccer-2019-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "the-lord-of-the-rings-conquest.-7z": {
+    "series": "The Lord of the Rings"
+  },
+  "pro-evolution-soccer-2010_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "di-rt-2.7z": {
+    "series": "Colin McRae"
+  },
+  "pro-evolution-soccer-3": {
+    "series": "Pro Evolution Soccer"
+  },
+  "fifa-07-steam-deck.-7z": {
+    "series": "FIFA"
+  },
+  "transformers-the-game.-7z": {
+    "series": "Transformers"
+  },
+  "tony-hawks-underground-2_202604": {
+    "series": "Tony Hawk's"
+  },
+  "wwe-2k19": {
+    "series": "WWE 2K"
+  },
+  "fifa-15_202603": {
+    "series": "FIFA"
+  },
+  "bf-2142_202509": {
+    "series": "Battlefield"
+  },
+  "project-cars-3": {
+    "series": "Project CARS"
+  },
+  "mlb-2k10": {
+    "series": "MLB 2K"
+  },
+  "wwe-2k17": {
+    "series": "WWE 2K"
+  },
+  "pro-evolution-soccer-2018-repack": {
+    "series": "Pro Evolution Soccer"
+  },
+  "ultimate-spider-man.-7z": {
+    "series": "Spider-Man"
+  },
+  "bfv_20250910": {
+    "series": "Battlefield"
+  },
+  "tony-hawks-underground": {
+    "series": "Tony Hawk's"
+  },
+  "need-for-speed-vi-hot-pursuit-2.7z": {
+    "series": "Need for Speed"
+  },
+  "need-for-speed-undercover_20251214": {
+    "series": "Need for Speed"
+  },
+  "colin-mcrae-dirt_202603": {
+    "series": "Colin McRae"
+  },
+  "fifa-13_202603": {
+    "series": "FIFA"
+  },
+  "pro-evolution-soccer-2012": {
+    "series": "Pro Evolution Soccer"
+  },
+  "transformers-devastation_202507": {
+    "series": "Transformers"
+  },
+  "fifa-17-repack_": {
+    "series": "FIFA"
+  },
+  "pro-evolution-soccer-6_202603": {
+    "series": "Pro Evolution Soccer"
+  },
+  "tony-hawks-pro-skater-3_202604": {
+    "series": "Tony Hawk's"
+  },
+  "grid-2_202511": {
+    "series": "GRID"
+  },
+  "spider-man-shattered-dimensions_202606": {
+    "series": "Spider-Man"
+  },
+  "fifa-16_202603": {
+    "series": "FIFA"
+  },
+  "need-for-speed-underground-2_202512": {
+    "series": "Need for Speed"
+  },
+  "fifa-09_202603": {
+    "series": "FIFA"
+  },
+  "test-drive-ferrari-racing-legends_202601": {
+    "series": "Test Drive"
+  },
+  "harry-potter-and-the-half-blood-princetm": {
+    "series": "Harry Potter"
+  },
+  "need-for-speed-hot-pursuit-2010_LE": {
+    "series": "Need for Speed"
+  },
+  "harry-potter-and-the-goblet-of-fire_202607": {
+    "series": "Harry Potter"
+  },
+  "grid-2-dlc-unlocker_202606": {
+    "series": "GRID"
+  },
+  "harry-potter-and-the-prisoner-of-azkaban_202607": {
+    "series": "Harry Potter"
+  },
+  "harry-potter-quidditch-world-cup_202607": {
+    "series": "Harry Potter"
+  },
+  "harry-potter-and-the-order-of-the-phoenixtm": {
+    "series": "Harry Potter"
+  },
+  "harry-potter-1-2_202607": {
+    "series": "Harry Potter"
   }
 }

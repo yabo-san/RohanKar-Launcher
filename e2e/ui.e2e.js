@@ -36,6 +36,7 @@ const path = require('path');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 const { startStack } = require('./fixture-server');
 const fixtures = require('./fixtures/search.json');
+const overrides = require('./fixtures/overrides.json');
 
 const ENABLED = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
 
@@ -63,13 +64,14 @@ test.afterAll(async () => {
   await stack?.close();
 });
 
-test('the wall shows every shipped uploader, grouped by title', async () => {
+test('the wall shows every shipped uploader, grouped by title and series', async () => {
   await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
   // The app opens on Home, which leads with the picks
   await expect(page.locator('#heading')).toHaveText('Home');
   await expect(page.locator('#body .feature-card').first()).toBeVisible({ timeout: 30_000 });
   const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
-  const groups = new Set(docs.map(d => titleKey(d))).size;
+  // A series (overrides.json "series") is one card
+  const groups = new Set(docs.map(d => overrides[d.identifier]?.series || titleKey(d))).size;
   await page.locator('[data-view="wall"]').click();
   await expect(page.locator('#body .game-card')).toHaveCount(groups, { timeout: 30_000 });
   for (const s of ENABLED) {
@@ -290,6 +292,36 @@ test('A title with one upload has no track list: one track is no album', async (
   await page.keyboard.press('Escape');
 });
 
+test('A series is one card on the wall; it opens an album of its games, each opening its own page', async () => {
+  await page.locator('[data-view="wall"]').click();
+  const card = page.locator('#body .series-card', { hasText: 'Fixture Classics' });
+  await expect(card).toHaveCount(1);
+  await expect(card.locator('.tag.versions')).toHaveText('2 GAMES');
+  await expect(page.locator('#body .game-card', { hasText: 'Age of Empires II' })).toHaveCount(0);
+  await card.click();
+  const detail = page.locator('#detail');
+  await expect(detail.locator('.album-kind')).toHaveText('Series');
+  await expect(detail.locator('.album-title')).toHaveText('Fixture Classics');
+  await expect(detail.locator('.album-meta')).toContainText('2 games');
+  // Its games as tracks, oldest first
+  const tracks = detail.locator('.series-tracks .track');
+  await expect(tracks).toHaveCount(2);
+  await tracks.filter({ hasText: 'Age of Empires II' }).click();
+  await expect(detail.locator('.album-title')).toHaveText('Age of Empires II');
+  await expect(detail.locator('#btn-download')).toBeVisible();
+  // The game's page leads back to its series
+  await detail.locator('.album-series').click();
+  await expect(detail.locator('.album-title')).toHaveText('Fixture Classics');
+  // A search shows the series' games one by one
+  await page.locator('#nav-back').click();
+  await page.locator('#nav-back').click();
+  await page.locator('#nav-back').click();
+  await page.locator('#lib-search').fill('age of empires');
+  await expect(page.locator('#body .game-card', { hasText: 'Age of Empires II' })).toHaveCount(1);
+  await expect(page.locator('#body .series-card')).toHaveCount(0);
+  await page.locator('#lib-search').fill('');
+});
+
 test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
@@ -464,7 +496,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   const table = page.locator('#body .lv');
   const rows = table.locator('.lv-row');
   const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
-  await expect(rows).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
+  await expect(rows).toHaveCount(new Set(docs.map(d => overrides[d.identifier]?.series || titleKey(d))).size);
   await expect(table.locator('.lv-row img, .lv-row [data-thumb]')).toHaveCount(0);
 
   // Column headers: the fixtures have no release dates or sizes, so those stay out
