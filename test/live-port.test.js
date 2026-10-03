@@ -43,6 +43,7 @@ test('live-port: the Acceptance ports are curated entries that can be installed'
 
 test('live-port: source-only entries are skipped, and GitLab ones until GitLab releases exist', () => {
   assert.equal(skipReason({ tags: ['source only'] }), 'source only');
+  assert.equal(skipReason({ tags: ['download page'] }), 'download page');
   assert.equal(skipReason({ tags: ['recomp'] }), null);
   assert.equal(skipReason({ repositorySource: 'gitlab' }), typeof ports.releasesFromGitlab === 'function' ? null : 'GitLab releases need #111');
   const item = itemFor({ name: 'Game', repository: 'Owner/Repo', folderName: 'G' });

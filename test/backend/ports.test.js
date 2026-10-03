@@ -146,18 +146,28 @@ test('no Windows build, unreadable releases, no release, no repository', async (
   assert.deepEqual(installs.startPort({ item: { ...item, repository: null } }), { ok: false, error: 'no_repository', detail: 'Perfect Dark has no repository to install from.' });
   assert.deepEqual(installs.startPort({ item: { ...item, sourceOnly: true, repositoryUrl: 'https://github.com/o/pd' } }),
     { ok: false, error: 'source_only', detail: 'Perfect Dark is source only: it publishes no download. Build it from https://github.com/o/pd.' });
+  assert.deepEqual(installs.startPort({ item: { ...item, repository: null, sourceOnly: true, downloadPage: 'https://example.com/pd.html' } }),
+    { ok: false, error: 'download_page', detail: "Perfect Dark isn't on GitHub or GitLab: download it from https://example.com/pd.html." });
 });
 
 test('portTraits: source only, work in progress, engine or launcher, and the repository page', () => {
   assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['Source Only', 'curated'] }),
-    { sourceOnly: true, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: 'https://github.com/a/b' });
+    { sourceOnly: true, downloadPage: null, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: 'https://github.com/a/b' });
   assert.deepEqual(ports.portTraits({ repository: 'a/b', tags: ['work in progress'] }).workInProgress, true);
   assert.equal(ports.portTraits({ tags: ['engine'] }).role, 'engine');
   assert.equal(ports.portTraits({ tags: ['launcher', 'owner pick'] }).role, 'launcher');
   const gitlab = ports.portTraits({ repository: ' g/r ', repositorySource: 'gitlab' });
   assert.deepEqual([gitlab.repositorySource, gitlab.repositoryUrl], ['gitlab', 'https://gitlab.com/g/r']);
-  assert.deepEqual(ports.portTraits(), { sourceOnly: false, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: null });
+  assert.deepEqual(ports.portTraits(), { sourceOnly: false, downloadPage: null, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: null });
   assert.equal(ports.portTraits({ tags: 'source only' }).sourceOnly, false, 'tags must be a list');
+});
+
+test('portTraits: a download page entry links to its https page and installs nothing', () => {
+  const page = 'https://libertycity.net/files/gta-3/1-x.html';
+  assert.deepEqual(ports.portTraits({ pageUrl: ` ${page} `, tags: ['download page'] }),
+    { sourceOnly: true, downloadPage: page, workInProgress: false, role: null, repositorySource: 'github', repositoryUrl: page });
+  assert.equal(ports.portTraits({ pageUrl: 'http://example.com/x', tags: ['download page'] }).downloadPage, null, 'https only');
+  assert.equal(ports.portTraits({ pageUrl: page, tags: ['engine'] }).downloadPage, null, 'needs the download page tag');
 });
 
 test('a bare exe asset installs the exe; cancelling stops it', async (t) => {

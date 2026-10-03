@@ -545,6 +545,30 @@
         "decomp port"
       ],
       "releaseAssetFilter": "zelda3_"
+    },
+    {
+      "name": "Liberty Extended",
+      "folderName": "LibertyExtended",
+      "pageUrl": "https://libertycity.net/files/gta-3/191140-liberty-extended-october-2025-update.html",
+      "description": "Cowboy69's GTA III overhaul on re3, the reverse-engineered GTA III: new mechanics and a more modern feel. Not on GitHub, so it doesn't install from here: download the zip from LibertyCity (password: libertycity) and unpack it into a copy of your own GTA III folder. Most mods for the original game don't work with it.",
+      "tags": [
+        "download page",
+        "gta",
+        "re3",
+        "rockstar"
+      ]
+    },
+    {
+      "name": "Vice Extended",
+      "folderName": "ViceExtended",
+      "pageUrl": "https://libertycity.net/files/gta-vice-city/167639-vice-extended-october-2025-update.html",
+      "description": "Cowboy69's Vice City overhaul on reVC, the reverse-engineered GTA Vice City: new mechanics and a more modern feel. Not on GitHub, so it doesn't install from here: download the zip from LibertyCity (password: libertycity) and unpack it into a copy of your own GTA Vice City folder. Old saves and ASI plugins for the original game don't work.",
+      "tags": [
+        "download page",
+        "gta",
+        "revc",
+        "rockstar"
+      ]
     }
   ]
 }
