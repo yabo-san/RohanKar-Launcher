@@ -1,8 +1,10 @@
 'use strict';
 /**
  * y4bo — overrides.js
- * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero?, hidden? }.
- * hidden: true leaves the upload out of the launcher unless it's installed (items.js).
+ * Per-title overrides keyed by archive.org identifier: { title?, artUrl?, hero?, hidden?, series?, port? }.
+ * hidden: true leaves the upload out of the launcher unless it's installed (items.js);
+ * series names the series the wall folds the title into (one card, its games as tracks);
+ * port ("owner/repo") is the shelf port that is the same game, a track on the game's album.
  * The copy on main is fetched at launch; the one bundled with the app is the fallback.
  */
 const path = require('path');

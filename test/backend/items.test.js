@@ -64,6 +64,32 @@ test('items: hidden uploads are left out unless installed', async (t) => {
   assert.equal(backend.items.loadedVersions().length, 7);
 });
 
+test('items: overrides.json series and port name the item\'s series and port, from any of its versions', async (t) => {
+  const { backend, fake } = await testBackend(t);
+  fake.routes['/overrides.json'] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      'rk-e2e-zoo-tycoon-pstriple': { series: ' Tycoon ' },
+      'rk-e2e-rollercoaster-tycoon': { series: 'Tycoon' },
+      'rk-e2e-halo-ce': { series: '', port: 'not-a-repo' },
+      'rk-e2e-the-sims': { port: 'Maxis/TheSims' },
+    }));
+  };
+  const { items } = await backend.items.list();
+  const series = Object.fromEntries(items.filter(i => i.shelf === 'wall').map(i => [i.id, i.series]));
+  assert.equal(series['rk-e2e-zoo-tycoon'], 'Tycoon');
+  assert.equal(series['rk-e2e-rollercoaster-tycoon'], 'Tycoon');
+  assert.equal(series['rk-e2e-halo-ce'], null);
+  assert.equal(series['rk-e2e-the-sims'], null);
+  // "port" links the shelf port that is the same game; anything but owner/repo is ignored
+  const port = Object.fromEntries(items.filter(i => i.shelf === 'wall').map(i => [i.id, i.port]));
+  assert.equal(port['rk-e2e-the-sims'], 'Maxis/TheSims');
+  assert.equal(port['rk-e2e-halo-ce'], null);
+  assert.equal(port['rk-e2e-zoo-tycoon'], null);
+  // Still one item per title: the series only labels them
+  assert.equal(items.filter(i => i.shelf === 'wall').length, 6);
+});
+
 test('items: filters by source, shelf, search, installed, inLibrary', async (t) => {
   const { backend } = await testBackend(t);
   backend.library.recordInstall('rk-e2e-halo-ce', '/g/halo', null);

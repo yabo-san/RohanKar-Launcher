@@ -144,6 +144,8 @@ img.fade-in { animation: img-in .45s var(--ease-out) both; }
 }
 button.album-sub { cursor: pointer; }
 button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px; }
+.album-series { align-self: flex-start; margin-top: 12px; padding: 0; border: 0; background: none; font: 600 12px/1.3 var(--font); color: rgb(255 255 255 / 70%); cursor: pointer; }
+.album-series:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
 .album-meta { margin-top: 8px; font: 600 11.5px/1.4 var(--font); letter-spacing: .4px; text-transform: uppercase; color: rgb(255 255 255 / 55%); }
 .album-meta .sep { margin: 0 6px; }
 .album-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 20px; }
@@ -181,7 +183,6 @@ button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px;
   display: grid; grid-template-columns: 36px minmax(0, 3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(90px, auto);
   align-items: center; gap: 16px; padding: 0 12px;
 }
-.ports-tracks .track-head, .ports-tracks .track { grid-template-columns: 36px minmax(0, 2fr) minmax(0, 2.2fr) minmax(0, 1.2fr); }
 .track-head { height: 30px; font-size: 12px; font-weight: 500; color: var(--text2); box-shadow: inset 0 -.5px 0 var(--hair2); }
 .track {
   position: relative; width: 100%; min-height: 46px; border: 0; border-radius: 6px; background: none; color: inherit;
@@ -203,10 +204,12 @@ button.track:hover { background: var(--hover); }
 .tc.warn { color: var(--warn); }
 .tflags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .tflags .tag { position: static; }
+.tflags .tag.port { background: rgb(255 255 255 / 16%); color: #fff; }
 .tflags .user-badge { margin: 0; }
 .track-sum { margin: 14px 12px 0; font-size: 12px; color: var(--text2); }
 .album-foot { margin: 22px 12px 0; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }
 .album-foot dd { color: #b8b8b8; }
+.album-head + .album-foot { margin-top: 36px; }   /* no track list between them */
 .album-page .section.has-row { margin-top: 44px; }
 
 @media (max-width: 860px) {
