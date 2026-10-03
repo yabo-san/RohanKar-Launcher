@@ -192,5 +192,8 @@
     "artUrl": "https://cdn2.steamgriddb.com/grid/35d598e0adbcb08f62a7879830fb093a.png",
     "title": "Pokémon Stadium",
     "hidden": true
+  },
+  "square_enix_2025": {
+    "title": "The Last Remnant"
   }
 }
