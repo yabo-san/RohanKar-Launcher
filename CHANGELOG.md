@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0-fork.21](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.20...v1.6.0-fork.21) (2026-10-07)
+
+
+### Features
+
+* **catalog:** shelf catch-up with the community list: TheXTech, TIP-Recomp, DBZ1; five source-only under More ports; rexglue-sdk parked (nightly only); drop the raw snesrev smw/zelda3 tiles now that the snesrev launcher tile covers them ([#142](https://github.com/yabo-san/RohanKar-Launcher/issues/142)) ([9c8bc3b](https://github.com/yabo-san/RohanKar-Launcher/commit/9c8bc3bee8bbae1b796766f3da0ccff265ecb040))
+* **playnite:** Add to Library on games; Playnite shows your library ([#146](https://github.com/yabo-san/RohanKar-Launcher/issues/146)) ([0b3dc6e](https://github.com/yabo-san/RohanKar-Launcher/commit/0b3dc6e91db924033bb74357719fd26e36a9c07c))
+
 ## [1.6.0-fork.20](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.19...v1.6.0-fork.20) (2026-10-07)
 
 
