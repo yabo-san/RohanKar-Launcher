@@ -306,6 +306,8 @@ async function reloadLibrary() {
 const isInstalled = (g) => ListView.isInstalled(g, { library: state.library });
 const installedVersion = (g) => (g._versions || [g]).find(v => state.library[v.identifier]?.install_dir);
 const inPortLibrary = (p) => state.portLibrary.some(r => r.id === p.id);
+// any version of the game has a library row (added, favorited or installed)
+const inGameLibrary = (g) => (g._versions || [g]).some(v => state.library[v.identifier]);
 const reviewCount = () => state.review.reduce((n, r) => n + r.added.length + r.changed.length + r.removed.length, 0);
 
 // ─── sidebar ─────────────────────────────────────────────────────────────────
@@ -1685,6 +1687,21 @@ const ROW_ACTIONS = [
       const on = ListView.isFavorite(g, ctx);
       const ids = on ? (g._versions || [g]).filter(v => state.library[v.identifier]?.is_favorite).map(v => v.identifier) : [gameTarget(g).identifier];
       for (const identifier of ids) await api.setFavorite({ identifier, isFavorite: !on });
+      await reloadLibrary();
+      render();
+    } },
+  // A game in the library but not installed is a Playnite card with an Install button
+  // (playnite-export.json, installed: false); Install there runs y4bo --install. Shown only
+  // for games that are not installed: removing an installed one is Delete, which asks first.
+  { id: 'game-library', label: (g) => (inGameLibrary(g) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['game'],
+    when: (g) => !isInstalled(g),
+    run: async (g) => {
+      if (inGameLibrary(g)) {
+        const rows = (g._versions || [g]).filter(v => state.library[v.identifier] && !state.library[v.identifier].install_dir);
+        for (const v of rows) await api.removeFromLibrary({ id: v.identifier });
+      } else {
+        await api.addToLibrary({ id: g.identifier, source: null });
+      }
       await reloadLibrary();
       render();
     } },

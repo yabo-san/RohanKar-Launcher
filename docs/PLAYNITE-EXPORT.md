@@ -21,11 +21,15 @@ file; it never opens `library.db`.
 
 ## What is in it
 
-Every library entry, and every catalog entry the launcher has loaded that is not in the library,
-as `installed: false`. So Playnite's "Not installed" filter is the fork's catalog, the way the
-RomM and Drop plugins present theirs, and Install in Playnite is `y4bo.exe --install <id>`.
-Someone who wants a smaller list deletes the games in Playnite and uses its exclusion list.
-`exportCatalog: false` in settings.json exports the library only.
+Every library entry: what you installed, favorited, or added with **Add to Library** (on a game's
+menu in y4bo). Entries without an install go out as `installed: false`, so they appear in
+Playnite as cards with an Install button, and Install runs `y4bo.exe --install <id>`. That is the
+way to get a game onto Playnite without downloading it first: add it in y4bo, install it from
+Playnite whenever.
+
+`exportCatalog: true` in settings.json sends the whole loaded catalog instead, each game not in
+the library as `installed: false`, the way the RomM plugin presents everything. Off by default:
+thousands of catalog games bury the ones you chose.
 
 ## Schema, version 1
 
