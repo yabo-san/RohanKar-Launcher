@@ -249,12 +249,13 @@ function createBackend({
     let overrides = {};
     try { overrides = await getOverrides(); } catch { /* no override art */ }
     const cols = library.collections();
-    // The whole catalog rides along as "not installed", the way the RomM and Drop plugins show
-    // theirs: Playnite's "Not installed" filter is the fork's catalog, and Install there is
-    // `y4bo --install <id>`. Anyone who wants less deletes the games and uses Playnite's
-    // exclusion list. settings.exportCatalog = false turns it off.
+    // Playnite shows your library: what you installed, favorited or added with "Add to Library".
+    // Library rows without an install go out as "not installed", and Install on that card runs
+    // `y4bo --install <id>`. settings.exportCatalog = true sends the whole catalog instead, the
+    // way the RomM plugin shows everything; off by default, because a catalog of thousands of
+    // games buries the ones you chose.
     const rows = { ...library.all() };
-    if (settings.load().exportCatalog !== false) {
+    if (settings.load().exportCatalog === true) {
       for (const it of list) {
         const id = it.id;
         if (!id || rows[id] || (it.versions || []).some(v => rows[v.id])) continue;
