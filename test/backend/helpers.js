@@ -57,7 +57,7 @@ function makeZip(files) {
   return Buffer.concat([...locals, cd, end]);
 }
 
-const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2048, 7)]);
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2048, 7), Buffer.from([0xff, 0xd9])]);
 
 // Fake archive.org. `state` can be changed by a test between requests:
 //   search:   { [uploader]: docs[] }             (defaults to e2e/fixtures/search.json)

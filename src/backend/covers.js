@@ -13,6 +13,33 @@ const { getFollow } = require('./net');
 const { artSource } = require('./overrides');
 
 const MIN_IMAGE_BYTES = 1024;  // smaller than this is an error page, not a cover
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_END = Buffer.from([0xff, 0xd9]);
+const PNG_END = Buffer.from('IEND');
+
+// Whether a file on disk is a whole image. A JPEG ends with its end-of-image
+// marker (FF D9; entropy-coded data byte-stuffs FF, so the pair only appears as
+// the marker) and a PNG with its IEND chunk; a download cut short has neither.
+// Other formats are judged by size alone.
+function wholeImage(p) {
+  let fd;
+  try {
+    const size = fs.statSync(p).size;
+    if (size <= MIN_IMAGE_BYTES) return false;
+    fd = fs.openSync(p, 'r');
+    const head = Buffer.alloc(8);
+    fs.readSync(fd, head, 0, 8, 0);
+    const tail = Buffer.alloc(Math.min(32, size));
+    fs.readSync(fd, tail, 0, tail.length, size - tail.length);
+    if (head[0] === 0xff && head[1] === 0xd8) return tail.includes(JPEG_END);
+    if (head.equals(PNG_SIGNATURE)) return tail.includes(PNG_END);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd);
+  }
+}
 
 // An identifier becomes a file name in the cache: no separators, no dot-only names
 const safeName = (s) => typeof s === 'string' && s !== '' && !/[\\/]/.test(s) && !/^\.+$/.test(s);
@@ -37,7 +64,8 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, art = {}, log =
   // Path of a cached copy of liveUrl, downloading it first if needed. Null on
   // any failure: the caller keeps its placeholder rather than retrying live.
   function cacheImage(liveUrl, cachePath) {
-    if (fs.existsSync(cachePath) && fs.statSync(cachePath).size > MIN_IMAGE_BYTES) return Promise.resolve(cachePath);
+    // A cut-short download cached by an older build is fetched again, not served forever.
+    if (fs.existsSync(cachePath) && wholeImage(cachePath)) return Promise.resolve(cachePath);
 
     return new Promise((resolve) => {
       getFollow(liveUrl, {
@@ -50,19 +78,27 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, art = {}, log =
             res.resume();
             return resolve(null);
           }
-          const file = fs.createWriteStream(cachePath);
+          // Written beside the cache file and moved in only when whole, so a body
+          // the server ends early (no error event, just a short read) never lands
+          const part = cachePath + '.part';
+          const file = fs.createWriteStream(part);
           const drop = () => {
             file.destroy();
-            try { fs.unlinkSync(cachePath); } catch { /* never written */ }
+            try { fs.unlinkSync(part); } catch { /* never written */ }
             resolve(null);
           };
           res.pipe(file);
           file.on('finish', () => {
-            file.close();
-            try {
-              if (fs.statSync(cachePath).size > MIN_IMAGE_BYTES) return resolve(cachePath);
-            } catch { /* vanished */ }
-            resolve(null);
+            file.close(() => {
+              try {
+                if (res.complete && wholeImage(part)) {
+                  fs.renameSync(part, cachePath);
+                  return resolve(cachePath);
+                }
+                fs.unlinkSync(part);
+              } catch { /* vanished */ }
+              resolve(null);
+            });
           });
           file.on('error', drop);
           res.on('error', drop);  // aborted mid-body (e.g. timeout): drop the partial file
@@ -129,4 +165,4 @@ function createCovers({ cacheDir, appDir, archive, getOverrides, art = {}, log =
 
 const fileUrl = (p) => (p ? 'file:///' + p.replace(/\\/g, '/') : p);
 
-module.exports = { createCovers, catalogArtUrl, fileUrl, safeName };
+module.exports = { createCovers, catalogArtUrl, fileUrl, safeName, wholeImage };

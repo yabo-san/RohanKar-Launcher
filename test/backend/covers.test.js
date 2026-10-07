@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { createCovers, catalogArtUrl, fileUrl, safeName } = require('../../src/backend/covers');
+const { createCovers, catalogArtUrl, fileUrl, safeName, wholeImage } = require('../../src/backend/covers');
 const { createArchive } = require('../../src/backend/archive');
 const { fakeArchive, tmpDir, JPEG } = require('./helpers');
 
@@ -130,4 +130,37 @@ test('cacheImage: a write error drops the partial file', async (t) => {
   const { dir, fake, covers } = await setup(t);
   const target = path.join(dir, 'no-such-dir', 'x.jpg');
   assert.equal(await covers.cacheImage(`${fake.base}/services/img/a`, target), null);
+});
+
+test('cacheImage: a body cut short is not cached, and a truncated cache file is fetched again', async (t) => {
+  const half = JPEG.subarray(0, 1500);
+  const { dir, covers } = await setup(t, {}, {
+    // claims the whole length, sends half, then ends the connection without an error status
+    '/services/img/cut': (req, res) => {
+      res.writeHead(200, { 'content-type': 'image/jpeg', 'content-length': JPEG.length });
+      res.write(half);
+      setImmediate(() => res.socket.destroy());
+    },
+  });
+  assert.equal(await covers.thumb('cut'), null);
+  const cache = path.join(dir, 'thumbcache');
+  assert.ok(!fs.existsSync(path.join(cache, 'cut.jpg')), 'no partial file left as the cover');
+  assert.ok(!fs.existsSync(path.join(cache, 'cut.jpg.part')), 'no .part left behind');
+
+  // a truncated file from an older build is replaced by a fresh download
+  fs.writeFileSync(path.join(cache, 'rk-old.jpg'), Buffer.concat([JPEG.subarray(0, 1500), Buffer.alloc(10)]));
+  const p = await covers.thumb('rk-old');
+  assert.equal(fs.readFileSync(p).length, JPEG.length);
+});
+
+test('wholeImage: needs the JPEG end marker or the PNG IEND chunk', (t) => {
+  const dir = require('./helpers').tmpDir(t);
+  const file = (name, buf) => { const p = path.join(dir, name); fs.writeFileSync(p, buf); return p; };
+  assert.equal(wholeImage(file('ok.jpg', JPEG)), true);
+  assert.equal(wholeImage(file('cut.jpg', JPEG.subarray(0, 1500))), false);
+  const png = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(2048), Buffer.from('IEND'), Buffer.alloc(4)]);
+  assert.equal(wholeImage(file('ok.png', png)), true);
+  assert.equal(wholeImage(file('cut.png', png.subarray(0, 1500))), false);
+  assert.equal(wholeImage(file('tiny.jpg', Buffer.from([0xff, 0xd8, 0xff, 0xd9]))), false);
+  assert.equal(wholeImage(path.join(dir, 'missing.jpg')), false);
 });
