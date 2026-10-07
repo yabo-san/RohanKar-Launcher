@@ -1052,7 +1052,8 @@ function viewSettings() {
       <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources))}</textarea></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
-      <button class="btn" data-action="choose-install">Choose…</button></div></div>
+      <button class="btn" data-action="choose-install">Choose…</button>
+      <button class="btn" data-action="scan-install" title="Installs already in this folder, from upstream RohanKar or by hand, join the library and the Playnite export">Adopt installs here</button></div></div>
     <div class="field"><label for="setting-download">Download folder</label>
       <div class="inline"><input type="text" id="setting-download" value="${esc(s.downloadPath || '')}" placeholder="Default: the install folder">
       <button class="btn" data-action="choose-download">Choose…</button></div></div>
@@ -1961,6 +1962,11 @@ async function onAction(action, el) {
       return render();
     }
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
+    case 'scan-install': {
+      const r = await api.scanInstalls($('#setting-install').value.trim() || undefined);
+      toast(r.found ? (r.found.length ? `Adopted ${r.found.length} install${r.found.length === 1 ? '' : 's'}; Playnite gets them on its next import.` : 'Nothing new here that the catalogs know by name.') : `Couldn't scan: ${r.error}`);
+      return;
+    }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
     case 'legacy-ui':
       await api.saveSettings({ ui: 'legacy' });

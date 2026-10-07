@@ -238,8 +238,9 @@ function createBackend({
   async function exportPlaynite(file = playniteFile, { loadItems = true } = {}) {
     const byId = {};
     const loaded = loadItems || items.loadedVersions().length > 0;
+    let list = [];
     try {
-      const list = loaded ? (await items.list()).items : catalogs.items();
+      list = loaded ? (await items.list()).items : catalogs.items();
       for (const it of list) {
         byId[it.id] = it;
         for (const v of it.versions || []) byId[v.id] = it;
@@ -248,8 +249,24 @@ function createBackend({
     let overrides = {};
     try { overrides = await getOverrides(); } catch { /* no override art */ }
     const cols = library.collections();
+    // The whole catalog rides along as "not installed", the way the RomM and Drop plugins show
+    // theirs: Playnite's "Not installed" filter is the fork's catalog, and Install there is
+    // `y4bo --install <id>`. Anyone who wants less deletes the games and uses Playnite's
+    // exclusion list. settings.exportCatalog = false turns it off.
+    const rows = { ...library.all() };
+    if (settings.load().exportCatalog !== false) {
+      for (const it of list) {
+        const id = it.id;
+        if (!id || rows[id] || (it.versions || []).some(v => rows[v.id])) continue;
+        rows[id] = {
+          identifier: id, install_dir: null, exe_path: null,
+          source: it.source?.type === 'quiver' ? (it.source.url || null) : null,
+          playtime_secs: 0, is_favorite: 0, last_played_at: null,
+        };
+      }
+    }
     const data = playnite.buildExport({
-      rows: library.all(),
+      rows,
       items: byId,
       tagsFor: (id) => cols.filter(c => c.games.includes(id)).map(c => c.name),
       art: (id) => covers.localArt(id, overrides),

@@ -19,6 +19,14 @@ file; it never opens `library.db`.
   old file, so a reader sees the old file or the new one, never half of one.
 - **On demand:** `y4bo.exe --export-playnite <path>` writes it to `<path>` and exits.
 
+## What is in it
+
+Every library entry, and every catalog entry the launcher has loaded that is not in the library,
+as `installed: false`. So Playnite's "Not installed" filter is the fork's catalog, the way the
+RomM and Drop plugins present theirs, and Install in Playnite is `y4bo.exe --install <id>`.
+Someone who wants a smaller list deletes the games in Playnite and uses its exclusion list.
+`exportCatalog: false` in settings.json exports the library only.
+
 ## Schema, version 1
 
 ```jsonc
@@ -26,7 +34,7 @@ file; it never opens `library.db`.
   "schemaVersion": 1,                 // bumped only for a breaking change
   "generatedAt": "2026-09-29T02:30:00.000Z",
   "launcherVersion": "1.6.0-fork.3",
-  "games": [ /* one record per library entry */ ]
+  "games": [ /* one record per library entry, plus one per catalog entry not in the library (installed: false) */ ]
 }
 ```
 

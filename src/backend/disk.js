@@ -126,8 +126,11 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
         if (sanitizeFolderName(id) === name) { identifier = id; matchedBy = 'identifier-sanitized'; break; }
       }
     }
-    if (!identifier && titles[sanitizeTitle(name).toLowerCase()]) {
-      identifier = titles[sanitizeTitle(name).toLowerCase()]; matchedBy = 'title';
+    if (!identifier) {
+      // Upstream RohanKar named its installs "(id)Title"; the number is its catalog id, not ours
+      const bare = name.replace(/^\(\d+\)\s*/, '');
+      const key = sanitizeTitle(bare).toLowerCase();
+      if (titles[key]) { identifier = titles[key]; matchedBy = bare === name ? 'title' : 'title-prefixed'; }
     }
     if (identifier) out.push({ identifier, folderPath: path.join(scanDir, name), matchedBy });
   }

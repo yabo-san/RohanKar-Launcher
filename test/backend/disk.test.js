@@ -75,11 +75,11 @@ test('unblockDirectory: only on Windows; removes Zone.Identifier streams', (t) =
 
 test('matchInstallFolders: by identifier, sanitized identifier, then title', (t) => {
   const root = tree(tmpDir(t), {
-    'rk-halo/': null, 'odd_id/': null, 'Zoo Tycoon - Complete/': null, 'unknown/': null, 'file.txt': '',
+    'rk-halo/': null, 'odd_id/': null, 'Zoo Tycoon - Complete/': null, '(28)Blur/': null, 'unknown/': null, 'file.txt': '',
   });
-  const found = disk.matchInstallFolders(root, ['rk-halo', 'odd:id.'], { 'Zoo Tycoon - Complete': 'rk-zoo', '': 'x' });
+  const found = disk.matchInstallFolders(root, ['rk-halo', 'odd:id.'], { 'Zoo Tycoon - Complete': 'rk-zoo', 'Blur': 'rk-blur', '': 'x' });
   assert.deepEqual(found.map(f => [f.identifier, f.matchedBy]).sort(), [
-    ['odd:id.', 'identifier-sanitized'], ['rk-halo', 'identifier'], ['rk-zoo', 'title'],
+    ['odd:id.', 'identifier-sanitized'], ['rk-blur', 'title-prefixed'], ['rk-halo', 'identifier'], ['rk-zoo', 'title'],
   ]);
   assert.deepEqual(disk.matchInstallFolders(path.join(root, 'nope'), [], {}), []);
   assert.deepEqual(disk.matchInstallFolders(null), []);

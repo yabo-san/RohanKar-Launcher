@@ -88,6 +88,8 @@ const api = (() => {
     windowClose:    () => call('POST', '/os/window', { action: 'close' }),
     openExternal:   (href) => call('POST', '/os/open-external', { url: href }),
     chooseFolder:   async () => (await call('POST', '/os/choose-folder')).body?.path || null,
+    // Adopt installs already in a folder (the settings install folder when dir is empty)
+    scanInstalls:   async (dir) => { const r = await call('POST', '/library/scan', dir ? { dir } : {}); return r.ok ? r.body : failure(r); },
     addToSteam:     async (opts) => { const r = await call('POST', '/os/add-to-steam', opts); return r.ok ? r.body : failure(r); },
     getAppVersion:  async () => (await call('GET', '/health')).body?.version || '',
     getHealth:      async () => (await call('GET', '/health')).body || {},
