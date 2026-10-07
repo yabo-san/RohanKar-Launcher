@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0-fork.20](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.19...v1.6.0-fork.20) (2026-10-07)
+
+
+### Features
+
+* **playnite:** adopt existing installs and export the whole catalog ([c52f46a](https://github.com/yabo-san/RohanKar-Launcher/commit/c52f46afa054f8c3eea4e300002ac7d898fa8880))
+
 ## [1.6.0-fork.19](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.18...v1.6.0-fork.19) (2026-10-03)
 
 
