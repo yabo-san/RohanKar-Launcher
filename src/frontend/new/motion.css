@@ -21,6 +21,10 @@
   position: absolute; top: 0; bottom: 0; left: 0; z-index: 30; width: var(--sbw);
   background: rgb(31 32 31 / 64%); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
   box-shadow: inset -.5px 0 0 rgb(0 0 0 / 55%), inset -14px 0 14px -14px rgb(0 0 0 / 35%);
+  /* The title row below spans the full width under this column, and Electron
+     builds drag regions from rectangles, not stacking order: without this the
+     title row's drag strip swallows clicks on the search box. */
+  -webkit-app-region: no-drag;
 }
 .main { width: 100%; }
 .chrome {
