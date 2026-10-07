@@ -35,7 +35,8 @@ copies of the launcher fetch it from `main`.
 | field | | what |
 | --- | --- | --- |
 | `name` | required | the tile's title |
-| `repository` | required | `owner/repo` (GitLab: the project path, may have subgroups) |
+| `repository` | required | `owner/repo` (GitLab: the project path, may have subgroups). Left out on a `download page` entry |
+| `pageUrl` | `download page` only | the https page the user downloads it from by hand |
 | `folderName` | required | the install folder's name; letters, digits, `.`, `_`, `-`; unique |
 | `tags` | required | exactly one section tag, plus any free tags (platform, series: `n64`, `nintendo`, `zelda`) |
 | `repositorySource` | GitLab only | `"gitlab"`; leave out for GitHub |
@@ -53,6 +54,7 @@ Section tags decide how a tile behaves:
 | `work in progress` | installs, with a "work in progress" badge |
 | `engine`, `launcher` | installs, and shows its description (what the user brings) |
 | `source only` | no Install button; links to the repository. The Live ports check skips it |
+| `download page` | not on GitHub or GitLab (a mod on LibertyCity): no Install button, an "Open download page" button to `pageUrl`. Its description says what to download and where to unpack it. The Live ports check skips it |
 
 **More ports.** Entries with `"more": true` are the rest of the community list the shelf started
 from: today the 21 `source only` decompilations. They stay off the shelf unless the user turns on

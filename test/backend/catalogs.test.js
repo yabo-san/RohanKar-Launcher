@@ -138,6 +138,17 @@ test('items: one per entry, a port binary with no game data, marked curated', as
   assert.deepEqual([banjo.sourceOnly, banjo.workInProgress, banjo.role, banjo.repositoryUrl], [false, false, null, 'https://github.com/BanjoRecomp/BanjoRecomp']);
 });
 
+test('items: a download page entry has no repository, is curated and links to its page', async (t) => {
+  const { catalogs, fake, catalog } = await setup(t);
+  const page = 'https://libertycity.net/files/gta-3/1-liberty-extended.html';
+  catalog.apps.push({ name: 'Liberty Extended', folderName: 'LibertyExtended', pageUrl: page, tags: ['download page', 'gta'] });
+  fake.routes['/curated.json'] = (req, res) => { res.writeHead(200); res.end(JSON.stringify(catalog)); };
+  await catalogs.refresh('curated');
+  const le = catalogs.items().find(i => i.title === 'Liberty Extended');
+  assert.deepEqual([le.id, le.repository, le.curated, le.sourceOnly, le.downloadPage, le.repositoryUrl],
+    ['quiver:curated:name:Liberty Extended', null, true, true, page, page]);
+});
+
 test('More ports: entries marked "more" show only with the setting on, or once the library holds one', async (t) => {
   const { catalogs, fake, catalog, settings, library } = await setup(t);
   catalog.apps.push({ name: 'BFBB', repository: 'bfbbdecomp/bfbb', more: true }, { name: 'SA2', repository: 'x/sa2', more: true });

@@ -61,6 +61,7 @@ const gitlabSupported = () => typeof ports.releasesFromGitlab === 'function';
 // Why an entry isn't checked, or null
 function skipReason(e) {
   if ((e.tags || []).includes('source only')) return 'source only';
+  if ((e.tags || []).includes('download page')) return 'download page';
   if (isGitlab(e) && !gitlabSupported()) return 'GitLab releases need #111';
   return null;
 }
@@ -231,7 +232,7 @@ async function run(opts, {
 } = {}) {
   const apps = catalog.apps || [];
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'live-port-'));
-  const wanted = opts.repos?.length ? opts.repos : opts.install ? ACCEPTANCE : apps.map(e => e.repository);
+  const wanted = opts.repos?.length ? opts.repos : opts.install ? ACCEPTANCE : apps.filter(e => e.repository).map(e => e.repository);
   const rows = [];
   const report = (row) => { rows.push(row); print(`${row.status.padEnd(10)} ${row.entry}${row.asset ? ` → ${row.asset}` : ''}${row.detail ? ` (${row.detail})` : ''}`); };
   const find = (repo) => apps.find(e => e.repository?.toLowerCase() === repo.toLowerCase());

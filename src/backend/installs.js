@@ -234,6 +234,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // (userSource) has its release binary checked or pinned per release tag.
   // Resolves { ok, jobs } or { ok: false, error, detail }.
   function startPort({ item, acceptHashChange = false }) {
+    if (item.downloadPage) return { ok: false, error: 'download_page', detail: `${item.title} isn't on GitHub or GitLab: download it from ${item.downloadPage}.` };
     if (!item.repository) return { ok: false, error: 'no_repository', detail: `${item.title} has no repository to install from.` };
     if (item.sourceOnly) return { ok: false, error: 'source_only', detail: `${item.title} is source only: it publishes no download. Build it from ${item.repositoryUrl || item.repository}.` };
     const running = [...jobs.values()].find(j => j.itemId === item.id && isRunning(j));
