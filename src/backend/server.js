@@ -358,9 +358,6 @@ function createApi(backend) {
   route('GET', '/settings', () => ({ body: settings.load() }));
   route('PUT', '/settings', ({ body }) => {
     const s = requireObject(body);
-    if ('allowAdditionalSources' in s && typeof s.allowAdditionalSources !== 'boolean') {
-      throw new HttpError(400, 'bad_request', 'allowAdditionalSources must be true or false');
-    }
     if ('morePorts' in s && typeof s.morePorts !== 'boolean') {
       throw new HttpError(400, 'bad_request', 'morePorts must be true or false');
     }
@@ -374,18 +371,16 @@ function createApi(backend) {
     return { body: settings.save(s) };
   });
 
-  // ─── Additional sources: user.json and what the curated list overrides ───
-  // docs/USER-SOURCES.md. Read even while the setting is off, so Settings can
-  // show a file's problems before the user turns it on.
+  // ─── The user's own sources: user.json and what the built-in list overrides
+  // docs/USER-SOURCES.md
   route('GET', '/user-sources', async () => {
     const f = backend.userSources.read();
-    const enabled = backend.userSources.enabled();
-    if (enabled) await items.load().catch(() => null);
+    await items.load().catch(() => null);
     const count = (k) => f.entries[k].length;
     return { body: {
-      enabled, file: f.file, error: f.error, invalid: f.invalid,
+      file: f.file, error: f.error, invalid: f.invalid,
       entries: { archive: count('archive'), github: count('github') },
-      conflicts: enabled ? [...catalogs.userConflicts(), ...items.conflicts()] : [],
+      conflicts: [...catalogs.userConflicts(), ...items.conflicts()],
     } };
   });
 

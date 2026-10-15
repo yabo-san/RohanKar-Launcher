@@ -72,7 +72,7 @@ item. Library state is joined in on every read.
 }
 ```
 
-- `shelf` is `wall` for archive.org items and the shelf name (Curated, Your ports)
+- `shelf` is `wall` for archive.org items and the shelf name (Built-in, Your ports)
   for catalog items.
 - `override` is the item's `overrides.json` entry; its `title` already replaced `title`.
   An upload whose entry has `"hidden": true` is left out of every list unless it's installed.
@@ -193,7 +193,7 @@ There is no subscribing: the shelf is fixed.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs
-# {"catalogs":[{"id":"curated","url":"https://raw.githubusercontent.com/…/curated-ports.json","name":"Curated","shelf":"Curated","curated":true,"entries":44,"fetchedAt":1790000000000,"error":null}]}
+# {"catalogs":[{"id":"curated","url":"https://raw.githubusercontent.com/…/curated-ports.json","name":"Built-in","shelf":"Built-in","curated":true,"entries":44,"fetchedAt":1790000000000,"error":null}]}
 ```
 
 ### `GET /catalogs/:id`
@@ -217,7 +217,7 @@ state joined in), without waiting for archive.org.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs/curated/items
-# {"items":[{"id":"quiver:curated:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Curated","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
+# {"items":[{"id":"quiver:curated:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Built-in","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
 ```
 
 ### `GET /catalogs/:id/review`
@@ -240,7 +240,7 @@ curl -X POST http://127.0.0.1:7777/v1/catalogs/curated/seen
 ### Your repos
 
 GitHub repos the user adds on their own. A repo the curated shelf doesn't list shows on the "Your
-ports" shelf (catalog id `local`) while additional sources are allowed. `:repo` is `owner/repo`
+ports" shelf (catalog id `local`). `:repo` is `owner/repo`
 URL-encoded (`owner%2Frepo`).
 
 | route | does |
@@ -441,7 +441,7 @@ curl http://127.0.0.1:7777/v1/sources
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
-`allowAdditionalSources` and `morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
+`morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
 (`null` or empty clears it; a URL is `400`).
 
 ```sh
@@ -451,14 +451,14 @@ curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://12
 
 ### `GET /user-sources`
 
-Additional sources ([USER-SOURCES.md](USER-SOURCES.md)): whether they're allowed, and user.json as
-read. `file` and `error` (a file that can't be used at all), `invalid` (each bad entry: `section`,
-`index`, `key`, `errors`), `entries` (valid entries per section) and, while allowed, `conflicts`:
-user entries ignored because the curated list has them (`from`, `key`, `reason`).
+The user's own sources ([USER-SOURCES.md](USER-SOURCES.md)): user.json as read. `file` and
+`error` (a file that can't be used at all), `invalid` (each bad entry: `section`, `index`, `key`,
+`errors`), `entries` (valid entries per section) and `conflicts`: user entries ignored because the
+built-in list has them (`from`, `key`, `reason`).
 
 ```sh
 curl http://127.0.0.1:7777/v1/user-sources
-# {"enabled":true,"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a curated uploader has it"}]}
+# {"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a built-in uploader has it"}]}
 ```
 
 ### `POST /export/playnite`

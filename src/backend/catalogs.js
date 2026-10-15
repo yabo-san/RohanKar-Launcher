@@ -2,7 +2,7 @@
 /**
  * The port shelves, in Quiver's catalog format ({ apps: [...] } or a bare
  * array):
- *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched at
+ *   - Built-in: catalog/curated-ports.json on main (curatedUrl), fetched at
  *     each launch and on demand, cached under catalogs/, and diffed against the copy the user
  *     last reviewed. The copy bundled with the app (curatedFile) stands in
  *     until a fetch succeeds. Entries marked "more": true show only while
@@ -18,7 +18,6 @@
 const fs     = require('fs');
 const path   = require('path');
 const { getText } = require('./net');
-const { additionalAllowed } = require('./user-sources');
 const { portTraits } = require('./ports');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
@@ -105,14 +104,11 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return true;
   }
 
-  // ─── Additional sources: everything that isn't curated ────────────────────
-  // user.json's github entries, then the user's own repos on top, and only
-  // while Settings allows additional sources. A repository a port shelf
-  // already lists is left out and reported as a conflict.
-  const additional = () => additionalAllowed(settings);
+  // ─── The user's own repos ─────────────────────────────────────────────────
+  // user.json's github entries, then the repos added in the app on top. A
+  // repository a port shelf already lists is left out and reported as a conflict.
   function userLayers() {
     const out = { map: new Map(), conflicts: [] };
-    if (!additional()) return out;
     const listed = listedRepos();
     const githubEntry = (g) => ({ ...g, name: g.name || g.repository.split('/')[1] });
     const layers = [
@@ -136,7 +132,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   const userConflicts = () => userLayers().conflicts;
 
   // ─── The curated shelf, and what's left of old subscriptions ──────────────
-  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Curated', shelf: 'Curated', curated: true }) : null;
+  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Built-in', shelf: 'Built-in', curated: true }) : null;
 
   let bundled;
   function bundledCurated() {
@@ -164,7 +160,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   const curatedRepos = () => new Set(CURATED ? entries(CURATED_ID).map(e => repoKey(e.repository)).filter(Boolean) : []);
 
   // The user's repos no port shelf lists, as catalog entries: the "Your
-  // ports" shelf. Empty while additional sources are off.
+  // ports" shelf.
   function localEntries() {
     return [...userLayers().map.values()].map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
@@ -176,7 +172,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     }));
   }
 
-  // Curated, old subscriptions while they hold a port of the user's, and "Your ports" while it has anything on it
+  // Built-in, old subscriptions while they hold a port of the user's, and "Your ports" while it has anything on it
   const shelves = () => [...(CURATED ? [CURATED] : []), ...legacy(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
@@ -283,7 +279,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   }
 
   return { list, get, refresh, warm, entries, review, markSeen, items,
-    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional, morePorts };
+    localRepos: localList, addRepo, removeRepo, userConflicts, morePorts };
 }
 
 module.exports = { createCatalogs, parseCatalog, diffEntries, entryKey, CURATED_ID, CURATED_PORTS_URL };

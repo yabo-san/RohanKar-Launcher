@@ -1,8 +1,7 @@
 'use strict';
 /**
- * Additional sources: what the user adds beyond the curated list (our
- * uploaders, catalog/ and the port shelves). Off unless Settings > "Allow
- * additional sources" is on; the curated list is the default.
+ * The user's own sources: what the user adds beyond the built-in list (our
+ * uploaders, catalog/ and the port shelves). Always loaded.
  *
  * user.json, a local file named in Settings (docs/USER-SOURCES.md):
  *
@@ -116,9 +115,6 @@ function dropCurated(section, list, curated) {
   return { kept, conflicts };
 }
 
-// The setting, read the one way everywhere
-const additionalAllowed = (settings) => settings.load().allowAdditionalSources === true;
-
 // user.json as the backend sees it, re-read when the file or its path changes
 function createUserSources({ settings, log = () => {} }) {
   let cache = null;
@@ -132,9 +128,8 @@ function createUserSources({ settings, log = () => {} }) {
     }
     return cache;
   }
-  // Entries in use: none while additional sources are off
-  const entries = () => (additionalAllowed(settings) ? read().entries : { archive: [], github: [] });
-  return { read, entries, enabled: () => additionalAllowed(settings) };
+  const entries = () => read().entries;
+  return { read, entries };
 }
 
 // ─── First-install pins, for files the user's entry gives no sha1 for ────────
@@ -172,6 +167,6 @@ function createPins(file) {
 }
 
 module.exports = {
-  SCHEMA_VERSION, validateUserFile, readUserFile, dropCurated, additionalAllowed,
+  SCHEMA_VERSION, validateUserFile, readUserFile, dropCurated,
   createUserSources, checkPin, createPins,
 };

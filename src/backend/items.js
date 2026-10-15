@@ -5,9 +5,9 @@
  * the rest are its versions); catalog entries are one item each. Library
  * state is joined in at read time, so installs show up without a refetch.
  *
- * Curated uploaders (catalog/uploaders.json) always load. Any other uploader,
- * and user.json's "archive" entries, load only while additional sources are
- * allowed; their versions carry user: true (user-sources.js).
+ * Built-in uploaders (catalog/uploaders.json) and the user's own (any other
+ * uploader, and user.json's "archive" entries) all load; the user's versions
+ * carry user: true, which decides how their files are checked (user-sources.js).
  *
  * An upload whose overrides.json entry has hidden: true is left out of every
  * list (wall, shelves, search) unless it's installed.
@@ -16,7 +16,7 @@ const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
 const { platformOf } = require('./playnite');
 
 const truthy = (v) => v === true || v === 'true' || v === '1';
-const NO_USER = { enabled: () => false, entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
+const NO_USER = { entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
 const USER_LABEL = 'Your sources';
 
 function createItems({ archive, settings, catalogs, library, getOverrides, userSources = NO_USER, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {
@@ -26,18 +26,16 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
   // What the loaded groups depend on besides the uploader list
   const userKey = () => {
     const f = userSources.read();
-    return JSON.stringify([userSources.enabled(), f.file, f.mtime]);
+    return JSON.stringify([f.file, f.mtime]);
   };
 
   // One source at a time so archive.org sees a trickle, not a burst
   async function loadArchive() {
     const defaults = await getDefaultSources();
     const curated = new Set(defaults.map(s => s.uploader.toLowerCase()));
-    const allowed = userSources.enabled();
     const enabled = sourcesFromSettings(settings.load(), defaults)
       .filter(s => s.enabled !== false)
-      .map(s => (curated.has(s.uploader.toLowerCase()) ? s : { ...s, user: true }))
-      .filter(s => allowed || !s.user);
+      .map(s => (curated.has(s.uploader.toLowerCase()) ? s : { ...s, user: true }));
     const overrides = await getOverrides();
     const results = [];
     for (const src of enabled) {
@@ -63,7 +61,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     const conflicts = [];
     for (const e of userSources.entries().archive) {
       if (curatedIds.has(e.identifier.toLowerCase())) {
-        conflicts.push({ from: 'user.json archive', key: e.identifier, reason: 'a curated uploader has it' });
+        conflicts.push({ from: 'user.json archive', key: e.identifier, reason: 'a built-in uploader has it' });
         continue;
       }
       const r = await archive.item(e.identifier);

@@ -73,7 +73,7 @@ test('GET /items with filters, /items/:id, files, reviews, cover, hero', async (
 
 test('items: sources down is a 502 with the per-source errors', async (t) => {
   const { call, backend, fake } = await testApi(t);
-  backend.settings.save({ allowAdditionalSources: true, sources: [{ uploader: 'nobody@x' }] });
+  backend.settings.save({ sources: [{ uploader: 'nobody@x' }] });
   const r = await call('GET', '/items');
   assert.equal(r.status, 502);
   assert.equal(r.body.error, 'sources_failed');
@@ -91,7 +91,7 @@ test('catalogs: list, get, refresh, items, review, seen on the curated shelf', a
   const id = 'curated';
   assert.equal((await call('GET', '/catalogs')).body.catalogs.length, 1);
   assert.equal((await call('GET', `/catalogs/${id}`)).body.entries, 1);
-  assert.equal((await call('GET', '/items?shelf=Curated')).body.items[0].title, 'A');
+  assert.equal((await call('GET', '/items?shelf=Built-in')).body.items[0].title, 'A');
   const [a] = (await call('GET', `/catalogs/${id}/items`)).body.items;
   assert.deepEqual([a.title, a.repository, a.installed, a.library], ['A', 'o/a', false, null]);
   assert.equal((await call('POST', '/library', { id: a.id, source: 'curated' })).status, 201);
@@ -278,7 +278,7 @@ test('GET /catalogs: the curated shelf first, fetched on the first call, its ite
   } };
   const { call, backend } = await testApi(t, { state, curated: true });
   const [shelf] = (await call('GET', '/catalogs')).body.catalogs;
-  assert.deepEqual([shelf.id, shelf.shelf, shelf.entries, shelf.error], ['curated', 'Curated', 1, null]);
+  assert.deepEqual([shelf.id, shelf.shelf, shelf.entries, shelf.error], ['curated', 'Built-in', 1, null]);
   const { items } = (await call('GET', '/catalogs/curated/items')).body;
   assert.deepEqual(items.map(i => [i.title, i.curated, i.userSource]), [['Zelda', true, false]]);
   assert.equal(backend.catalogs.list()[0].id, 'curated');
@@ -443,7 +443,6 @@ test('os: standalone answers 501 for window, browser, Steam and updater', async 
 
 test('repos: your own GitHub repos (add, list, replace, remove) make up "Your ports"', async (t) => {
   const { call } = await testApi(t);
-  await call('PUT', '/settings', { allowAdditionalSources: true });
   const enc = encodeURIComponent;
 
   const saved = await call('PUT', `/repos/${enc('me/port')}`, { name: 'My Port', sources: [{ ia: 'x', path: 'y' }] });
