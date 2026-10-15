@@ -14,7 +14,7 @@ const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const { createManualApp } = require('./manual');
-const { sourcesFromSettings } = require('./sources');
+const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
 
 const API_VERSION = 'v1';
@@ -358,11 +358,15 @@ function createApi(backend) {
   route('GET', '/settings', () => ({ body: settings.load() }));
   route('PUT', '/settings', ({ body }) => {
     const s = requireObject(body);
-    if ('allowAdditionalSources' in s && typeof s.allowAdditionalSources !== 'boolean') {
-      throw new HttpError(400, 'bad_request', 'allowAdditionalSources must be true or false');
-    }
     if ('morePorts' in s && typeof s.morePorts !== 'boolean') {
       throw new HttpError(400, 'bad_request', 'morePorts must be true or false');
+    }
+    // Uploads to leave out, stored as identifiers (an item URL is read as its identifier)
+    if ('excludeItems' in s) {
+      if (!Array.isArray(s.excludeItems)) throw new HttpError(400, 'bad_request', 'excludeItems must be a list of archive.org identifiers or item URLs');
+      const bad = s.excludeItems.filter(x => !itemIdFrom(x));
+      if (bad.length) throw new HttpError(400, 'bad_request', `Not an archive.org upload: ${bad.map(String).join(', ')}`);
+      s.excludeItems = [...new Set(s.excludeItems.map(itemIdFrom))];
     }
     if ('userSourcesFile' in s && s.userSourcesFile !== null) {
       const f = s.userSourcesFile;
@@ -374,18 +378,16 @@ function createApi(backend) {
     return { body: settings.save(s) };
   });
 
-  // ─── Additional sources: user.json and what the curated list overrides ───
-  // docs/USER-SOURCES.md. Read even while the setting is off, so Settings can
-  // show a file's problems before the user turns it on.
+  // ─── The user's own sources: user.json and what the built-in list overrides
+  // docs/USER-SOURCES.md
   route('GET', '/user-sources', async () => {
     const f = backend.userSources.read();
-    const enabled = backend.userSources.enabled();
-    if (enabled) await items.load().catch(() => null);
+    await items.load().catch(() => null);
     const count = (k) => f.entries[k].length;
     return { body: {
-      enabled, file: f.file, error: f.error, invalid: f.invalid,
-      entries: { archive: count('archive'), github: count('github') },
-      conflicts: enabled ? [...catalogs.userConflicts(), ...items.conflicts()] : [],
+      file: f.file, error: f.error, invalid: f.invalid,
+      entries: { archive: count('archive'), github: count('github'), exclude: count('exclude') },
+      conflicts: [...catalogs.userConflicts(), ...items.conflicts()],
     } };
   });
 

@@ -14,7 +14,6 @@ const state = {
   query: '',
   settings: {},
   sources: [],
-  curatedSources: [],   // GET /sources defaults: the curated uploaders
   library: {},          // archive.org installs from library.db, keyed by identifier
   versions: [],         // every archive.org item from every enabled uploader
   games: [],            // one entry per title, with _versions
@@ -25,6 +24,7 @@ const state = {
   manualForm: null,     // { name, folder } while adding a manual app from the Library
   review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
+  appVersion: '',       // GET /health version, for the Report an issue links
   libSearch: '',        // the search box in a library header (Cider's library pages)
   libPage: 1,           // the page, when a library header is set to paged
   detail: null,
@@ -126,15 +126,11 @@ function syncChrome() {
   $('.main').classList.toggle('scrolled', $('#body').scrollTop > 4);
 }
 
-// The badge on anything from an additional source
-const CURATED_BADGE = '<span class="curated-badge" title="On the y4bo curated list: made by people, not vibecoded">Curated</span>';
 // A port's state from its tags (core's portTraits), as small badges on cards and details
 const ROLE_LABEL = { engine: 'Engine', launcher: 'Launcher' };
-const portBadges = (p) => (p.curated ? CURATED_BADGE : '')
-  + (p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
+const portBadges = (p) => (p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
   + (p.workInProgress ? '<span class="state-badge wip" title="Not finished yet; installs if a release exists">Work in progress</span>' : '')
   + (p.role ? `<span class="state-badge role" title="A plain app: bring your own game data">${ROLE_LABEL[p.role]}</span>` : '');
-const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
 function stripHtml(html) {
   const d = document.createElement('div');
@@ -221,7 +217,7 @@ async function loadWall({ refresh = false } = {}) {
     const { items, errors } = await api.getItems(refresh ? { shelf: 'wall', refresh: 'true' } : { shelf: 'wall' });
     state.games = items.map(item => {
       const versions = item.versions.map(versionFromItem);
-      for (const v of versions) Object.assign(v, { _versions: versions, _userItem: !!item.userSource });
+      for (const v of versions) Object.assign(v, { _versions: versions });
       state.versions.push(...versions);
       return versions[0];
     });
@@ -255,15 +251,13 @@ function portFromItem(it, cat) {
     shelf:              cat.id,
     shelfName:          cat.shelf,
     userSource:         !!it.userSource,
-    // the curated list has this repository, whichever shelf lists it
-    curated:            !!it.curated,
     sourceOnly:         !!it.sourceOnly,
     workInProgress:     !!it.workInProgress,
     role:               it.role || null,
     description:        it.description || '',
     repositoryUrl:      it.repositoryUrl || null,
     host:               it.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub',
-    sourceLabel:        cat.curated ? 'y4bo curated list' : cat.shelf,
+    sourceLabel:        cat.shelf,
     catalogUrl:         cat.url,
   };
 }
@@ -420,7 +414,6 @@ function gameCard(g) {
     </div>
     <div class="title">${esc(title)}</div>
     <div class="sub">${esc([g._sourceLabel, g.addeddate ? new Date(g.addeddate).getFullYear() : ''].filter(Boolean).join(' · '))}</div>
-    ${g._userItem ? USER_BADGE : ''}
   </button>`;
 }
 
@@ -434,7 +427,7 @@ function portCard(p) {
       ${p.sourceOnly ? '' : `<span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span>`}<span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
-    ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.userSource ? USER_BADGE : ''}
+    ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}
   </button>`;
 }
 
@@ -794,7 +787,7 @@ function listRow(kind, x, cols, ctx) {
   const n = x._versions?.length || 1;
   const cell = (c) => {
     if (c.id === 'name') {
-      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + (port && x.curated ? '<span class="lv-badge curated">Curated</span>' : '') + (port && x.sourceOnly ? '<span class="lv-badge">Source only</span>' : '') + (port && x.workInProgress ? '<span class="lv-badge wip">Work in progress</span>' : '') + ((port ? x.userSource : x._userItem) ? '<span class="lv-badge user" title="From a source you added. We don\'t monitor it.">Your source</span>' : '');
+      const badges = (!port && n > 1 ? `<span class="lv-badge">${n}</span>` : '') + (port && x.sourceOnly ? '<span class="lv-badge">Source only</span>' : '') + (port && x.workInProgress ? '<span class="lv-badge wip">Work in progress</span>' : '');
       return `<span class="lv-td lv-name" role="cell"><span class="lv-title">${esc(title)}</span>${badges}</span>`;
     }
     const text = c.text(x, ctx);
@@ -1049,9 +1042,11 @@ function viewSettings() {
   const s = state.settings;
   return `<div class="form">
     <div class="field"><label for="setting-sources">Uploaders</label>
-      <div class="hint">One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.
-        Uploaders that aren't on our curated list load only while additional sources are allowed, and adding one asks first.</div>
-      <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources))}</textarea></div>
+      <div class="hint">One archive.org uploader per line: an email, an @handle or a profile link (archive.org/details/@name), optional ", label".
+        Add ", -word|word" to leave out uploads whose title has any of those words, or ", +word|word" to keep only titles with one.
+        A line "- " plus an upload's link or identifier leaves that one upload out. A leading # turns a line off. The wall queries them one at a time.
+        Add any uploader you like; the ones we ship with are just a starting point.</div>
+      <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources, state.settings.excludeItems))}</textarea></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
       <button class="btn" data-action="choose-install">Choose…</button>
@@ -1067,15 +1062,16 @@ function viewSettings() {
     <div class="field" id="more-ports"><label class="switch-row" for="setting-more-ports">
         <span><b>More ports</b><span class="hint">Also show the rest of the community list we started from: mostly decompilations that publish source but no download.</span></span>
         <input type="checkbox" class="switch" id="setting-more-ports" role="switch" ${s.morePorts ? 'checked' : ''}></label></div>
-    <div class="field" id="additional"><label class="switch-row" for="setting-additional">
-        <span><b>Allow additional sources</b><span class="hint">Off: only our curated uploaders and catalog. On: your user.json, GitHub repos you add
-          and uploaders we don't list. Everything from them is marked Your source · not reviewed.</span></span>
-        <input type="checkbox" class="switch" id="setting-additional" role="switch" ${s.allowAdditionalSources ? 'checked' : ''}></label>
+    <div class="field" id="additional"><label>Your sources</label>
+      <div class="hint">Single archive.org uploads and GitHub repos of your own, listed in a user.json file. Repos also go in with Add a GitHub repo.</div>
       <div id="additional-body">${additionalHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
       <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
-    <div class="field"><div class="hint" id="app-version"></div></div>
+    <div class="field"><label>Something wrong?</label>
+      <div class="hint">Tell us on GitHub. The report opens with your app version filled in; a game's or port's page has the same link for that one.</div>
+      <button class="btn" id="btn-report-issue" data-href="${esc(issueUrl({ version: state.appVersion }))}">Report an issue</button></div>
+    <div class="field"><div class="hint" id="app-version">${state.appVersion ? `y4bo ${esc(state.appVersion)}` : ''}</div></div>
   </div>`;
 }
 
@@ -1136,7 +1132,13 @@ function render() {
   observeCovers(body);
   syncRows();
   body.querySelectorAll('.sentinel').forEach(el => pageObserver.observe(el));
-  if (v.name === 'settings') api.getAppVersion().then(ver => { const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`; }).catch(() => {});
+  if (v.name === 'settings' && !state.appVersion) {
+    api.getAppVersion().then(ver => {
+      state.appVersion = ver;
+      const el = $('#app-version'); if (el) el.textContent = `y4bo ${ver}`;
+      const btn = $('#btn-report-issue'); if (btn) btn.dataset.href = issueUrl({ version: ver });
+    }).catch(() => {});
+  }
   renderNav();
   renderNowbar();
   if (onDetailPage()) paintDetail();
@@ -1294,7 +1296,7 @@ function versionsTable(d) {
       <span class="tt"><b>${esc(r.uploader)}</b><small>${esc(r.identifier)}</small></span>
       <span class="tc">${esc(r.date)}</span>
       <span class="tc num">${fmtNum(r.downloads)}</span>
-      <span class="tflags">${r.user ? USER_BADGE : ''}${r.installed ? '<span class="tag installed">INSTALLED</span>' : ''}${r.newer ? '<span class="tag installed update">NEWER</span>' : ''}</span>
+      <span class="tflags">${r.installed ? '<span class="tag installed">INSTALLED</span>' : ''}${r.newer ? '<span class="tag installed update">NEWER</span>' : ''}</span>
     </button>`).join('')}
   </div><div class="track-sum">${rows.length === 1 ? '1 version' : `${rows.length} versions`}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
 }
@@ -1330,8 +1332,7 @@ function gameDetail(d) {
       : `<div class="album-sub by">archive.org</div>`,
     meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
     actions,
-    extra: `${v._user ? `<div class="user-note">${USER_BADGE}<span>This upload is from a source you added. We don't monitor it.</span></div>` : ''}
-      ${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
+    extra: `${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
@@ -1339,6 +1340,7 @@ function gameDetail(d) {
   }) + versionsTable(d) + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
     `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
+    `<dt>Problem?</dt><dd><a data-href="${esc(issueUrl({ version: state.appVersion, item: { kind: 'game', title: getTitle(v), id: v.identifier, source: v._uploader } }))}">Report an issue</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
     lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : '',
@@ -1394,10 +1396,10 @@ function portDetail(d) {
     meta: portMeta(p),
     actions: portActions(p) + (p.sourceOnly && !added ? '' : pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`)) + moreBtn('data-detail-menu'),
     extra: `${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
-      ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       ${portProgress(p)}${exePicker(d)}`,
   }) + portTracks(p) + albumFoot([
     `<dt>Repository</dt><dd><a data-href="${esc(p.repositoryUrl)}">${esc(p.repository)}</a></dd>`,
+    `<dt>Problem?</dt><dd><a data-href="${esc(issueUrl({ version: state.appVersion, item: { kind: 'port', title: p.name, id: p.id, source: p.repository } }))}">Report an issue</a></dd>`,
     `<dt>Folder</dt><dd>${esc(p.folderName || p.repository.replace('/', '.'))}</dd>`,
     p.releaseAssetFilter ? `<dt>Asset filter</dt><dd><code>${esc(p.releaseAssetFilter)}</code></dd>` : '',
     p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : '',
@@ -1428,7 +1430,7 @@ function confirmHashChange(job, name) {
   return modal({
     title: 'File changed',
     body: `${c.file} from ${name} is not the file you installed before (sha1 ${c.before.slice(0, 12)}… is now ${c.after.slice(0, 12)}…). `
-      + 'It may be an update, or someone may have replaced it. We do not monitor additional sources. Only continue if you trust the source.',
+      + 'It may be an update, or someone may have replaced it. Only continue if you trust the source.',
     primary: 'Install anyway',
   });
 }
@@ -1438,28 +1440,35 @@ async function installGame(v, { acceptHashChange = false } = {}) {
   if (state.downloads.has(identifier)) return;
   const list = await api.fetchFileList({ identifier });
   if (!list.ok || !list.files?.length) return toast(`Couldn't read the file list: ${list.error || 'no files'}`);
-  const files = list.files;
-  const archives = files.filter(f => /\.(zip|7z|rar)$/i.test(f.name) || (/\.exe$/i.test(f.name) && !files.some(x => /\.(zip|7z|rar)$/i.test(x.name))));
-  if (!archives.length) return toast('No downloadable file found for this game.');
-  // Largest archive is the game; multi-part picks stay in the classic UI for now
-  const file = archives.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0];
+  // What core says installs: archives (extracted), else an exe, else the
+  // uploader's own files, downloaded as they are
+  const installable = list.installable || [];
+  if (!installable.length) return toast('This upload has no files of its own to download.');
+  const plain = !installable.some(f => /\.(zip|7z|rar|exe)$/i.test(f.name));
+  // Largest archive is the game (multi-part picks stay in the classic UI for
+  // now); plain files all download
+  const picks = plain ? installable : [installable.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0]];
 
   const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', v.identifier] };
   state.downloads.set(identifier, dl);
   render();
-  const job = await api.install({
-    identifier,
-    fileName:     file.name,
-    acceptHashChange,
-    onStart:      (j) => { dl.jobId = j.id; },
-    onProgress:   (percent) => showProgress(identifier, percent),
-    onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
-  });
+  let job;
+  for (const file of picks) {
+    job = await api.install({
+      identifier,
+      fileName:     file.name,
+      acceptHashChange,
+      onStart:      (j) => { dl.jobId = j.id; },
+      onProgress:   (percent) => showProgress(identifier, percent),
+      onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
+    });
+    if (job.status !== 'done') break;
+  }
   state.downloads.delete(identifier);
   await reloadLibrary();
   render();
   if (job.hashChange) return (await confirmHashChange(job, getTitle(v))) && installGame(v, { acceptHashChange: true });
-  if (job.status === 'done') toast(`${getTitle(v)} is installed.`);
+  if (job.status === 'done') toast(plain ? `${getTitle(v)} is downloaded. Open its folder to use the files.` : `${getTitle(v)} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`);
 }
 
@@ -1528,12 +1537,10 @@ function viewAddRepo() {
     f.repos = [];
     api.getRepos().then(r => { f.repos = r; const el = $('#repo-list'); if (el) el.innerHTML = repoListHtml(); }).catch(() => {});
   }
-  const off = !state.settings.allowAdditionalSources;
   return `<div class="editor"><p class="lede">A GitHub repo with Windows releases. It shows on Your ports, and Install takes its latest release's build. Any game data it needs is up to you.</p>
-    ${off ? '<div class="notice"><div class="grow">Turn on <b>Allow additional sources</b> in Settings to add your own repos.</div></div>' : ''}
     <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo" spellcheck="false"></div>
       <div><label for="repo-name">Name</label><input type="text" id="repo-name" data-repo-field="name" value="${esc(f.name)}" placeholder="Optional; the repo's name otherwise" spellcheck="false"></div></div>
-    <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save" ${off ? 'disabled' : ''}>Add</button></div>
+    <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save">Add</button></div>
     <div id="repo-list">${repoListHtml()}</div></div>`;
 }
 
@@ -1570,7 +1577,6 @@ document.addEventListener('input', (e) => {
   if (t.dataset.repoField && state.repoForm) state.repoForm[t.dataset.repoField] = t.value;
 });
 document.addEventListener('change', (e) => {
-  if (e.target.id === 'setting-additional') return setAdditional(e.target.checked);
   if (e.target.id === 'setting-more-ports') return setMorePorts(e.target.checked);
 });
 
@@ -1582,20 +1588,19 @@ async function setMorePorts(on) {
   loadPorts();
 }
 
-// ─── Additional sources (Settings) ───────────────────────────────────────────
+// ─── Your sources (Settings) ─────────────────────────────────────────────────
 
-const SECTION_NAME = { collisions: 'collisions', archive: 'archive', github: 'github' };
+const SECTION_NAME = { collisions: 'collisions', archive: 'archive', github: 'github', exclude: 'exclude' };
 function additionalHtml() {
-  if (!state.settings.allowAdditionalSources) return '';
   const u = state.userSources;
   if (!u) { loadUserSources(); return '<div class="hint">Loading…</div>'; }
   const n = (k) => u.entries[k];
   const status = !u.file ? '<div class="hint">No user.json yet. Pick a file on this computer: <code>{ "schemaVersion": 1, "archive": [], "github": [] }</code>.</div>'
     : u.error ? `<div class="notice warn" id="user-file-error"><div class="grow">${esc(u.error)}</div></div>`
-    : `<div class="hint" id="user-file-counts">Loaded: ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}.</div>`;
+    : `<div class="hint" id="user-file-counts">Loaded: ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}${n('exclude') ? `, ${n('exclude')} excluded upload${n('exclude') === 1 ? '' : 's'}` : ''}.</div>`;
   const invalid = u.invalid.length ? `<div class="notice warn user-list" id="user-invalid"><div class="grow"><b>${u.invalid.length} invalid entr${u.invalid.length === 1 ? 'y' : 'ies'}, not loaded:</b>
       ${u.invalid.map(i => `<div>${esc(SECTION_NAME[i.section])}[${i.index}]${i.key ? ` ${esc(i.key)}` : ''}: ${esc(i.errors.join('; '))}</div>`).join('')}</div></div>` : '';
-  const conflicts = u.conflicts.length ? `<div class="notice user-list" id="user-conflicts"><div class="grow"><b>Ignored, the curated list already has ${u.conflicts.length === 1 ? 'it' : 'them'}:</b>
+  const conflicts = u.conflicts.length ? `<div class="notice user-list" id="user-conflicts"><div class="grow"><b>Ignored, already built in:</b>
       ${u.conflicts.map(c => `<div>${esc(c.key)} (${esc(c.from)}): ${esc(c.reason)}</div>`).join('')}</div></div>` : '';
   return `<label for="setting-user-file" class="sublabel">user.json</label>
     <div class="inline"><input type="text" id="setting-user-file" value="${esc(u.file || '')}" placeholder="Full path to user.json on this computer" spellcheck="false">
@@ -1604,33 +1609,9 @@ function additionalHtml() {
 }
 
 async function loadUserSources() {
-  state.userSources = await api.getUserSources().catch(() => null) || { enabled: false, file: null, error: null, invalid: [], entries: {}, conflicts: [] };
+  state.userSources = await api.getUserSources().catch(() => null) || { file: null, error: null, invalid: [], entries: {}, conflicts: [] };
   const el = $('#additional-body');
   if (el) el.innerHTML = additionalHtml();
-}
-
-// The toggle: turning it on asks first, every time; off hides what's from
-// additional sources (installed files stay on disk)
-async function setAdditional(on) {
-  const box = $('#setting-additional');
-  if (on && !(await modal({
-    title: 'Additional sources',
-    body: 'Warning: we do not monitor additional sources. Make sure you trust the repo or uploader before you add it.',
-    primary: 'I understand',
-  }))) {
-    if (box) box.checked = false;
-    return;
-  }
-  const r = await api.saveSettings({ allowAdditionalSources: on });
-  if (r && r.ok === false) { if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
-  state.settings = { ...state.settings, allowAdditionalSources: on };
-  document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !on));
-  state.userSources = null;
-  const el = $('#additional-body');
-  if (el) el.innerHTML = additionalHtml();
-  toast(on ? 'Additional sources are on. What comes from them is marked Your source · not reviewed.' : 'Additional sources are off. Only the curated list shows; installed games stay on disk.');
-  loadWall({ refresh: true });
-  loadPorts();
 }
 
 async function saveUserFile() {
@@ -1884,20 +1865,18 @@ document.addEventListener('touchmove', userScroll, { capture: true, passive: tru
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
   if (!sources.length) return toast('Add at least one uploader.');
-  // Asks first whenever the list gains an uploader we don't list
-  const added = newUncurated(sources, state.sources, state.curatedSources);
-  if (added.length && !(await modal({
-    title: added.length === 1 ? 'An uploader we don\'t list' : 'Uploaders we don\'t list',
-    body: uncuratedWarning(added, state.settings.allowAdditionalSources),
-    primary: 'I understand',
-  }))) return;
-  const patch = { sources, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
-  await api.saveSettings(patch);
+  const excludeItems = parseExcludes($('#setting-sources').value);
+  const patch = { sources, excludeItems, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
+  const saved = await api.saveSettings(patch);
+  if (saved && saved.ok === false) return toast(saved.body?.detail || 'Settings not saved.');
+  patch.excludeItems = saved?.body?.excludeItems || excludeItems;
+  // New uploaders or filters refetch; excluded uploads only need the list again
   const changed = formatSources(sources) !== formatSources(state.sources);
+  const excludesChanged = formatSources([], patch.excludeItems) !== formatSources([], state.settings.excludeItems);
   state.settings = { ...state.settings, ...patch };
   state.sources = sources;
   toast('Settings saved.');
-  if (changed) loadWall({ refresh: true });
+  if (changed || excludesChanged) loadWall({ refresh: changed });
 }
 
 // A port acts through its library row, keyed by the catalog item id
@@ -2223,8 +2202,8 @@ async function showAnnouncement() {
 applyFolded();
 (async function init() {
   state.settings = await api.getSettings().catch(() => ({}));
-  document.querySelectorAll('.additional-only').forEach(el => el.classList.toggle('hidden', !state.settings.allowAdditionalSources));
-  ({ sources: state.sources, defaults: state.curatedSources } = await api.getSources());
+  api.getAppVersion().then(ver => { state.appVersion = ver; }).catch(() => {});
+  ({ sources: state.sources } = await api.getSources());
   state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();

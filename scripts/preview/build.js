@@ -15,9 +15,7 @@
  * on main), as the app does. --fixtures uses the e2e
  * fixtures instead (no network), and gives the preview a small made-up
  * library (seedLibrary) so the Library page has something on it, and
- * e2e/fixtures/user.json as the user's own sources: what the UIs load is
- * saved a second time with Allow additional sources on (keys prefixed
- * "ON "), and preview.js answers from those while the toggle is on.
+ * e2e/fixtures/user.json as the user's own sources.
  */
 const fs   = require('fs');
 const os   = require('os');
@@ -92,9 +90,6 @@ function seedLibrary(backend, wallItems) {
   if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
 }
 
-// What the UIs load that depends on Allow additional sources
-const ADDITIONAL_PREFIX = 'ON ';
-
 async function build(opts) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-preview-'));
   let settings = {};
@@ -158,18 +153,9 @@ async function build(opts) {
     };
     const catalogs = await shelves('');
 
-    // The same with additional sources on (user.json), for the toggle
-    let more = [];
-    if (opts.fixtures) {
-      backend.backend.settings.save({ allowAdditionalSources: true });
-      more = (await save('/items', { shelf: 'wall' }, { prefix: ADDITIONAL_PREFIX }))?.items || [];
-      await save('/user-sources', {}, { prefix: ADDITIONAL_PREFIX });
-      await shelves(ADDITIONAL_PREFIX);
-    }
-
     // Covers and file lists: each version of each wall item. Two archive.org
     // requests per id, the slow part of a live build, so it reports progress
-    const ids = [...new Set([...(wall?.items || []), ...more].flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
+    const ids = [...new Set((wall?.items || []).flatMap(it => [it.id, ...(it.versions || []).map(v => v.id)]))];
     step(`fetching covers and file lists for ${ids.length} items`);
     let done = 0;
     await pool(ids, 6, async (id) => {
@@ -219,4 +205,4 @@ if (require.main === module) {
   build(parseArgs(process.argv.slice(2))).catch((e) => { console.error(e); process.exit(1); });
 }
 
-module.exports = { build, key, seedLibrary, ADDITIONAL_PREFIX };
+module.exports = { build, key, seedLibrary };

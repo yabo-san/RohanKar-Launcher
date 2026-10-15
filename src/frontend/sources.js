@@ -14,34 +14,50 @@ function getTitle(game) {
   return (t && String(t).trim()) || game.identifier?.replace(/-/g, ' ') || 'Unknown';
 }
 
-// Settings text format: one uploader per line, optional ", label", leading # disables.
+// Settings text format (docs/USER-SOURCES.md), one line each:
+//   <uploader>[, label][, -exclude|words][, +include|words]
+//     uploader: an email, @handle, profile URL or item URL (the backend
+//     resolves it); -words: leave out uploads whose title has any of them;
+//     +words: keep only uploads whose title has one of them
+//   - <identifier or item URL>   leave that one upload out (parseExcludes)
+//   a leading # turns a line off
 function parseSources(text) {
-  return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => {
+  return sourceLines(text).map(line => {
     const enabled = !line.startsWith('#');
     const [uploader, ...rest] = line.replace(/^#\s*/, '').split(',');
-    const label = rest.join(',').trim();
-    return { uploader: uploader.trim(), label: label || uploader.trim().split('@')[0], enabled };
-  }).filter(s => s.uploader);
+    if (uploader.trim().startsWith('-')) return null;
+    const pick = (sign) => rest.map(f => f.trim()).filter(f => f.startsWith(sign)).map(f => f.slice(1).trim()).filter(Boolean).join('|');
+    const label = rest.filter(f => !/^\s*[-+]/.test(f)).join(',').trim();
+    const src = { uploader: uploader.trim(), label: label || defaultLabel(uploader.trim()), enabled };
+    if (pick('-')) src.titleExclude = pick('-');
+    if (pick('+')) src.titleInclude = pick('+');
+    return src;
+  }).filter(s => s && s.uploader);
 }
 
-function formatSources(list) {
-  return list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`).join('\n');
+// The "- <identifier or URL>" lines: single uploads to leave out
+function parseExcludes(text) {
+  return sourceLines(text).filter(l => l.startsWith('-')).map(l => l.slice(1).trim()).filter(Boolean);
 }
 
-// Uploaders in `next` that are neither on the curated list nor already saved:
-// the ones Settings warns about before saving
-function newUncurated(next, prev = [], curated = []) {
-  const key = (s) => String(s.uploader).toLowerCase();
-  const known = new Set([...curated, ...prev].map(key));
-  return next.filter(s => !known.has(key(s))).map(s => s.uploader);
+const sourceLines = (text) => String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+
+// What a line with no label is called: the handle, the part of an email
+// before @, an item URL's identifier, else what was typed
+function defaultLabel(uploader) {
+  const handle = /(?:^|\/)@([^/?#\s]+)/.exec(uploader);
+  if (handle) return handle[1];
+  const item = /\/(?:details|download)\/([^/?#\s]+)/.exec(uploader);
+  if (item) return item[1];
+  return uploader.split('@')[0] || uploader;
 }
 
-// The text of that warning, shared by both interfaces
-function uncuratedWarning(uploaders, additionalOn) {
-  const one = uploaders.length === 1;
-  return `Warning: we do not monitor ${uploaders.join(', ')}. ${one ? 'It is' : 'They are'} not on our curated list. `
-    + `Make sure you trust ${one ? 'this uploader' : 'these uploaders'} before you add ${one ? 'it' : 'them'}.`
-    + (additionalOn ? '' : ` ${one ? 'It loads' : 'They load'} only while additional sources are allowed.`);
+function formatSources(list, excludes = []) {
+  return [
+    ...list.map(s => `${s.enabled === false ? '# ' : ''}${s.uploader}${s.label ? ', ' + s.label : ''}`
+      + `${s.titleExclude ? ', -' + s.titleExclude : ''}${s.titleInclude ? ', +' + s.titleInclude : ''}`),
+    ...(Array.isArray(excludes) ? excludes : []).map(x => `- ${x}`),
+  ].join('\n');
 }
 
 // The version to show for a grouped entry: the installed one if any, else the entry itself
@@ -56,5 +72,5 @@ function versionLabel(v) {
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { getTitle, parseSources, formatSources, newUncurated, uncuratedWarning, preferredVersion, versionLabel };
+  module.exports = { getTitle, parseSources, parseExcludes, formatSources, preferredVersion, versionLabel };
 }

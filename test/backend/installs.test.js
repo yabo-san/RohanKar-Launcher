@@ -84,7 +84,12 @@ test('extract: zip into the item folder or a collection subfolder; other formats
   const bad = path.join(dir, 'bad.zip');
   fs.writeFileSync(bad, 'not a zip');
   assert.equal((await installs.extract({ filePath: bad, identifier: 'b' })).ok, false);
-  assert.deepEqual(await installs.extract({ filePath: path.join(dir, 'x.iso'), identifier: 'b' }), { ok: false, error: 'Unsupported archive format' });
+  // Not an archive: copied in as it is
+  const iso = path.join(dir, 'x.iso');
+  fs.writeFileSync(iso, 'ISO');
+  const plain = await installs.extract({ filePath: iso, identifier: 'plain' });
+  assert.equal(fs.readFileSync(path.join(plain.installDir, 'x.iso'), 'utf8'), 'ISO');
+  assert.deepEqual(await installs.extract({ filePath: path.join(dir, 'gone.iso'), identifier: 'g' }).then(r => r.ok), false);
 });
 
 test('extract: uses 7-Zip when it is installed', { skip: process.platform === 'win32' && 'uses a sh stand-in for 7z.exe' }, async (t) => {
@@ -149,6 +154,27 @@ test('start: errors from the file list, download and extraction are reported', a
   const gone = (await installs.start({ itemId: 'gone' })).jobs[0];
   await installs.wait(gone.id);
   assert.deepEqual([installs.get(gone.id).status, installs.get(gone.id).error], ['error', 'HTTP 500']);
+});
+
+test('start: an item with no archive or exe downloads its own files as they are', async (t) => {
+  const { installs, library } = await setup(t, {
+    files: { disc: [{ name: 'Game.iso', source: 'original' }, { name: 'disc_meta.xml', source: 'original' }, { name: 'Game.iso.png', source: 'derivative' }],
+      two: [{ name: 'a.pkg', source: 'original' }, { name: 'b.pkg', source: 'original' }] },
+    zips: { 'disc/Game.iso': Buffer.from('ISO'), 'two/a.pkg': Buffer.from('A'), 'two/b.pkg': Buffer.from('B') },
+  });
+  const job = (await installs.start({ itemId: 'disc' })).jobs[0];
+  await installs.wait(job.id);
+  const done = installs.get(job.id);
+  assert.deepEqual([done.status, done.exePath], ['done', null]);
+  assert.equal(fs.readFileSync(path.join(done.installDir, 'Game.iso'), 'utf8'), 'ISO');
+  assert.equal(library.get('disc').install_dir, done.installDir);
+
+  // Several plain files: the user picks, and they share the item's folder
+  assert.deepEqual((await installs.start({ itemId: 'two' })).choices.map(f => f.name), ['a.pkg', 'b.pkg']);
+  const jobs = (await installs.start({ itemId: 'two', files: ['a.pkg', 'b.pkg'] })).jobs;
+  for (const j of jobs) await installs.wait(j.id);
+  const dir = installs.get(jobs[0].id).installDir;
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['a.pkg', 'b.pkg']);
 });
 
 test('start: a running job is reused; cancel stops it', async (t) => {

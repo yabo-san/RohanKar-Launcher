@@ -4,7 +4,7 @@
  * a plain browser against the standalone backend.
  *
  * - The wall holds the shipped uploaders' games, grouped by title.
- * - The port shelf is the curated list, with no game data on its cards.
+ * - The port shelf is the built-in list, with no game data on its cards.
  * - Add puts a port in the library and Remove takes it out.
  * - Install downloads, extracts and registers an archive.org game.
  * - A port installs the Windows build from its GitHub release, and only that
@@ -22,9 +22,11 @@
  * - Your own app: a folder the library makes, fills and launches.
  * - Cards lift on hover and pages rise in, and prefers-reduced-motion turns
  *   both off.
- * - Additional sources: the Settings toggle asks in a modal every time it goes
- *   on; user.json's entries show with the Your source badge, curated ones
- *   never; a file that changed since its first install asks before installing.
+ * - Your sources: no switch and no warnings; user.json's entries load as soon
+ *   as the file is set, with no badge; a file that changed since its first
+ *   install asks before installing.
+ * - Report an issue: Settings and each game's and port's page link to a
+ *   prefilled GitHub issue.
  * - The Settings toggle switches to the classic UI and back, and is saved.
  *
  * archive.org, GitHub and the curated list are served by fixture-server.js.
@@ -212,16 +214,16 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   // without Properties since this is that page; Escape closes it and stays
   await detail.locator('[data-detail-menu]').click();
   const menu = page.locator('#ctxmenu');
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(2);
-  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(5);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(6);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
   // Right-click on the page's head opens the same menu
   await detail.locator('.album-title').click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
@@ -237,13 +239,13 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   await expect(page.locator('#heading')).toHaveText('rohanjackson071');
 });
 
-test('The port shelf is the curated list: every card Curated, no game data, no other shelf', async () => {
+test('The port shelf is the built-in list: no curated badge, no game data, no other shelf', async () => {
   await expect(page.locator('#nav-shelves .navitem')).toHaveCount(1);
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await expect(page.locator('#body .port-card')).toHaveCount(8);
-  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(8);
+  await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(0);
   await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
-  await expect(page.locator('#body .lib-count')).toContainText('Source: y4bo curated list');
+  await expect(page.locator('#body .lib-count')).toContainText('Source: Built-in');
   await page.locator('#btn-settings').click();
   await expect(page.locator('#setting-full-quiver')).toHaveCount(0);
   await expect(page.locator('#quiver-import')).toHaveCount(0);
@@ -251,7 +253,7 @@ test('The port shelf is the curated list: every card Curated, no game data, no o
 });
 
 test('Card states from tags: source only links the repository, work in progress and engines still install', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   const bfbb = page.locator('.port-card', { hasText: 'BFBB' });
   await expect(bfbb.locator('.state-badge')).toHaveText('Source only');
   await expect(bfbb.locator('.play-btn')).toHaveCount(0);
@@ -280,7 +282,7 @@ test('Card states from tags: source only links the repository, work in progress 
 });
 
 test('Add puts a port in the library and Remove takes it out', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
   // What installs: the release binary, and only that
   await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
@@ -289,7 +291,7 @@ test('Add puts a port in the library and Remove takes it out', async () => {
   await page.locator('#detail [data-toggle-port]').click();
   await expect(page.locator('#detail [data-toggle-port]')).toHaveText('Remove from library');
   await page.locator('#nav-back').click();
-  await expect(page.locator('#heading')).toHaveText('Curated ports');
+  await expect(page.locator('#heading')).toHaveText('Built-in ports');
 
   await page.locator('[data-view="library"]').click();
   await expect(page.locator('#body .port-card')).toHaveCount(1);
@@ -335,7 +337,7 @@ test('An installed upload with a newer one on archive.org gets the Newer release
 });
 
 test('Perfect Dark installs its GitHub build only', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
@@ -347,7 +349,7 @@ test('Perfect Dark installs its GitHub build only', async () => {
 });
 
 test('Right-click menu on a port card: installed actions, Launch Options submenu, Escape closes', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   const card = page.locator('.port-card', { hasText: 'Perfect Dark' });
   await card.click({ button: 'right' });
   const menu = page.locator('#ctxmenu');
@@ -364,7 +366,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeHidden();
 
   // Not installed: Download and Locate Existing Install
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await page.locator('.port-card', { hasText: 'Mario Kart 64' }).click({ button: 'right' });
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi').first()).toHaveText('Download');
   await expect(menu.locator('[data-menu="locate"]')).toBeVisible();
@@ -375,7 +377,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
 });
 
 test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab release', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Curated' }).click();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
   const detail = page.locator('#detail');
   await expect(detail.locator('.tracklist .track')).toContainText('GitLab release from sonicdcer/Starfox64Recomp');
@@ -499,7 +501,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await row.locator('.lr-more').click();
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await menu.locator('[data-menu="favorite"]').click();
   await expect(menu).toBeHidden();
   await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
@@ -566,36 +568,13 @@ test('Cards lift on hover and pages rise in; with reduced motion, neither', asyn
   await page.emulateMedia({ reducedMotion: 'no-preference' });
 });
 
-test('Additional sources: the toggle asks every time, user.json cards carry the badge, a changed file asks first', async () => {
+test('Your sources: no switch or warning, user.json loads at once with no badge, a changed file asks first', async () => {
   const modal = page.locator('#modal');
-  const toggle = page.locator('#setting-additional');
   await page.locator('#btn-settings').click();
-  await expect(toggle).not.toBeChecked();
-  await expect(page.locator('#nav-add-repo')).toBeHidden();
-
-  // Cancel leaves it off
-  await toggle.click();
-  await expect(modal.locator('.modal-title')).toHaveText('Additional sources');
-  await expect(modal.locator('.modal-content')).toHaveText('Warning: we do not monitor additional sources. Make sure you trust the repo or uploader before you add it.');
-  await expect(modal.locator('.md-btn-primary')).toHaveText('I understand');
-  await expect(modal.locator('.md-btn:not(.md-btn-primary)')).toHaveText('Cancel');
-  await modal.locator('.md-btn', { hasText: 'Cancel' }).click();
-  await expect(modal).toHaveCount(0);
-  await expect(toggle).not.toBeChecked();
-  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8'));
-  expect(saved().allowAdditionalSources).toBeUndefined();
-
-  // Escape is Cancel too; I understand turns it on
-  await toggle.click();
-  await page.keyboard.press('Escape');
-  await expect(toggle).not.toBeChecked();
-  await toggle.click();
-  await modal.locator('.md-btn-primary').click();
-  await expect(toggle).toBeChecked();
-  await expect.poll(() => saved().allowAdditionalSources).toBe(true); // the save lands after the toggle redraws
+  await expect(page.locator('#setting-additional')).toHaveCount(0);
   await expect(page.locator('#nav-add-repo')).toBeVisible();
 
-  // user.json: loaded, its invalid entry and its conflict with the curated list listed
+  // user.json: loaded, its invalid entry and its conflict with the built-in list listed
   const file = path.join(stack.dataDir, 'user.json');
   fs.copyFileSync(path.join(__dirname, 'fixtures', 'user.json'), file);
   await page.locator('#setting-user-file').fill('https://example.com/user.json');
@@ -605,23 +584,21 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   await page.locator('[data-action="user-file-save"]').click();
   await expect(page.locator('#user-file-counts')).toHaveText('Loaded: 2 archive.org downloads, 1 GitHub release.');
   await expect(page.locator('#user-invalid')).toContainText('github[1] not a repo: repository must be owner/repo');
-  await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a curated uploader has it');
+  await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a built-in uploader has it');
 
-  // The badge: on your cards, never on curated ones
+  // Your cards look like any other
   await page.locator('[data-view="wall"]').click();
   const demo = page.locator('.game-card', { hasText: 'User Demo' });
-  await expect(demo.locator('.user-badge')).toHaveText('Your source · not reviewed');
-  await expect(page.locator('.game-card', { hasText: 'Halo' }).locator('.user-badge')).toHaveCount(0);
+  await expect(demo).toBeVisible();
+  await expect(page.locator('.user-badge')).toHaveCount(0);
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await expect(page.locator('.port-card', { hasText: 'User Tool' }).locator('.user-badge')).toHaveText('Your source · not reviewed');
-  await expect(page.locator('.port-card .user-badge')).toHaveCount(await page.locator('.port-card').count());
-  await page.locator('[data-view="shelf"][data-arg]', { hasText: 'Curated' }).click();
-  await expect(page.locator('.port-card', { hasText: 'Perfect Dark' }).locator('.user-badge')).toHaveCount(0);
+  await expect(page.locator('.port-card', { hasText: 'User Tool' })).toBeVisible();
+  await expect(page.locator('.user-badge, .curated-badge')).toHaveCount(0);
 
   // First install pins the file; a different file later asks before installing
   await page.locator('[data-view="wall"]').click();
   await demo.click();
-  await expect(page.locator('#detail .user-note')).toContainText('from a source you added');
+  await expect(page.locator('#detail .user-note')).toHaveCount(0);
   await page.locator('#btn-download').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const pinsFile = path.join(stack.dataDir, 'pins.json');
@@ -638,51 +615,42 @@ test('Additional sources: the toggle asks every time, user.json cards carry the 
   expect(JSON.parse(fs.readFileSync(pinsFile, 'utf8'))).toEqual(pins);
   await page.keyboard.press('Escape');
 
-  // Off hides them and keeps the install; on again asks again
-  await page.locator('#btn-settings').click();
-  await toggle.click();
-  await expect(modal).toHaveCount(0);
-  await expect(page.locator('#nav-add-repo')).toBeHidden();
-  await page.locator('[data-view="wall"]').click();
-  await expect(page.locator('.game-card', { hasText: 'Halo' })).toBeVisible();
-  await expect(page.locator('.game-card', { hasText: 'User Demo' })).toHaveCount(0);
-  expect((await page.evaluate(() => api.getLibrary()))['rk-e2e-user-demo'].install_dir).toBeTruthy();
-  await page.locator('#btn-settings').click();
-  await toggle.click();
-  await expect(modal.locator('.modal-title')).toHaveText('Additional sources');
-  await modal.locator('.md-btn-primary').click();
-  await expect(toggle).toBeChecked();
 });
 
-test('Settings > Uploaders: saving one we don\'t list asks first, every time it is new', async () => {
+test('Settings > Uploaders: any uploader saves without a warning', async () => {
   const modal = page.locator('#modal');
   const box = page.locator('#setting-sources');
   const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).sources;
   await page.locator('#btn-settings').click();
   const before = await box.inputValue();
   await box.fill(before + '\n# stranger@example.invalid, Stranger');
-
-  // Cancel saves nothing
-  await page.locator('#btn-save-settings').click();
-  await expect(modal.locator('.modal-title')).toHaveText('An uploader we don\'t list');
-  await expect(modal.locator('.modal-content')).toHaveText('Warning: we do not monitor stranger@example.invalid. It is not on our curated list. Make sure you trust this uploader before you add it.');
-  await modal.locator('.md-btn', { hasText: 'Cancel' }).click();
-  await expect(modal).toHaveCount(0);
-  expect((saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(false);
-
-  // I understand saves it; saving again doesn't ask
-  await page.locator('#btn-save-settings').click();
-  await modal.locator('.md-btn-primary').click();
-  await expect.poll(() => (saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(true);
   await page.locator('#btn-save-settings').click();
   await expect(page.locator('#toast')).toContainText('Settings saved.');
   await expect(modal).toHaveCount(0);
-
-  // Removing it doesn't ask either
+  await expect.poll(() => (saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(true);
   await box.fill(before);
   await page.locator('#btn-save-settings').click();
-  await expect(modal).toHaveCount(0);
   await expect.poll(() => saved().some(s => s.uploader === 'stranger@example.invalid')).toBe(false);
+});
+
+test('Report an issue: Settings, a game and a port each open a prefilled GitHub issue', async () => {
+  const href = async (loc) => new URL(await loc.getAttribute('data-href'));
+  await page.locator('#btn-settings').click();
+  let u = await href(page.locator('#btn-report-issue'));
+  expect(u.origin + u.pathname).toBe('https://github.com/yabo-san/RohanKar-Launcher/issues/new');
+  await expect.poll(async () => (await href(page.locator('#btn-report-issue'))).searchParams.get('body')).toMatch(/App: y4bo \d/);
+
+  await page.locator('[data-view="wall"]').click();
+  await page.locator('.game-card', { hasText: 'Halo' }).click();
+  u = await href(page.locator('#detail a', { hasText: 'Report an issue' }));
+  expect(u.searchParams.get('body')).toContain('Game: Halo: Combat Evolved (archive.org item rk-e2e-halo-ce');
+  await page.keyboard.press('Escape');
+
+  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+  await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
+  u = await href(page.locator('#detail a', { hasText: 'Report an issue' }));
+  expect(u.searchParams.get('body')).toMatch(/Port: Perfect Dark \(.+\/perfect_dark\)/);
+  await page.keyboard.press('Escape');
 });
 
 test('Add a GitHub repo: it lands on Your ports, and can be removed', async () => {
@@ -696,7 +664,7 @@ test('Add a GitHub repo: it lands on Your ports, and can be removed', async () =
   expect(saved).toEqual([{ repository: 'someone/banjo-fork', name: 'Banjo Fork' }]);
 
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await expect(page.locator('.port-card', { hasText: 'Banjo Fork' }).locator('.user-badge')).toBeVisible();
+  await expect(page.locator('.port-card', { hasText: 'Banjo Fork' })).toBeVisible();
 
   await page.locator('#nav-add-repo').click();
   await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();

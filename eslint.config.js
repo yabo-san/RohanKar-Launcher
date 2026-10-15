@@ -32,7 +32,7 @@ module.exports = [
     files: ['src/frontend/renderer.js'],
     languageOptions: {
       globals: {
-        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', newUncurated: 'readonly', uncuratedWarning: 'readonly',
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', parseExcludes: 'readonly', formatSources: 'readonly',
         preferredVersion: 'readonly', versionLabel: 'readonly',
       },
     },
@@ -42,12 +42,12 @@ module.exports = [
     files: ['src/frontend/new/app.js'],
     languageOptions: {
       globals: {
-        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', formatSources: 'readonly', newUncurated: 'readonly', uncuratedWarning: 'readonly',
+        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', parseExcludes: 'readonly', formatSources: 'readonly',
         // ../list-view.js
         ListView: 'readonly',
         // ../details.js
         installBytes: 'readonly', gameMeta: 'readonly', portMeta: 'readonly', versionRows: 'readonly',
-        moreFrom: 'readonly', morePorts: 'readonly', createHistory: 'readonly',
+        moreFrom: 'readonly', morePorts: 'readonly', createHistory: 'readonly', issueUrl: 'readonly',
       },
     },
   },

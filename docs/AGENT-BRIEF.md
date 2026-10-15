@@ -162,5 +162,7 @@ Games belong to their owners and are hosted publicly on archive.org.
 
 ## Rules
 
-Logic in core, the renderer only renders. Tests for every core change. No network in tests.
+No curation framing in the UI (K, 2026-10-15): no Curated or "not reviewed" badges, no trust
+warnings or switches in front of what users add. What ships is a starting list; users add
+uploaders, uploads and repos freely. Logic in core, the renderer only renders. Tests for every core change. No network in tests.
 Before/after and `mise run ui` screenshots in every UI PR. No em dashes in docs or PR text.

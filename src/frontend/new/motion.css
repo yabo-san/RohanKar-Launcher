@@ -165,7 +165,7 @@ button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px;
 .album-more:hover { background: rgb(255 255 255 / 17%); }
 .album-more .ico { width: 18px; height: 18px; }
 .album-info .progress { max-width: 420px; }
-.album-info .user-note, .album-info .newer-note, .album-info .srcline, .album-info .manual-note { max-width: 640px; margin: 14px 0 0; }
+.album-info .newer-note, .album-info .srcline, .album-info .manual-note { max-width: 640px; margin: 14px 0 0; }
 .album-info .h3 { margin-top: 18px; }
 .album-info .versions { max-width: 640px; }
 .album-desc { max-width: 640px; margin-top: 16px; }
@@ -207,7 +207,6 @@ button.track:hover { background: var(--hover); }
 .tc.warn { color: var(--warn); }
 .tflags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .tflags .tag { position: static; }
-.tflags .user-badge { margin: 0; }
 .track-sum { margin: 14px 12px 0; font-size: 12px; color: var(--text2); }
 .album-foot { margin: 22px 12px 0; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }
 .album-foot dd { color: #b8b8b8; }

@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSources, formatSources, newUncurated, uncuratedWarning, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
+const { parseSources, parseExcludes, formatSources, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 
 test('parseSources: uploader with label', () => {
@@ -66,6 +66,42 @@ test('formatSources and parseSources round-trip', () => {
     { uploader: 'c@z.com', label: 'One, Two', enabled: true },
   ];
   assert.deepEqual(parseSources(formatSources(list)), list);
+});
+
+test('parseSources: @handles and profile URLs, labelled by the handle', () => {
+  assert.deepEqual(parseSources('@pstriple\nhttps://archive.org/details/@eldritchpenumbra/uploads?x=1\nhttps://archive.org/details/one-upload/\nbare'), [
+    { uploader: '@pstriple', label: 'pstriple', enabled: true },
+    { uploader: 'https://archive.org/details/@eldritchpenumbra/uploads?x=1', label: 'eldritchpenumbra', enabled: true },
+    { uploader: 'https://archive.org/details/one-upload/', label: 'one-upload', enabled: true },
+    { uploader: 'bare', label: 'bare', enabled: true },
+  ]);
+});
+
+test('parseSources: -exclude and +include fields, anywhere after the uploader, label kept', () => {
+  assert.deepEqual(parseSources('@e, Eldritch, -DVD|PS3, +Windows| Linux\n# a@x.com, -discography, -leak\nb@x.com, +USA, One, Two'), [
+    { uploader: '@e', label: 'Eldritch', enabled: true, titleExclude: 'DVD|PS3', titleInclude: 'Windows| Linux' },
+    { uploader: 'a@x.com', label: 'a', enabled: false, titleExclude: 'discography|leak' },
+    { uploader: 'b@x.com', label: 'One, Two', enabled: true, titleInclude: 'USA' },
+  ]);
+  assert.deepEqual(parseSources('a@x.com, -, +')[0], { uploader: 'a@x.com', label: 'a', enabled: true }, 'empty filters are none');
+});
+
+test('parseExcludes: "- upload" lines; parseSources skips them', () => {
+  const text = 'a@x.com\n- https://archive.org/details/bad-upload\n-other-id\n# - off-id\n-';
+  assert.deepEqual(parseExcludes(text), ['https://archive.org/details/bad-upload', 'other-id']);
+  assert.deepEqual(parseSources(text), [{ uploader: 'a@x.com', label: 'a', enabled: true }]);
+});
+
+test('formatSources: filters and excludes round-trip', () => {
+  const list = [
+    { uploader: '@e', label: 'Eldritch', enabled: true, titleExclude: 'DVD|PS3', titleInclude: 'Windows' },
+    { uploader: 'a@x.com', label: 'a', enabled: false, titleExclude: 'discography' },
+  ];
+  const text = formatSources(list, ['bad-upload', 'other']);
+  assert.equal(text, '@e, Eldritch, -DVD|PS3, +Windows\n# a@x.com, a, -discography\n- bad-upload\n- other');
+  assert.deepEqual(parseSources(text), list);
+  assert.deepEqual(parseExcludes(text), ['bad-upload', 'other']);
+  assert.equal(formatSources([{ uploader: 'a@x.com' }], null), 'a@x.com');
 });
 
 test('titleKey: ignores case, punctuation, leading "the" and bracketed tags', () => {
@@ -142,9 +178,9 @@ test('sourcesFromCatalog: on only with launcher, tracked, and an email', () => {
     { uploaderEmail: 'nohandle@x.com' },
     { note: 'neither' },
   ] }), [
-    { uploader: 'on@x.com', label: 'on', enabled: true },
-    { uploader: 'u@x.com', label: 'untracked', enabled: false },
-    { uploader: 'n@x.com', label: 'noflag', enabled: false },
+    { uploader: 'on@x.com', label: 'on', enabled: true, handles: ['on'] },
+    { uploader: 'u@x.com', label: 'untracked', enabled: false, handles: ['untracked'] },
+    { uploader: 'n@x.com', label: 'noflag', enabled: false, handles: ['noflag'] },
     { uploader: 'noemail', label: 'noemail', enabled: false },
     { uploader: 'nohandle@x.com', label: 'nohandle', enabled: false },
   ]);
@@ -160,21 +196,4 @@ test('sourcesFromCatalog: missing or malformed catalog', () => {
 test('sourcesFromCatalog: the bundled catalog turns on exactly the three launcher uploaders', () => {
   const on = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
   assert.deepEqual(on.map(s => s.label).sort(), ['hailstormttv', 'r4zel1ght', 'rohanjackson071']);
-});
-
-test('newUncurated: only uploaders neither curated nor already saved, any case', () => {
-  const curated = [{ uploader: 'a@x.com' }, { uploader: 'b@x.com' }];
-  const prev = [{ uploader: 'a@x.com' }, { uploader: 'mine@x.com' }];
-  const next = parseSources('A@x.com\n# b@x.com\nMINE@x.com\nnew@x.com, New\n# off@x.com');
-  assert.deepEqual(newUncurated(next, prev, curated), ['new@x.com', 'off@x.com']);
-  assert.deepEqual(newUncurated(prev, prev, curated), []);
-  assert.deepEqual(newUncurated(next), next.map(s => s.uploader));
-});
-
-test('uncuratedWarning: one or several, and whether they load yet', () => {
-  assert.equal(uncuratedWarning(['n@x.com'], true),
-    'Warning: we do not monitor n@x.com. It is not on our curated list. Make sure you trust this uploader before you add it.');
-  assert.equal(uncuratedWarning(['n@x.com', 'm@x.com'], false),
-    'Warning: we do not monitor n@x.com, m@x.com. They are not on our curated list. Make sure you trust these uploaders before you add them.'
-    + ' They load only while additional sources are allowed.');
 });

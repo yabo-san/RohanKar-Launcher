@@ -5,18 +5,43 @@
  * the rest are its versions); catalog entries are one item each. Library
  * state is joined in at read time, so installs show up without a refetch.
  *
- * Curated uploaders (catalog/uploaders.json) always load. Any other uploader,
- * and user.json's "archive" entries, load only while additional sources are
- * allowed; their versions carry user: true (user-sources.js).
+ * Built-in uploaders (catalog/uploaders.json) and the user's own (any other
+ * uploader, and user.json's "archive" entries) all load; the user's versions
+ * carry user: true, which decides how their files are checked (user-sources.js).
  *
  * An upload whose overrides.json entry has hidden: true is left out of every
  * list (wall, shelves, search) unless it's installed.
  */
-const { sourcesFromSettings, getTitle, titleKey } = require('./sources');
+const { sourcesFromSettings, getTitle, titleKey, normalizeUploader, sourceKeys, titleAllowed, joinTerms, itemIdFrom } = require('./sources');
 const { platformOf } = require('./playnite');
 
 const truthy = (v) => v === true || v === 'true' || v === '1';
-const NO_USER = { enabled: () => false, entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
+
+// Curated sources by every key they answer to (email, @handles)
+function curatedByKey(defaults) {
+  const map = new Map();
+  for (const d of defaults) for (const k of sourceKeys(d)) if (!map.has(k)) map.set(k, d);
+  return map;
+}
+
+// A saved source as loadArchive uses it. One matching a curated entry, by its
+// email or any of its handles, takes the curated title filters on top of its
+// own; any other is user: true. A label defaults to the handle, the part of
+// the email before @, or the identifier. One that isn't an uploader at all is
+// kept with invalid: <why>, and reported as a failed source.
+function resolveSource(src, curated) {
+  const n = normalizeUploader(src.uploader);
+  if (n.error) return { ...src, invalid: n.error, user: !curated.has(String(src.uploader).toLowerCase()) };
+  const c = curated.get(n.key);
+  const out = { ...src, label: src.label || (n.kind === 'email' ? n.value.split('@')[0] : n.value) };
+  const titleInclude = joinTerms(c?.titleInclude, src.titleInclude);
+  const titleExclude = joinTerms(c?.titleExclude, src.titleExclude);
+  if (titleInclude) out.titleInclude = titleInclude; else delete out.titleInclude;
+  if (titleExclude) out.titleExclude = titleExclude; else delete out.titleExclude;
+  if (!c) out.user = true;
+  return out;
+}
+const NO_USER = { entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
 const USER_LABEL = 'Your sources';
 
 function createItems({ archive, settings, catalogs, library, getOverrides, userSources = NO_USER, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {
@@ -26,24 +51,30 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
   // What the loaded groups depend on besides the uploader list
   const userKey = () => {
     const f = userSources.read();
-    return JSON.stringify([userSources.enabled(), f.file, f.mtime]);
+    return JSON.stringify([f.file, f.mtime]);
   };
 
   // One source at a time so archive.org sees a trickle, not a burst
   async function loadArchive() {
     const defaults = await getDefaultSources();
-    const curated = new Set(defaults.map(s => s.uploader.toLowerCase()));
-    const allowed = userSources.enabled();
-    const enabled = sourcesFromSettings(settings.load(), defaults)
-      .filter(s => s.enabled !== false)
-      .map(s => (curated.has(s.uploader.toLowerCase()) ? s : { ...s, user: true }))
-      .filter(s => allowed || !s.user);
+    const curated = curatedByKey(defaults);
+    const s = settings.load();
+    const enabled = sourcesFromSettings(s, defaults)
+      .filter(src => src.enabled !== false)
+      .map(src => resolveSource(src, curated));
     const overrides = await getOverrides();
     const results = [];
     for (const src of enabled) {
+      if (src.invalid) {
+        log(`[items] source ${src.uploader}: ${src.invalid}`);
+        results.push({ error: src.invalid, src });
+        continue;
+      }
       try {
         const docs = await archive.fetchSource(src);
-        results.push(docs.map(d => ({ ...d, _source: src })));
+        // Uploads the source's title filters leave out are kept (an installed
+        // one keeps its card) but marked, and list() skips them
+        results.push(docs.map(d => ({ ...d, _source: src, ...(titleAllowed(d.title, src) ? {} : { _excluded: 'title' }) })));
       } catch (e) {
         log(`[items] source ${src.uploader} failed: ${e.message}`);
         results.push({ error: e.message, src });
@@ -63,7 +94,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     const conflicts = [];
     for (const e of userSources.entries().archive) {
       if (curatedIds.has(e.identifier.toLowerCase())) {
-        conflicts.push({ from: 'user.json archive', key: e.identifier, reason: 'a curated uploader has it' });
+        conflicts.push({ from: 'user.json archive', key: e.identifier, reason: 'a built-in uploader has it' });
         continue;
       }
       const r = await archive.item(e.identifier);
@@ -150,15 +181,28 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     return { ...it, versions: [], installed: !!row?.install_dir, library: row };
   }
 
+  // Single uploads the user excluded, lowercase identifiers: Settings' "- "
+  // lines (settings.excludeItems, checked on save) and user.json's exclude list.
+  // Read on every list, so a change needs no refetch.
+  function excludedItems() {
+    const saved = settings.load().excludeItems;
+    const out = new Set(userSources.entries().exclude?.map(id => id.toLowerCase()));
+    for (const x of Array.isArray(saved) ? saved : []) out.add(itemIdFrom(x)?.toLowerCase());
+    out.delete(undefined);
+    return out;
+  }
+
   // filters: source (uploader, label or catalog id), shelf, search (title
   // substring, case-insensitive), installed (true/false), inLibrary (true/false)
   async function list(filters = {}) {
     const { groups, errors } = await load({ refresh: truthy(filters.refresh) });
     const lib = library.all();
-    // An upload overrides.json marks hidden is left out unless it's installed,
-    // so an installed copy keeps its card; a group with none left goes away
+    const excluded = excludedItems();
+    // An upload overrides.json marks hidden, or the user excluded (by
+    // identifier or a title filter), is left out unless it's installed, so an
+    // installed copy keeps its card; a group with none left goes away
     const shown = groups
-      .map(g => g.filter(d => !d._override?.hidden || lib[d.identifier]?.install_dir))
+      .map(g => g.filter(d => !(d._override?.hidden || d._excluded || excluded.has(d.identifier.toLowerCase())) || lib[d.identifier]?.install_dir))
       .filter(g => g.length);
     let items = [
       ...shown.map(g => archiveItem(g, lib)),

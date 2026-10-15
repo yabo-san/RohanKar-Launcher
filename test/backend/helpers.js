@@ -61,13 +61,15 @@ const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(2048, 
 
 // Fake archive.org. `state` can be changed by a test between requests:
 //   search:   { [uploader]: docs[] }             (defaults to e2e/fixtures/search.json)
-//   failures: { [uploader]: [status, ...] }      statuses served before the real answer
+//   failures: { [uploader]: [status, ...] }      statuses served before the real answer ('@handle' for uploads)
+//   uploads:  { [handle]: hits[] }               an account's uploads by handle, lowercase, page_production hits
 //   files:    { [identifier]: [{ name, size }] } (default: one <id>.zip)
 //   metadata: { [identifier]: { title, ... } }   an item's metadata block (default: none)
 //   zips:     { [identifier/file]: Buffer }      (default: an exe-bearing zip)
 //   routes:   { [pathname]: (req, res) => void } overrides anything above
 async function fakeArchive(t, state = {}) {
   state.search   ??= SEARCH;
+  state.uploads  ??= {};
   state.failures ??= {};
   state.files    ??= {};
   state.metadata ??= {};
@@ -96,6 +98,19 @@ async function fakeArchive(t, state = {}) {
       const rows = Number(url.searchParams.get('rows'));
       const page = Number(url.searchParams.get('page'));
       return json(200, { response: { numFound: docs.length, docs: docs.slice((page - 1) * rows, page * rows) } });
+    }
+
+    // An account's uploads by @handle, in the page_production shape
+    // (test/fixtures/archive/account-uploads.json); an unknown handle has none
+    if (url.pathname === '/services/search/beta/page_production/') {
+      const handle = (url.searchParams.get('page_target') || '').replace(/^@/, '').toLowerCase();
+      const queued = state.failures['@' + handle];
+      if (queued?.length) return json(queued.shift(), { error: 'nope' });
+      const hits = state.uploads[handle] || [];
+      const per = Number(url.searchParams.get('hits_per_page'));
+      const page = Number(url.searchParams.get('page'));
+      const slice = hits.slice((page - 1) * per, page * per);
+      return json(200, { response: { body: { page_elements: { uploads: { hits: { total: hits.length, returned: slice.length, hits: slice } } } } } });
     }
 
     const [, kind, id, ...rest] = url.pathname.split('/').map(decodeURIComponent);
