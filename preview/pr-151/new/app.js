@@ -1485,6 +1485,11 @@ async function installPort(p, { acceptHashChange = false } = {}) {
   await reloadLibrary();
   render();
   if (job.hashChange) return (await confirmHashChange(job, p.name)) && installPort(p, { acceptHashChange: true });
+  // Nothing to download from a repo of the user's: offer the bookmark instead
+  if (job.noDownload && p.userSource) {
+    if (confirm(`Nothing to download: ${job.error}.\n\nKeep ${p.name} as a bookmark that opens its ${p.host} page?`)) return setBookmark(p, true);
+    return;
+  }
   if (job.status === 'done') toast(`${p.name} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
 }
@@ -1507,6 +1512,18 @@ async function launch(v, exePath) {
 async function addToSteam(v, exePath) {
   const r = await api.addToSteam({ appName: getTitle(v), exePath, startDir: exePath.replace(/[\\/][^\\/]*$/, '') });
   toast(r.ok ? `Added ${getTitle(v)} to Steam. Restart Steam to see it.` : `Couldn't add to Steam: ${r.error}`);
+}
+
+// A repo of the user's either downloads its releases or is a bookmark to its
+// page; they switch between the two at any time
+async function setBookmark(p, bookmark) {
+  const mine = (await api.getRepos()).find(r => r.repository.toLowerCase() === p.repository.toLowerCase());
+  if (!mine) return toast(`${p.name} comes from your user.json: set "bookmark" on it there.`, 6000);
+  const r = await api.saveRepo(mine.repository, { ...mine, bookmark });
+  if (!r.ok) return toast(`Couldn't change it: ${r.error}`, 6000);
+  toast(bookmark ? `${p.name} is a bookmark: it opens its ${p.host} page.` : `${p.name} downloads its releases again.`);
+  await loadPorts();
+  if (state.detail?.kind === 'port' && state.detail.id === p.id) { state.detail = detailFor('port', p.id); render(); }
 }
 
 async function togglePort(id) {
@@ -1717,6 +1734,8 @@ const ROW_ACTIONS = [
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
     when: (p) => !noDownload(p) || inPortLibrary(p),
     run: (p) => togglePort(p.id) },
+  { id: 'bookmark', label: (p) => (p.bookmark ? 'Download Releases Instead' : 'Keep as Bookmark'), icon: 'globe', group: 'manage', kinds: ['port'],
+    when: (p, ctx) => p.userSource && !itemInstalled(p, ctx) && idle(p, ctx), run: (p) => setBookmark(p, !p.bookmark) },
   { id: 'manual-rename', label: 'Rename…', icon: 'edit', group: 'manage', kinds: ['game'],
     when: (g) => g._manual, run: (g, ctx) => { if (!ctx.onDetail) openDetail('game', g.identifier); return onAction('manual-rename'); } },
   // Opens the details page; not offered on that page
