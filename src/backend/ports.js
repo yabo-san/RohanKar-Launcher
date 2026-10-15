@@ -21,13 +21,16 @@ const SCRIPT = /\.ps1$/i;
 const HOSTS = Object.freeze({ github: 'github.com', gitlab: 'gitlab.com', codeberg: 'codeberg.org' });
 const sourceOf = (s) => (Object.hasOwn(HOSTS, s) ? s : 'github');
 
-// What the user typed in Add a repo: owner/repo (GitHub), or a link to the
+// What the user typed in Add a repo: owner/repo (on GitHub unless source says), or a link to the
 // repo on GitHub, GitLab (group/subgroup/repo too) or Codeberg, any page of
 // it. { repository, repositorySource } or null.
 const OWNER_REPO = /^[\w.-]+\/[\w.-]+$/;
 function parseRepo(input, source = 'github') {
   const s = String(input || '').trim();
-  if (OWNER_REPO.test(s)) return { repository: s.replace(/\.git$/i, ''), repositorySource: sourceOf(source) };
+  // A GitLab project path may have subgroups: group/subgroup/repo
+  if (OWNER_REPO.test(s) || (sourceOf(source) === 'gitlab' && /^[\w.-]+(\/[\w.-]+)+$/.test(s))) {
+    return { repository: s.replace(/\.git$/i, ''), repositorySource: sourceOf(source) };
+  }
   let u;
   try { u = new URL(/^[a-z]+:\/\//i.test(s) ? s : `https://${s}`); } catch { return null; }
   const host = u.hostname.toLowerCase().replace(/^www\./, '');
@@ -45,6 +48,15 @@ function parseRepo(input, source = 'github') {
 const codebergReleasesUrl = (api, repository) => `${api}/repos/${repository}/releases?limit=30`;
 // A repo's top-level files (GitHub and Codeberg alike: name, type, sha, download_url)
 const contentsUrl = (api, repository) => `${api}/repos/${repository}/contents`;
+
+// GitLab's top-level tree in that shape; a file's download is its raw contents on the default branch
+const gitlabTreeUrl = (api, repository) => `${api}/projects/${encodeURIComponent(repository)}/repository/tree`;
+function contentsFromGitlab(list, api, repository) {
+  return (Array.isArray(list) ? list : []).filter(f => f && f.name).map(f => ({
+    name: f.name, type: f.type === 'blob' ? 'file' : 'dir', sha: f.id,
+    download_url: `${api}/projects/${encodeURIComponent(repository)}/repository/files/${encodeURIComponent(f.path || f.name)}/raw?ref=HEAD`,
+  }));
+}
 
 // A repo with no Windows release whose top level holds a PowerShell script,
 // like an install wizard: that script, as a release asset, or null. Several
@@ -170,5 +182,5 @@ function portTraits(entry = {}) {
 }
 
 module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits,
-  releasesFromGitlab, gitlabReleasesUrl, codebergReleasesUrl, contentsUrl, scriptFromContents,
+  releasesFromGitlab, gitlabReleasesUrl, codebergReleasesUrl, contentsUrl, gitlabTreeUrl, contentsFromGitlab, scriptFromContents,
   parseRepo, sourceOf, HOSTS, sniffArchiveExt, ARCHIVE_EXT, SCRIPT };

@@ -18,12 +18,11 @@
  */
 const fs   = require('fs');
 const path = require('path');
-const { toRegExp } = require('./ports');
+const { toRegExp, parseRepo, HOSTS } = require('./ports');
 
 const SCHEMA_VERSION = 1;
 const SECTIONS = ['archive', 'github'];
 const IA_ID = /^[\w.-]+$/;
-const REPO  = /^[\w.-]+\/[\w.-]+$/;
 const SHA1  = /^[0-9a-f]{40}$/i;
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
@@ -47,7 +46,9 @@ function validateArchive(e) {
 function validateGithub(e) {
   if (!isObj(e)) return ['entry must be an object'];
   const errs = [];
-  if (typeof e.repository !== 'string' || !REPO.test(e.repository.trim())) errs.push('repository must be owner/repo');
+  // owner/repo, or a link to the repo; repositorySource says where an owner/repo lives
+  if (e.repositorySource != null && !Object.hasOwn(HOSTS, e.repositorySource)) errs.push('repositorySource must be "github", "gitlab" or "codeberg"');
+  else if (!parseRepo(e.repository, e.repositorySource)) errs.push('repository must be owner/repo, or a link to a GitHub, GitLab or Codeberg repo');
   for (const k of ['name', 'folderName']) optString(e, k, errs);
   if (e.assetPattern != null) {
     if (typeof e.assetPattern !== 'string') errs.push('assetPattern must be a string');
@@ -77,7 +78,7 @@ function validateUserFile(doc) {
       if (!errors.length && seen.has(key.toLowerCase())) errors.push(`repeats ${key}, listed earlier in ${section}`);
       if (errors.length) return invalid.push({ section, index, key, errors });
       seen.add(key.toLowerCase());
-      entries[section].push({ ...e, [section === 'archive' ? 'identifier' : 'repository']: key });
+      entries[section].push(section === 'archive' ? { ...e, identifier: key } : { ...e, ...parseRepo(key, e.repositorySource) });
     });
   }
   // An older file's collisions are reported, not read (collisions are parked)

@@ -263,9 +263,11 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const entry = item.entry || {};
     if (release && ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter }).asset) return { release, source };
     // No release with a build: a repo that is an install script (its top-level .ps1)
-    if (source !== 'gitlab') {
-      const c = await json(source, ports.contentsUrl(source === 'codeberg' ? codebergApi : githubApi, repository));
-      const script = c.status === 200 ? ports.scriptFromContents(JSON.parse(c.body)) : null;
+    const c = source === 'gitlab' ? await json(source, ports.gitlabTreeUrl(gitlabApi, repository))
+      : await json(source, ports.contentsUrl(source === 'codeberg' ? codebergApi : githubApi, repository));
+    if (c.status === 200) {
+      const files = JSON.parse(c.body);
+      const script = ports.scriptFromContents(source === 'gitlab' ? ports.contentsFromGitlab(files, gitlabApi, repository) : files);
       if (script) return { release: script, source };
     }
     if (!release) throw new Error(`${repository} has no published release`);

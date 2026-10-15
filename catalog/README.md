@@ -38,7 +38,7 @@ copies of the launcher fetch it from `main`.
 | `repository` | required | `owner/repo` (GitLab: the project path, may have subgroups) |
 | `folderName` | required | the install folder's name; letters, digits, `.`, `_`, `-`; unique |
 | `tags` | required | exactly one section tag, plus any free tags (platform, series: `n64`, `nintendo`, `zelda`) |
-| `repositorySource` | GitLab only | `"gitlab"`; leave out for GitHub |
+| `repositorySource` | GitLab or Codeberg | `"gitlab"` or `"codeberg"`; leave out for GitHub |
 | `releaseAssetFilter` | when needed | text the release file's name must contain, when a release has several Windows files (`win64`, `DoomLauncher_`) |
 | `appIconUrl` | optional | an https image for the tile when there is no cover |
 | `description` | optional | shown on the tile's page; for engines and launchers, say what the user brings |

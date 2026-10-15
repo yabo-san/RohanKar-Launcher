@@ -4,7 +4,6 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const ports = require('../src/backend/ports');
 const { parseArgs, skipReason, itemFor, fetchHead, summaryTable, run, ACCEPTANCE, DEFAULT_BYTES } = require('../scripts/live-port');
 const { fakeArchive, tmpDir, makeZip } = require('./backend/helpers');
 
@@ -41,10 +40,11 @@ test('live-port: the Acceptance ports are curated entries that can be installed'
   }
 });
 
-test('live-port: source-only entries are skipped, and GitLab ones until GitLab releases exist', () => {
+test('live-port: source-only entries are skipped', () => {
   assert.equal(skipReason({ tags: ['source only'] }), 'source only');
   assert.equal(skipReason({ tags: ['recomp'] }), null);
-  assert.equal(skipReason({ repositorySource: 'gitlab' }), typeof ports.releasesFromGitlab === 'function' ? null : 'GitLab releases need #111');
+  assert.equal(skipReason({ repositorySource: 'gitlab' }), null);
+  assert.equal(skipReason({ repositorySource: 'codeberg' }), null);
   const item = itemFor({ name: 'Game', repository: 'Owner/Repo', folderName: 'G' });
   assert.deepEqual([item.id, item.title, item.repository, item.entry.folderName], ['quiver:live:owner/repo', 'Game', 'Owner/Repo', 'G']);
   assert.equal(itemFor({ repository: 'a/b' }).title, 'a/b');

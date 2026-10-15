@@ -41,6 +41,8 @@ test('parseRepo: owner/repo, or a link to the repo on GitHub, GitLab or Codeberg
   const p = ports.parseRepo;
   assert.deepEqual(p('me/port'), { repository: 'me/port', repositorySource: 'github' });
   assert.deepEqual(p('me/port', 'codeberg'), { repository: 'me/port', repositorySource: 'codeberg' });
+  assert.deepEqual(p('group/sub/port', 'gitlab'), { repository: 'group/sub/port', repositorySource: 'gitlab' });
+  assert.equal(p('group/sub/port'), null, 'only GitLab has subgroups');
   assert.deepEqual(p('me/port', 'sourceforge'), { repository: 'me/port', repositorySource: 'github' });
   assert.deepEqual(p('https://github.com/me/port/releases/latest'), { repository: 'me/port', repositorySource: 'github' });
   assert.deepEqual(p(' https://codeberg.org/testamentenjoyment/SpikeOut-Installer '), { repository: 'testamentenjoyment/SpikeOut-Installer', repositorySource: 'codeberg' });
@@ -208,4 +210,40 @@ test('a bare exe asset installs the exe; cancelling stops it', async (t) => {
   assert.equal(installs.cancel(slow.id).status, 'cancelled');
   await installs.wait(slow.id);
   assert.equal(installs.get(slow.id).status, 'cancelled');
+});
+
+// GitLab and Codeberg on par with GitHub: a release build, or failing that a
+// top-level install script, from each
+test('a GitLab or Codeberg repo installs its release build, or its install script', async (t) => {
+  const state = { routes: {} };
+  const fake = await fakeArchive(t, state);
+  const zip = makeZip({ 'tool.exe': 'MZ' });
+  const script = 'Write-Host "hi"\n';
+  state.routes['/repos/me/tool/releases'] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify([{ tag_name: 'v1', assets: [{ name: 'tool-win64.zip', browser_download_url: `${fake.base}/dl/tool-win64.zip` }] }]));
+  };
+  state.routes['/dl/tool-win64.zip'] = (req, res) => { res.writeHead(200, { 'content-length': zip.length }); res.end(zip); };
+  state.routes['/projects/group%2Fsub%2Fwizard/releases'] = (req, res) => { res.writeHead(200); res.end('[]'); };
+  state.routes['/projects/group%2Fsub%2Fwizard/repository/tree'] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify([{ id: 'b10b', name: 'Setup.ps1', type: 'blob', path: 'Setup.ps1' }, { id: 't1', name: 'res', type: 'tree', path: 'res' }]));
+  };
+  state.routes['/projects/group%2Fsub%2Fwizard/repository/files/Setup.ps1/raw'] = (req, res) => { res.writeHead(200, { 'content-length': Buffer.byteLength(script) }); res.end(script); };
+  const dir = tmpDir(t);
+  const settings = createSettings(path.join(dir, 'settings.json'));
+  settings.save({ downloadPath: path.join(dir, 'dl'), installPath: path.join(dir, 'games') });
+  const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
+  t.after(() => library.close());
+  const installs = createInstalls({ settings, library, archive: createArchive({ base: fake.base }), gamesDir: dir, githubApi: 'http://127.0.0.1:1', gitlabApi: fake.base, codebergApi: fake.base });
+  const run = async (item) => { const r = installs.startPort({ item }); await installs.wait(r.jobs[0].id); return installs.get(r.jobs[0].id); };
+
+  const cb = await run({ id: 'cb', title: 'Tool', repository: 'me/tool', repositorySource: 'codeberg', entry: {} });
+  assert.deepEqual([cb.status, cb.error, cb.file], ['done', null, 'tool-win64.zip']);
+  assert.equal(cb.exePath, path.join(cb.installDir, 'tool.exe'));
+
+  const gl = await run({ id: 'gl', title: 'Wizard', repository: 'group/sub/wizard', repositorySource: 'gitlab', entry: {} });
+  assert.deepEqual([gl.status, gl.error, gl.file], ['done', null, 'Setup.ps1']);
+  assert.equal(gl.exePath, path.join(gl.installDir, 'Setup.ps1'));
+  assert.equal(fs.readFileSync(gl.exePath, 'utf8'), script);
 });
