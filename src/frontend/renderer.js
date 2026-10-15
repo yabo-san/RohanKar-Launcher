@@ -1448,7 +1448,9 @@ async function onDownload() {
       /\.(zip|7z|rar)$/i.test(f.name) ||
       (/\.exe$/i.test(f.name) && !files.some(ff => /\.(zip|7z|rar)$/i.test(ff.name)))
     );
-    if (!archives.length) { alert('No downloadable file found for this game.'); return; }
+    // No archive or exe: the uploader's own files download as they are (core's installableFiles)
+    if (!archives.length) archives = files.filter(f => f.source === 'original' && !/(_meta\.xml|_files\.xml|_meta\.sqlite|_reviews\.xml|__ia_thumb\.jpg|\.torrent)$/i.test(f.name));
+    if (!archives.length) { alert('This upload has no files of its own to download.'); return; }
   } catch (e) {
     alert('Failed to fetch file list: ' + e.message);
     return;

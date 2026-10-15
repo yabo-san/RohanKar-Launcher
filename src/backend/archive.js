@@ -180,11 +180,20 @@ function createArchive({ base = 'https://archive.org', log = () => {}, sleep = (
   return { base, search, searchWithRetry, fetchSource, item, fileList, reviews, downloadUrl, thumbUrl };
 }
 
-// Archives a user can install from an item's file list: zip/7z/rar, or a
-// bare .exe when the item has no archive at all
+// archive.org's own files in every item: its metadata, thumbnail and torrent
+const IA_OWN_FILE = /(_meta\.xml|_files\.xml|_meta\.sqlite|_reviews\.xml|__ia_thumb\.jpg|_archive\.torrent|\.torrent)$/i;
+const ARCHIVE_FILE = /\.(zip|7z|rar)$/i;
+
+// Files a user can install from an item's file list: zip/7z/rar (extracted),
+// else a bare .exe, else the uploader's own files as they are (download
+// only: an .iso, a .pkg, a folder of anything). Never archive.org's
+// derivatives or metadata.
 function installableFiles(files) {
-  const hasArchive = files.some(f => /\.(zip|7z|rar)$/i.test(f.name));
-  return files.filter(f => /\.(zip|7z|rar)$/i.test(f.name) || (!hasArchive && /\.exe$/i.test(f.name)));
+  const archives = files.filter(f => ARCHIVE_FILE.test(f.name));
+  if (archives.length) return archives;
+  const exes = files.filter(f => /\.exe$/i.test(f.name));
+  if (exes.length) return exes;
+  return files.filter(f => f.source === 'original' && !IA_OWN_FILE.test(f.name));
 }
 
-module.exports = { createArchive, installableFiles, accountUploads, SEARCH_PAGE_SIZE, SEARCH_MAX_ITEMS, SEARCH_RETRIES, UPLOADS_PAGE_SIZE };
+module.exports = { createArchive, installableFiles, ARCHIVE_FILE, accountUploads, SEARCH_PAGE_SIZE, SEARCH_MAX_ITEMS, SEARCH_RETRIES, UPLOADS_PAGE_SIZE };

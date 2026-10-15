@@ -1440,28 +1440,35 @@ async function installGame(v, { acceptHashChange = false } = {}) {
   if (state.downloads.has(identifier)) return;
   const list = await api.fetchFileList({ identifier });
   if (!list.ok || !list.files?.length) return toast(`Couldn't read the file list: ${list.error || 'no files'}`);
-  const files = list.files;
-  const archives = files.filter(f => /\.(zip|7z|rar)$/i.test(f.name) || (/\.exe$/i.test(f.name) && !files.some(x => /\.(zip|7z|rar)$/i.test(x.name))));
-  if (!archives.length) return toast('No downloadable file found for this game.');
-  // Largest archive is the game; multi-part picks stay in the classic UI for now
-  const file = archives.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0];
+  // What core says installs: archives (extracted), else an exe, else the
+  // uploader's own files, downloaded as they are
+  const installable = list.installable || [];
+  if (!installable.length) return toast('This upload has no files of its own to download.');
+  const plain = !installable.some(f => /\.(zip|7z|rar|exe)$/i.test(f.name));
+  // Largest archive is the game (multi-part picks stay in the classic UI for
+  // now); plain files all download
+  const picks = plain ? installable : [installable.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0]];
 
   const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', v.identifier] };
   state.downloads.set(identifier, dl);
   render();
-  const job = await api.install({
-    identifier,
-    fileName:     file.name,
-    acceptHashChange,
-    onStart:      (j) => { dl.jobId = j.id; },
-    onProgress:   (percent) => showProgress(identifier, percent),
-    onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
-  });
+  let job;
+  for (const file of picks) {
+    job = await api.install({
+      identifier,
+      fileName:     file.name,
+      acceptHashChange,
+      onStart:      (j) => { dl.jobId = j.id; },
+      onProgress:   (percent) => showProgress(identifier, percent),
+      onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
+    });
+    if (job.status !== 'done') break;
+  }
   state.downloads.delete(identifier);
   await reloadLibrary();
   render();
   if (job.hashChange) return (await confirmHashChange(job, getTitle(v))) && installGame(v, { acceptHashChange: true });
-  if (job.status === 'done') toast(`${getTitle(v)} is installed.`);
+  if (job.status === 'done') toast(plain ? `${getTitle(v)} is downloaded. Open its folder to use the files.` : `${getTitle(v)} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`);
 }
 

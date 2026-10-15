@@ -5,6 +5,10 @@ and the built-in port shelf (`catalog/curated-ports.json`). Anyone can add their
 no switch to turn on and no warning to click through. What you add loads next to what ships and
 looks the same.
 
+An upload made of zip, 7z or rar archives (what RohanKar expects) installs and plays from the
+launcher. Anything else (an .iso, a .pkg, loose files) still downloads into its folder, so the
+launcher works as a download client for any archive.org upload; Open folder gets to the files.
+
 ## Where you add your own
 
 | Source | Where it's added |

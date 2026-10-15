@@ -154,7 +154,9 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-zoo-tycoon-pstriple
 
 ### `GET /items/:id/files`
 
-The archive.org file list, its folders, and the files an install can use (zip/7z/rar, or a lone .exe).
+The archive.org file list, its folders, and the files an install can use: zip/7z/rar, else a lone
+.exe, else the uploader's own files (`source: "original"`, not archive.org's metadata or
+derivatives), which download as they are.
 
 ```sh
 curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/files
@@ -369,7 +371,8 @@ curl -X PUT http://127.0.0.1:7777/v1/collections/1/items/rk-e2e-halo-ce
 
 Start installing an archive.org item: `{ id, files? }`. One job per file. An item with several
 archives needs `files` (`409 choose_files` lists `choices`); each then extracts into its own
-`_GAME_<name>` folder, as the desktop app's collection picker does. Returns `202` at once; follow
+`_GAME_<name>` folder, as the desktop app's collection picker does. Files that aren't archives are
+copied into the item's folder as they are, so any upload can be downloaded. Returns `202` at once; follow
 progress on `/events` or poll `/installs/:id`.
 
 A catalog port (`quiver:` id) is one job, `step: "binary"`: it takes the latest non-draft,
