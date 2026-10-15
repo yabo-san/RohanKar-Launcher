@@ -32,6 +32,39 @@ test('pickAsset: pattern, then filter, then a Windows-looking build, 64-bit firs
   assert.match(ports.pickAsset(pd, { pattern: '(' }).error, /Bad asset pattern/);
 });
 
+test('pickAsset: a PowerShell script only when there is no Windows build', () => {
+  assert.equal(ports.pickAsset(['Setup.ps1', 'notes.txt'].map(asset)).asset.name, 'Setup.ps1');
+  assert.equal(ports.pickAsset(['Setup.ps1', 'game-win64.zip'].map(asset)).asset.name, 'game-win64.zip');
+});
+
+test('parseRepo: owner/repo, or a link to the repo on GitHub, GitLab or Codeberg', () => {
+  const p = ports.parseRepo;
+  assert.deepEqual(p('me/port'), { repository: 'me/port', repositorySource: 'github' });
+  assert.deepEqual(p('me/port', 'codeberg'), { repository: 'me/port', repositorySource: 'codeberg' });
+  assert.deepEqual(p('me/port', 'sourceforge'), { repository: 'me/port', repositorySource: 'github' });
+  assert.deepEqual(p('https://github.com/me/port/releases/latest'), { repository: 'me/port', repositorySource: 'github' });
+  assert.deepEqual(p(' https://codeberg.org/testamentenjoyment/SpikeOut-Installer '), { repository: 'testamentenjoyment/SpikeOut-Installer', repositorySource: 'codeberg' });
+  assert.deepEqual(p('codeberg.org/me/port.git'), { repository: 'me/port', repositorySource: 'codeberg' });
+  assert.deepEqual(p('https://gitlab.com/group/sub/port/-/releases'), { repository: 'group/sub/port', repositorySource: 'gitlab' });
+  for (const bad of ['', 'not-a-repo', 'https://example.com/me/port', 'https://github.com/me', null]) assert.equal(p(bad), null, String(bad));
+});
+
+test('portTraits: a Codeberg repo links to codeberg.org', () => {
+  const t = ports.portTraits({ repository: 'me/port', repositorySource: 'codeberg' });
+  assert.deepEqual([t.repositorySource, t.repositoryUrl], ['codeberg', 'https://codeberg.org/me/port']);
+  assert.equal(ports.portTraits({ repository: 'me/port', repositorySource: 'nope' }).repositoryUrl, 'https://github.com/me/port');
+});
+
+test('scriptFromContents: the one top-level .ps1, or the one named install/setup', () => {
+  const f = (name, type = 'file') => ({ name, type, sha: 'abcdef0123456789', download_url: `https://x/raw/${name}` });
+  assert.deepEqual(ports.scriptFromContents([f('README.md'), f('resources', 'dir'), f('SpikeOut.ps1')]),
+    { tag_name: 'script-abcdef012345', assets: [{ name: 'SpikeOut.ps1', browser_download_url: 'https://x/raw/SpikeOut.ps1' }] });
+  assert.equal(ports.scriptFromContents([f('a.ps1'), f('Install.ps1')]).assets[0].name, 'Install.ps1');
+  assert.equal(ports.scriptFromContents([f('a.ps1'), f('b.ps1')]), null, 'two scripts, neither named install: no guess');
+  assert.equal(ports.scriptFromContents([f('README.md')]), null);
+  assert.equal(ports.scriptFromContents({ message: 'Not Found' }), null);
+});
+
 test('releasesFromGitlab: GitLab\'s releases in GitHub\'s shape, asset links only', () => {
   const gitlab = require('../fixtures/gitlab/starfox64recomp-releases.json');
   const [r] = ports.releasesFromGitlab(gitlab);

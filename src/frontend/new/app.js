@@ -262,7 +262,7 @@ function portFromItem(it, cat) {
     role:               it.role || null,
     description:        it.description || '',
     repositoryUrl:      it.repositoryUrl || null,
-    host:               it.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub',
+    host:               ({ gitlab: 'GitLab', codeberg: 'Codeberg' })[it.repositorySource] || 'GitHub',
     sourceLabel:        cat.curated ? 'y4bo curated list' : cat.shelf,
     catalogUrl:         cat.url,
   };
@@ -1529,9 +1529,9 @@ function viewAddRepo() {
     api.getRepos().then(r => { f.repos = r; const el = $('#repo-list'); if (el) el.innerHTML = repoListHtml(); }).catch(() => {});
   }
   const off = !state.settings.allowAdditionalSources;
-  return `<div class="editor"><p class="lede">A GitHub repo with Windows releases. It shows on Your ports, and Install takes its latest release's build. Any game data it needs is up to you.</p>
+  return `<div class="editor"><p class="lede">A GitHub, GitLab or Codeberg repo with Windows releases, or one that is a PowerShell install script. It shows on Your ports, and Install takes its latest release's build (or the script, which Play runs). Any game data it needs is up to you.</p>
     ${off ? '<div class="notice"><div class="grow">Turn on <b>Allow additional sources</b> in Settings to add your own repos.</div></div>' : ''}
-    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo" spellcheck="false"></div>
+    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo, or a link to the repo" spellcheck="false"></div>
       <div><label for="repo-name">Name</label><input type="text" id="repo-name" data-repo-field="name" value="${esc(f.name)}" placeholder="Optional; the repo's name otherwise" spellcheck="false"></div></div>
     <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save" ${off ? 'disabled' : ''}>Add</button></div>
     <div id="repo-list">${repoListHtml()}</div></div>`;
@@ -1547,7 +1547,7 @@ async function repoSave() {
   // Read from the inputs: they are what the user sees
   const repo = ($('#repo-repository')?.value || '').trim();
   const name = ($('#repo-name')?.value || '').trim();
-  if (!repo) return toast('Type the repository as owner/repo.');
+  if (!repo) return toast('Type the repository as owner/repo, or paste a link to it.');
   const r = await api.saveRepo(repo, name ? { name } : {});
   if (!r.ok) return toast(`Couldn't add it: ${r.error}`, 6000);
   toast(`Added ${r.entry.name || repo}. It's on Your ports, unless a shelf already lists it.`);

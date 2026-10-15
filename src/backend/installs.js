@@ -2,7 +2,7 @@
 /**
  * Install engine: download an archive.org file, extract it, find its
  * executable, record it in library.db. Ports (catalog items) take the latest
- * GitHub or GitLab release's Windows build (ports.js); game data is the user's job.
+ * GitHub, GitLab or Codeberg release's Windows build (ports.js); game data is the user's job.
  * Files from additional sources are checked against the user's sha1, or
  * pinned on first install (pins); a changed file stops with hashChange set.
  */
@@ -19,9 +19,10 @@ const { checkPin } = require('./user-sources');
 const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
 const GITHUB_API = 'https://api.github.com';
 const GITLAB_API = 'https://gitlab.com/api/v4';
+const CODEBERG_API = 'https://codeberg.org/api/v1';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API, codebergApi = CODEBERG_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -248,20 +249,27 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { ok: true, jobs: [view(job)] };
   }
 
-  // The newest published release, from GitHub or GitLab (repositorySource "gitlab")
+  // The newest published release, from GitHub, GitLab or Codeberg (repositorySource)
   async function latestRelease(item) {
-    const gitlab = item.repositorySource === 'gitlab' || item.entry?.repositorySource === 'gitlab';
+    const source = ports.sourceOf(item.repositorySource || item.entry?.repositorySource);
     const repository = item.repository;
-    const r = gitlab
-      ? await getText(ports.gitlabReleasesUrl(gitlabApi, repository), { kind: 'gitlab', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/json' } })
-      : await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
-        kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
-      });
+    const json = (kind, url, Accept = 'application/json') => getText(url, { kind, log: netLog, timeoutMs: 15000, headers: { Accept } });
+    const r = source === 'gitlab' ? await json('gitlab', ports.gitlabReleasesUrl(gitlabApi, repository))
+      : source === 'codeberg' ? await json('codeberg', ports.codebergReleasesUrl(codebergApi, repository))
+      : await json('github', `${githubApi}/repos/${repository}/releases?per_page=30`, 'application/vnd.github+json');
     if (r.status !== 200) throw new Error(`Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})`);
     const list = JSON.parse(r.body);
-    const release = ports.pickRelease(gitlab ? ports.releasesFromGitlab(list) : list);
+    const release = ports.pickRelease(source === 'gitlab' ? ports.releasesFromGitlab(list) : list);
+    const entry = item.entry || {};
+    if (release && ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter }).asset) return { release, source };
+    // No release with a build: a repo that is an install script (its top-level .ps1)
+    if (source !== 'gitlab') {
+      const c = await json(source, ports.contentsUrl(source === 'codeberg' ? codebergApi : githubApi, repository));
+      const script = c.status === 200 ? ports.scriptFromContents(JSON.parse(c.body)) : null;
+      if (script) return { release: script, source };
+    }
     if (!release) throw new Error(`${repository} has no published release`);
-    return { release, source: gitlab ? 'gitlab' : 'github' };
+    return { release, source };
   }
 
   // The latest release's Windows build, unpacked into the port's folder
@@ -311,7 +319,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     // Record it against the catalog item, keeping its library row
     if (settings.load().deleteAfterInstall) fs.rmSync(bin.filePath, { force: true });
     disk.unblockDirectory(dest, { platform, log });
-    const exes = disk.findExes(dest);
+    // An install script is what Play runs
+    const exes = ports.SCRIPT.test(pick.asset.name) ? [path.join(dest, path.basename(bin.filePath))] : disk.findExes(dest);
     const exePath = exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     update(job, { status: 'done', step: null, installDir: dest, exePath });
@@ -351,4 +360,4 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
 }
 
-module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API, GITLAB_API };
+module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API, GITLAB_API, CODEBERG_API };
