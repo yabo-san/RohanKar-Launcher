@@ -1,0 +1,10 @@
+name: chun dump (temporary)
+on:
+  push:
+    branches: [ci/chun-dump]
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 scripts/chun-dump.py
