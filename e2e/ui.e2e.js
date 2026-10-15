@@ -709,11 +709,21 @@ test('Add a GitHub repo: it lands on Your ports, and can be removed', async () =
   await expect(bookmark.locator('.play-btn')).toHaveCount(0);
   await bookmark.click({ button: 'right' });
   await expect(page.locator('#ctxmenu .mi', { hasText: 'View on Codeberg' })).toBeVisible();
-  await expect(page.locator('#ctxmenu .mi', { hasText: 'Download' })).toHaveCount(0);
+  await expect(page.locator('#ctxmenu .mi', { hasText: /^Download$/ })).toHaveCount(0);
+  await expect(page.locator('#ctxmenu .mi', { hasText: 'Download Releases Instead' })).toBeVisible();
   await page.keyboard.press('Escape');
   await bookmark.click();
   await expect(page.locator('#detail [data-href="https://codeberg.org/someone/refined"]', { hasText: 'Open on Codeberg' })).toBeVisible();
   await expect(page.locator('#btn-install-port')).toHaveCount(0);
+  // Either way, any time: back to downloading its releases, and a bookmark again
+  await page.locator('#detail [data-detail-menu]').click();
+  await page.locator('#ctxmenu .mi', { hasText: 'Download Releases Instead' }).click();
+  await expect(page.locator('#btn-install-port')).toBeVisible();
+  await page.locator('#detail [data-detail-menu]').click();
+  await page.locator('#ctxmenu .mi', { hasText: 'Keep as Bookmark' }).click();
+  await expect(page.locator('#detail [data-href="https://codeberg.org/someone/refined"]', { hasText: 'Open on Codeberg' })).toBeVisible();
+  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'catalogs', 'repos.local.json'), 'utf8')).find(r => r.repository === 'someone/refined'))
+    .toEqual({ repository: 'someone/refined', repositorySource: 'codeberg', bookmark: true });
 
   await page.locator('#nav-add-repo').click();
   await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();

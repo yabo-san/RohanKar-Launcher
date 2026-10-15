@@ -375,7 +375,8 @@ test('a Codeberg install script added by its link installs, and Play runs it', a
   state.routes[`/repos/${repo}/contents`] = (req, res) => { res.writeHead(200); res.end('[]'); };
   const again = await call('POST', '/installs', { id: item.id });
   await backend.installs.wait(again.body.installs[0].id);
-  assert.equal(backend.installs.get(again.body.installs[0].id).error, `${repo} has no published release`);
+  const none = backend.installs.get(again.body.installs[0].id);
+  assert.deepEqual([none.error, none.noDownload], [`${repo} has no published release`, true], 'nothing to download: the app offers a bookmark');
 });
 
 test('settings and Playnite export', async (t) => {

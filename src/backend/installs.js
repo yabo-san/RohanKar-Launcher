@@ -138,6 +138,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
     ...(job.hashChange ? { hashChange: job.hashChange } : {}),
+    ...(job.noDownload ? { noDownload: true } : {}),
     startedAt: job.startedAt, finishedAt: job.finishedAt,
   });
 
@@ -246,9 +247,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     };
     jobs.set(job.id, job);
     emit('install', view(job));
-    job.done = runPortJob(job, item).catch(e => update(job, { status: 'error', error: e.message }));
+    job.done = runPortJob(job, item).catch(e => update(job, { status: 'error', error: e.message, ...(e.noDownload ? { noDownload: true } : {}) }));
     return { ok: true, jobs: [view(job)] };
   }
+
+  // The repo has nothing to download (no release, no Windows build, no script):
+  // the user can keep it as a bookmark instead
+  const nothingToDownload = (message) => Object.assign(new Error(message), { noDownload: true });
 
   // The newest published release, from GitHub, GitLab or Codeberg (repositorySource)
   async function latestRelease(item) {
@@ -271,7 +276,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       const script = ports.scriptFromContents(source === 'gitlab' ? ports.contentsFromGitlab(files, gitlabApi, repository) : files);
       if (script) return { release: script, source };
     }
-    if (!release) throw new Error(`${repository} has no published release`);
+    if (!release) throw nothingToDownload(`${repository} has no published release`);
     return { release, source };
   }
 
@@ -287,7 +292,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     update(job, { status: 'downloading', step: 'binary', percent: 0 });
     const { release, source } = await latestRelease(item);
     const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter });
-    if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
+    if (!pick.asset) throw nothingToDownload(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
     update(job, { file: pick.asset.name });
     const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
     if (job.status === 'cancelled') return;
