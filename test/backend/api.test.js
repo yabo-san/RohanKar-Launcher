@@ -362,6 +362,15 @@ test('a Codeberg install script added by its link installs, and Play runs it', a
   assert.equal(played.body.ok, true);
   assert.deepEqual([ran, opened], [[job.exePath], []]);
 
+  // A bookmark: kept as a link to its page, nothing to install
+  assert.deepEqual((await call('PUT', `/repos/${encodeURIComponent('https://gitlab.com/kh/refined')}`, { bookmark: true })).body,
+    { repository: 'kh/refined', repositorySource: 'gitlab', bookmark: true });
+  assert.equal((await call('PUT', `/repos/${encodeURIComponent('me/x')}`, { bookmark: 'yes' })).status, 400);
+  const kh = (await call('GET', '/catalogs/local/items')).body.items.find(i => i.repository === 'kh/refined');
+  assert.deepEqual([kh.bookmark, kh.repositoryUrl], [true, 'https://gitlab.com/kh/refined']);
+  const refused = await call('POST', '/installs', { id: kh.id });
+  assert.equal(refused.body.error, 'bookmark');
+
   // No release and no script: say so
   state.routes[`/repos/${repo}/contents`] = (req, res) => { res.writeHead(200); res.end('[]'); };
   const again = await call('POST', '/installs', { id: item.id });

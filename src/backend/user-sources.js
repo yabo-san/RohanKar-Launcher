@@ -50,6 +50,7 @@ function validateGithub(e) {
   if (e.repositorySource != null && !Object.hasOwn(HOSTS, e.repositorySource)) errs.push('repositorySource must be "github", "gitlab" or "codeberg"');
   else if (!parseRepo(e.repository, e.repositorySource)) errs.push('repository must be owner/repo, or a link to a GitHub, GitLab or Codeberg repo');
   for (const k of ['name', 'folderName']) optString(e, k, errs);
+  if (e.bookmark != null && typeof e.bookmark !== 'boolean') errs.push('bookmark must be true or false');
   if (e.assetPattern != null) {
     if (typeof e.assetPattern !== 'string') errs.push('assetPattern must be a string');
     else { try { toRegExp(e.assetPattern); } catch (err) { errs.push(`assetPattern: ${err.message}`); } }

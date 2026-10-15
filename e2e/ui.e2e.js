@@ -354,7 +354,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeVisible();
   // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options',
-    'Remove from Library', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Copy Link', 'Delete']);
+    'Remove from Library', 'Properties', 'Go to Shelf', 'View on GitHub', 'Copy Link', 'Delete']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
   await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
   await expect(menu.locator('.has-sub > .mi .chev')).toBeVisible();
@@ -698,9 +698,27 @@ test('Add a GitHub repo: it lands on Your ports, and can be removed', async () =
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
   await expect(page.locator('.port-card', { hasText: 'Banjo Fork' }).locator('.user-badge')).toBeVisible();
 
+  // A bookmark by its Codeberg link: its page opens instead of installing, and right-click shows it too
+  await page.locator('#nav-add-repo').click();
+  await page.locator('#repo-repository').fill('https://codeberg.org/someone/refined');
+  await page.locator('label[for="repo-bookmark"]').click();
+  await page.locator('#btn-add-repo').click();
+  await expect(page.locator('.repo-row', { hasText: 'someone/refined · bookmark' })).toBeVisible();
+  await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
+  const bookmark = page.locator('.port-card', { hasText: 'someone/refined' });
+  await expect(bookmark.locator('.play-btn')).toHaveCount(0);
+  await bookmark.click({ button: 'right' });
+  await expect(page.locator('#ctxmenu .mi', { hasText: 'View on Codeberg' })).toBeVisible();
+  await expect(page.locator('#ctxmenu .mi', { hasText: 'Download' })).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await bookmark.click();
+  await expect(page.locator('#detail [data-href="https://codeberg.org/someone/refined"]', { hasText: 'Open on Codeberg' })).toBeVisible();
+  await expect(page.locator('#btn-install-port')).toHaveCount(0);
+
   await page.locator('#nav-add-repo').click();
   await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();
   await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toHaveCount(0);
+  await page.locator('.repo-row', { hasText: 'someone/refined' }).locator('[data-action="repo-remove"]').click();
 });
 
 test('the announcement shows once and stays dismissed', async () => {

@@ -164,6 +164,8 @@ function releaseRoot(dir) {
 // What a catalog entry's tags and source say about installing it:
 //   sourceOnly:     "source only", a decompilation with no playable build; nothing to install
 //   workInProgress: "work in progress", installs if a release exists
+//   bookmark:       a repo the user keeps as a link to its page (bookmark: true): its
+//                   install is theirs to do (KH ReFined), so there is nothing to install
 //   role:           "engine" or "launcher", a plain app the user brings data to (its
 //                   description says what); no wiring between them
 //   repositorySource, repositoryUrl: "gitlab" or "codeberg" as the entry says, else
@@ -175,6 +177,7 @@ function portTraits(entry = {}) {
   return {
     sourceOnly:     hasTag(tags, 'source only'),
     workInProgress: hasTag(tags, 'work in progress'),
+    bookmark:       entry.bookmark === true,
     role:           hasTag(tags, 'engine') ? 'engine' : hasTag(tags, 'launcher') ? 'launcher' : null,
     repositorySource: source,
     repositoryUrl:  typeof entry.repository === 'string' && entry.repository.trim() ? `https://${HOSTS[source]}/${entry.repository.trim()}` : null,

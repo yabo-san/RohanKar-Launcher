@@ -69,7 +69,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // repos.local.json. A repos list from before collisions were parked
   // (collisions.local.json) carries over once, keeping only the repo fields.
   const reposFile = path.join(dir, 'repos.local.json');
-  const REPO_FIELDS = ['repository', 'repositorySource', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
+  const REPO_FIELDS = ['repository', 'repositorySource', 'bookmark', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
   const pickRepo = (c) => Object.fromEntries(REPO_FIELDS.filter(k => c[k] != null).map(k => [k, c[k]]));
   function localList() {
     if (!fs.existsSync(reposFile)) {
@@ -92,8 +92,9 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     const repo = entry && typeof entry === 'object' ? parseRepo(entry.repository, entry.repositorySource) : null;
     if (!repo) errors.push('repository must be owner/repo');
     for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (entry?.[k] != null && typeof entry[k] !== 'string') errors.push(`${k} must be a string`);
+    if (entry?.bookmark != null && typeof entry.bookmark !== 'boolean') errors.push('bookmark must be true or false');
     if (errors.length) return { ok: false, errors };
-    const clean = pickRepo({ ...entry, ...repo, repositorySource: repo.repositorySource === 'github' ? null : repo.repositorySource });
+    const clean = pickRepo({ ...entry, ...repo, repositorySource: repo.repositorySource === 'github' ? null : repo.repositorySource, bookmark: entry.bookmark || null });
     const key = repoKey(clean.repository);
     writeJson(reposFile, [...localList().filter(c => repoKey(c.repository) !== key), clean]);
     return { ok: true, entry: clean };
@@ -171,6 +172,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return [...userLayers().map.values()].map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
       ...(c.repositorySource ? { repositorySource: c.repositorySource } : {}),
+      ...(c.bookmark === true ? { bookmark: true } : {}),
       ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
       ...(c.assetPattern ? { assetPattern: c.assetPattern } : {}),

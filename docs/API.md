@@ -245,8 +245,8 @@ URL-encoded (`owner%2Frepo`).
 
 | route | does |
 | --- | --- |
-| `GET /repos` | `{ repos: [{ repository, repositorySource?, name?, folderName?, releaseAssetFilter? }] }` |
-| `PUT /repos/:repo` | Adds one (replacing any for that repo). `:repo` is `owner/repo` (GitHub, or `repositorySource` `"gitlab"`/`"codeberg"` in the body) or a link to the repo on GitHub, GitLab or Codeberg; unknown fields are dropped; `400 bad_repo` names every problem. A repo with no Windows release whose top level holds one PowerShell script (or one named install/setup) installs that script, and launching it runs it in PowerShell |
+| `GET /repos` | `{ repos: [{ repository, repositorySource?, bookmark?, name?, folderName?, releaseAssetFilter? }] }` |
+| `PUT /repos/:repo` | Adds one (replacing any for that repo). `:repo` is `owner/repo` (GitHub, or `repositorySource` `"gitlab"`/`"codeberg"` in the body) or a link to the repo on GitHub, GitLab or Codeberg; unknown fields are dropped; `400 bad_repo` names every problem. A repo with no Windows release whose top level holds one PowerShell script (or one named install/setup) installs that script, and launching it runs it in PowerShell. `bookmark: true` keeps the repo as a link to its page: nothing installs (`POST /installs` answers `bookmark`) |
 | `DELETE /repos/:repo` | Removes it (`204`), `404` if it isn't there |
 
 ```sh
