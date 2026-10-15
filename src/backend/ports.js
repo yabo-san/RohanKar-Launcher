@@ -1,8 +1,10 @@
 'use strict';
 /**
  * Port installs, the pieces that aren't downloading or extracting: which
- * GitHub or GitLab release and asset to take, and laying the release down. A port
- * installs its release binary only; game data is the user's job.
+ * GitHub, GitLab or Codeberg release and asset to take, and laying the release
+ * down. A port installs its release binary only; game data is the user's job.
+ * A repo whose download is a PowerShell script (an install wizard) installs
+ * that script, and Play runs it.
  */
 const fs     = require('fs');
 const path   = require('path');
@@ -13,6 +15,58 @@ const NOT_WINDOWS = /linux|macos|mac-|[-_.]mac\b|osx|darwin|android|ios\b|appima
 const LOOKS_WINDOWS = /win|windows|x64|x86_64|amd64|\.exe$/i;
 const PREFER_64 = /x64|x86_64|amd64|win64/i;
 const NOT_64 = /x86(?!_64)|win32|arm|i686/i;
+const SCRIPT = /\.ps1$/i;
+
+// Where a repository lives (repositorySource), and its web host
+const HOSTS = Object.freeze({ github: 'github.com', gitlab: 'gitlab.com', codeberg: 'codeberg.org' });
+const sourceOf = (s) => (Object.hasOwn(HOSTS, s) ? s : 'github');
+
+// What the user typed in Add a repo: owner/repo (on GitHub unless source says), or a link to the
+// repo on GitHub, GitLab (group/subgroup/repo too) or Codeberg, any page of
+// it. { repository, repositorySource } or null.
+const OWNER_REPO = /^[\w.-]+\/[\w.-]+$/;
+function parseRepo(input, source = 'github') {
+  const s = String(input || '').trim();
+  // A GitLab project path may have subgroups: group/subgroup/repo
+  if (OWNER_REPO.test(s) || (sourceOf(source) === 'gitlab' && /^[\w.-]+(\/[\w.-]+)+$/.test(s))) {
+    return { repository: s.replace(/\.git$/i, ''), repositorySource: sourceOf(source) };
+  }
+  let u;
+  try { u = new URL(/^[a-z]+:\/\//i.test(s) ? s : `https://${s}`); } catch { return null; }
+  const host = u.hostname.toLowerCase().replace(/^www\./, '');
+  const repositorySource = Object.keys(HOSTS).find(k => HOSTS[k] === host);
+  if (!repositorySource) return null;
+  let parts = u.pathname.split('/').filter(Boolean);
+  // GitLab pages hang off /-/ (…/repo/-/releases); GitHub and Codeberg repos are owner/repo
+  parts = repositorySource === 'gitlab' ? parts.slice(0, parts.indexOf('-') < 0 ? parts.length : parts.indexOf('-')) : parts.slice(0, 2);
+  if (parts.length < 2 || !parts.every(p => /^[\w.-]+$/.test(p))) return null;
+  return { repository: parts.join('/').replace(/\.git$/i, ''), repositorySource };
+}
+
+// Codeberg (Forgejo) answers in GitHub's shape: tag_name, draft, prerelease,
+// assets[].browser_download_url
+const codebergReleasesUrl = (api, repository) => `${api}/repos/${repository}/releases?limit=30`;
+// A repo's top-level files (GitHub and Codeberg alike: name, type, sha, download_url)
+const contentsUrl = (api, repository) => `${api}/repos/${repository}/contents`;
+
+// GitLab's top-level tree in that shape; a file's download is its raw contents on the default branch
+const gitlabTreeUrl = (api, repository) => `${api}/projects/${encodeURIComponent(repository)}/repository/tree`;
+function contentsFromGitlab(list, api, repository) {
+  return (Array.isArray(list) ? list : []).filter(f => f && f.name).map(f => ({
+    name: f.name, type: f.type === 'blob' ? 'file' : 'dir', sha: f.id,
+    download_url: `${api}/projects/${encodeURIComponent(repository)}/repository/files/${encodeURIComponent(f.path || f.name)}/raw?ref=HEAD`,
+  }));
+}
+
+// A repo with no Windows release whose top level holds a PowerShell script,
+// like an install wizard: that script, as a release asset, or null. Several
+// scripts: the one named install/setup, else none (we can't tell which).
+function scriptFromContents(list) {
+  const ps1 = (Array.isArray(list) ? list : []).filter(f => f && f.type === 'file' && SCRIPT.test(f.name || '') && f.download_url);
+  const named = ps1.filter(f => /install|setup/i.test(f.name));
+  const pick = ps1.length === 1 ? ps1[0] : named.length === 1 ? named[0] : null;
+  return pick ? { tag_name: `script-${String(pick.sha || '').slice(0, 12)}`, assets: [{ name: pick.name, browser_download_url: pick.download_url }] } : null;
+}
 
 // The newest release that is neither a draft nor a prerelease, from the
 // GitHub API's /releases list (newest first)
@@ -61,8 +115,9 @@ function toRegExp(pattern) {
 // Picks the Windows asset of a release.
 //   pattern: an assetPattern (a regex), wins when set
 //   filter:  Quiver's releaseAssetFilter, a substring of the asset name
-// Otherwise any asset that looks like a Windows build. Among several, an
-// archive or exe beats anything else and 64-bit beats 32-bit/ARM.
+// Otherwise any asset that looks like a Windows build, or failing that a
+// PowerShell script. Among several, an archive or exe beats a script, a script
+// beats anything else, and 64-bit beats 32-bit/ARM.
 // Returns { asset } or { error, names }.
 function pickAsset(assets, { pattern = null, filter = null } = {}) {
   const all = (Array.isArray(assets) ? assets : []).filter(a => a && a.name && a.browser_download_url);
@@ -75,9 +130,11 @@ function pickAsset(assets, { pattern = null, filter = null } = {}) {
     pool = all.filter(a => a.name.toLowerCase().includes(String(filter).toLowerCase()));
   } else {
     pool = all.filter(a => LOOKS_WINDOWS.test(a.name) && !NOT_WINDOWS.test(a.name));
+    if (!pool.length) pool = all.filter(a => SCRIPT.test(a.name));
   }
   const usable = pool.filter(a => ARCHIVE_EXT.test(a.name) || /\.exe$/i.test(a.name));
-  const ranked = (usable.length ? usable : pool).slice().sort((a, b) => rank(b.name) - rank(a.name));
+  const scripts = pool.filter(a => SCRIPT.test(a.name));
+  const ranked = (usable.length ? usable : scripts.length ? scripts : pool).slice().sort((a, b) => rank(b.name) - rank(a.name));
   if (!ranked.length) return { error: 'No Windows build in the latest release', names: all.map(a => a.name) };
   return { asset: ranked[0] };
 }
@@ -107,22 +164,26 @@ function releaseRoot(dir) {
 // What a catalog entry's tags and source say about installing it:
 //   sourceOnly:     "source only", a decompilation with no playable build; nothing to install
 //   workInProgress: "work in progress", installs if a release exists
+//   bookmark:       a repo the user keeps as a link to its page (bookmark: true): its
+//                   install is theirs to do (KH ReFined), so there is nothing to install
 //   role:           "engine" or "launcher", a plain app the user brings data to (its
 //                   description says what); no wiring between them
-//   repositorySource, repositoryUrl: "gitlab" for repositorySource "gitlab", else "github",
-//                   and the project page there
+//   repositorySource, repositoryUrl: "gitlab" or "codeberg" as the entry says, else
+//                   "github", and the project page there
 const hasTag = (tags, tag) => tags.some(t => String(t).trim().toLowerCase() === tag);
 function portTraits(entry = {}) {
   const tags = Array.isArray(entry.tags) ? entry.tags : [];
-  const source = entry.repositorySource === 'gitlab' ? 'gitlab' : 'github';
+  const source = sourceOf(entry.repositorySource);
   return {
     sourceOnly:     hasTag(tags, 'source only'),
     workInProgress: hasTag(tags, 'work in progress'),
+    bookmark:       entry.bookmark === true,
     role:           hasTag(tags, 'engine') ? 'engine' : hasTag(tags, 'launcher') ? 'launcher' : null,
     repositorySource: source,
-    repositoryUrl:  typeof entry.repository === 'string' && entry.repository.trim() ? `https://${source}.com/${entry.repository.trim()}` : null,
+    repositoryUrl:  typeof entry.repository === 'string' && entry.repository.trim() ? `https://${HOSTS[source]}/${entry.repository.trim()}` : null,
   };
 }
 
 module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits,
-  releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, ARCHIVE_EXT };
+  releasesFromGitlab, gitlabReleasesUrl, codebergReleasesUrl, contentsUrl, gitlabTreeUrl, contentsFromGitlab, scriptFromContents,
+  parseRepo, sourceOf, HOSTS, sniffArchiveExt, ARCHIVE_EXT, SCRIPT };

@@ -8,14 +8,14 @@
 const fs   = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const { createSettings } = require('./settings');
 const { createNetLog }   = require('./netlog');
 const { createLibrary }  = require('./library');
 const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
-const { createInstalls, GITHUB_API, GITLAB_API } = require('./installs');
+const { createInstalls, GITHUB_API, GITLAB_API, CODEBERG_API } = require('./installs');
 const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
@@ -53,6 +53,14 @@ function defaultHost(platform = process.platform) {
       execFile(opener, [p], (err) => resolve(err ? err.message : ''));
     }),
     revealPath: (p) => { execFile(opener, [p]); },
+    // An install script (.ps1) in a console window of its own, from its folder:
+    // opening one only edits it. Windows PowerShell 5.1 ships with Windows.
+    runScript: (p) => new Promise((resolve) => {
+      if (platform !== 'win32') return resolve('PowerShell scripts run on Windows');
+      const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', p], { cwd: path.dirname(p), detached: true, stdio: 'ignore' });
+      child.once('error', (e) => resolve(e.message));
+      child.once('spawn', () => { child.unref(); resolve(''); });
+    }),
     trashItem:      unsupported('Moving files to the trash'),
     chooseFolder:   unsupported('Choosing a folder'),
     openExternal:   unsupported('Opening a browser'),
@@ -71,6 +79,7 @@ function createBackend({
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
   gitlabApi = GITLAB_API,
+  codebergApi = CODEBERG_API,
   featuredUrl = FEATURED_URL,
   curatedPortsUrl = CURATED_PORTS_URL,
   announcementUrl = ANNOUNCEMENT_URL,
@@ -158,7 +167,7 @@ function createBackend({
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, art: readArt(appDir, log), log: netlog.log });
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
-  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi });
+  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi, codebergApi });
   const catalogs = createCatalogs({
     dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
     curatedUrl: curatedPortsUrl, curatedFile: path.join(appDir, 'catalog', 'curated-ports.json'),
@@ -173,7 +182,7 @@ function createBackend({
     try {
       // Unblock on every launch: covers games installed before unblocking existed
       disk.unblockDirectory(library.get(identifier)?.install_dir || path.dirname(exePath), { platform, log });
-      const errMsg = await os.openPath(exePath);
+      const errMsg = /\.ps1$/i.test(exePath) ? await os.runScript(exePath) : await os.openPath(exePath);
       if (errMsg) return { ok: false, error: errMsg };
       library.markPlayed(identifier);
       return { ok: true };

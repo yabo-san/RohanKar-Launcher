@@ -41,8 +41,8 @@ node src/backend/main.js --data-dir ./.launcher-data --port 7777
 ```
 
 `LAUNCHER_TOKEN` fixes the token, `LAUNCHER_PORT` and `LAUNCHER_DATA_DIR` the others;
-`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api` and `--gitlab-api` point
-archive.org, the catalog fetches and the GitHub and GitLab APIs elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
+`--archive-base`, `--overrides-url`, `--uploaders-url`, `--github-api`, `--gitlab-api` and `--codeberg-api` point
+archive.org, the catalog fetches and the GitHub, GitLab and Codeberg APIs elsewhere (fixtures). Without Electron, the endpoints that need the desktop app (dialogs,
 the Recycle Bin, the window, the browser, Steam, the updater) answer `501`.
 
 The examples below use `curl -H "Authorization: Bearer $T"`, shortened to `curl`.
@@ -245,8 +245,8 @@ URL-encoded (`owner%2Frepo`).
 
 | route | does |
 | --- | --- |
-| `GET /repos` | `{ repos: [{ repository, name?, folderName?, releaseAssetFilter? }] }` |
-| `PUT /repos/:repo` | Adds one (replacing any for that repo); unknown fields are dropped; `400 bad_repo` names every problem |
+| `GET /repos` | `{ repos: [{ repository, repositorySource?, bookmark?, name?, folderName?, releaseAssetFilter? }] }` |
+| `PUT /repos/:repo` | Adds one (replacing any for that repo). `:repo` is `owner/repo` (GitHub, or `repositorySource` `"gitlab"`/`"codeberg"` in the body) or a link to the repo on GitHub, GitLab or Codeberg; unknown fields are dropped; `400 bad_repo` names every problem. A repo with no Windows release whose top level holds one PowerShell script (or one named install/setup) installs that script, and launching it runs it in PowerShell. `bookmark: true` keeps the repo as a link to its page: nothing installs (`POST /installs` answers `bookmark`). A port install that finds nothing to download (no release, no Windows build, no script) ends with `noDownload: true` on the job, so the app can offer the bookmark |
 | `DELETE /repos/:repo` | Removes it (`204`), `404` if it isn't there |
 
 ```sh

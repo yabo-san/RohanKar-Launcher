@@ -19,12 +19,11 @@ const fs     = require('fs');
 const path   = require('path');
 const { getText } = require('./net');
 const { additionalAllowed } = require('./user-sources');
-const { portTraits } = require('./ports');
+const { portTraits, parseRepo } = require('./ports');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 const CURATED_ID = 'curated';
 const CURATED_PORTS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/curated-ports.json';
-const REPO = /^[\w.-]+\/[\w.-]+$/;
 
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
 
@@ -66,11 +65,11 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     fs.renameSync(p + '.tmp', p);
   };
 
-  // ─── The user's own GitHub repos ──────────────────────────────────────────
+  // ─── The user's own repos (GitHub, GitLab or Codeberg) ────────────────────
   // repos.local.json. A repos list from before collisions were parked
   // (collisions.local.json) carries over once, keeping only the repo fields.
   const reposFile = path.join(dir, 'repos.local.json');
-  const REPO_FIELDS = ['repository', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
+  const REPO_FIELDS = ['repository', 'repositorySource', 'bookmark', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
   const pickRepo = (c) => Object.fromEntries(REPO_FIELDS.filter(k => c[k] != null).map(k => [k, c[k]]));
   function localList() {
     if (!fs.existsSync(reposFile)) {
@@ -85,13 +84,17 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return Array.isArray(l) ? l.filter(c => repoKey(c?.repository)) : [];
   }
 
-  // Adds one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
+  // Adds one (replacing any for the same repository). repository is owner/repo
+  // or a link to the repo; a link says where it lives (repositorySource, left
+  // out for GitHub). { ok, entry } or { ok: false, errors }
   function addRepo(entry) {
     const errors = [];
-    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !REPO.test(entry.repository.trim())) errors.push('repository must be owner/repo');
+    const repo = entry && typeof entry === 'object' ? parseRepo(entry.repository, entry.repositorySource) : null;
+    if (!repo) errors.push('repository must be owner/repo');
     for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (entry?.[k] != null && typeof entry[k] !== 'string') errors.push(`${k} must be a string`);
+    if (entry?.bookmark != null && typeof entry.bookmark !== 'boolean') errors.push('bookmark must be true or false');
     if (errors.length) return { ok: false, errors };
-    const clean = pickRepo({ ...entry, repository: entry.repository.trim() });
+    const clean = pickRepo({ ...entry, ...repo, repositorySource: repo.repositorySource === 'github' ? null : repo.repositorySource, bookmark: entry.bookmark || null });
     const key = repoKey(clean.repository);
     writeJson(reposFile, [...localList().filter(c => repoKey(c.repository) !== key), clean]);
     return { ok: true, entry: clean };
@@ -168,6 +171,8 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   function localEntries() {
     return [...userLayers().map.values()].map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
+      ...(c.repositorySource ? { repositorySource: c.repositorySource } : {}),
+      ...(c.bookmark === true ? { bookmark: true } : {}),
       ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
       ...(c.assetPattern ? { assetPattern: c.assetPattern } : {}),

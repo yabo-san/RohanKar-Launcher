@@ -322,6 +322,63 @@ test('Star Fox 64: Recompiled installs from the curated shelf, from GitLab\'s re
   assert.equal(backend.installs.get(again.body.installs[0].id).error, "Couldn't read the releases of sonicdcer/Starfox64Recomp (HTTP 404)");
 });
 
+// A repo the user adds by its Codeberg link whose "release" is an install
+// script (SpikeOut-Installer: no Windows release, a .ps1 at the top). Install
+// lays the script down and Play runs it in PowerShell instead of opening it.
+test('a Codeberg install script added by its link installs, and Play runs it', async (t) => {
+  const ran = [];
+  const opened = [];
+  const state = { routes: {} };
+  const { call, backend, fake } = await testApi(t, { state, host: { runScript: async (p) => { ran.push(p); return ''; }, openPath: async (p) => { opened.push(p); return ''; } } });
+  const repo = 'testamentenjoyment/SpikeOut-Installer';
+  const script = '#requires -Version 5.0\nWrite-Host "SpikeOut"\n';
+  state.routes[`/repos/${repo}/releases`] = (req, res) => { res.writeHead(200); res.end('[]'); };
+  state.routes[`/repos/${repo}/contents`] = (req, res) => {
+    res.writeHead(200);
+    res.end(JSON.stringify([
+      { name: 'README.md', type: 'file', sha: '1', download_url: `${fake.base}/raw/README.md` },
+      { name: 'resources', type: 'dir', sha: '2', download_url: null },
+      { name: 'SpikeOut-Installer.ps1', type: 'file', sha: '3f2a9c', download_url: `${fake.base}/raw/SpikeOut-Installer.ps1` },
+    ]));
+  };
+  state.routes['/raw/SpikeOut-Installer.ps1'] = (req, res) => { res.writeHead(200, { 'content-length': Buffer.byteLength(script) }); res.end(script); };
+  backend.settings.save({ installPath: path.join(backend.dataDir, 'games') });
+  await call('PUT', '/settings', { allowAdditionalSources: true });
+
+  const saved = await call('PUT', `/repos/${encodeURIComponent(`https://codeberg.org/${repo}`)}`, {});
+  assert.deepEqual(saved.body, { repository: repo, repositorySource: 'codeberg' });
+  await call('GET', '/catalogs');
+  const [item] = (await call('GET', '/catalogs/local/items')).body.items;
+  assert.deepEqual([item.repositorySource, item.repositoryUrl], ['codeberg', `https://codeberg.org/${repo}`]);
+
+  const r = await call('POST', '/installs', { id: item.id });
+  await backend.installs.wait(r.body.installs[0].id);
+  const job = backend.installs.get(r.body.installs[0].id);
+  assert.deepEqual([job.status, job.error, job.file], ['done', null, 'SpikeOut-Installer.ps1']);
+  assert.equal(job.exePath, path.join(job.installDir, 'SpikeOut-Installer.ps1'));
+  assert.equal(fs.readFileSync(job.exePath, 'utf8'), script);
+
+  const played = await call('POST', `/library/${encodeURIComponent(item.id)}/launch`, {});
+  assert.equal(played.body.ok, true);
+  assert.deepEqual([ran, opened], [[job.exePath], []]);
+
+  // A bookmark: kept as a link to its page, nothing to install
+  assert.deepEqual((await call('PUT', `/repos/${encodeURIComponent('https://gitlab.com/kh/refined')}`, { bookmark: true })).body,
+    { repository: 'kh/refined', repositorySource: 'gitlab', bookmark: true });
+  assert.equal((await call('PUT', `/repos/${encodeURIComponent('me/x')}`, { bookmark: 'yes' })).status, 400);
+  const kh = (await call('GET', '/catalogs/local/items')).body.items.find(i => i.repository === 'kh/refined');
+  assert.deepEqual([kh.bookmark, kh.repositoryUrl], [true, 'https://gitlab.com/kh/refined']);
+  const refused = await call('POST', '/installs', { id: kh.id });
+  assert.equal(refused.body.error, 'bookmark');
+
+  // No release and no script: say so
+  state.routes[`/repos/${repo}/contents`] = (req, res) => { res.writeHead(200); res.end('[]'); };
+  const again = await call('POST', '/installs', { id: item.id });
+  await backend.installs.wait(again.body.installs[0].id);
+  const none = backend.installs.get(again.body.installs[0].id);
+  assert.deepEqual([none.error, none.noDownload], [`${repo} has no published release`, true], 'nothing to download: the app offers a bookmark');
+});
+
 test('settings and Playnite export', async (t) => {
   const { call, backend } = await testApi(t);
   assert.deepEqual((await call('GET', '/settings')).body, {});

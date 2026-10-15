@@ -23,7 +23,7 @@ test('every entry has a name, an owner/repo, a folder and known fields only', ()
     assert.ok(typeof a.name === 'string' && a.name.trim(), `${at}: name`);
     assert.match(a.repository, /^[^/\s]+(\/[^/\s]+)+$/, `${at}: repository is owner/repo`);
     if (a.repositorySource !== 'gitlab') assert.match(a.repository, /^[^/\s]+\/[^/\s]+$/, `${at}: a GitHub repository is owner/repo`);
-    assert.ok(a.repositorySource === undefined || a.repositorySource === 'gitlab', `${at}: repositorySource is "gitlab" or left out`);
+    assert.ok(a.repositorySource === undefined || ['gitlab', 'codeberg'].includes(a.repositorySource), `${at}: repositorySource is "gitlab", "codeberg" or left out`);
     assert.match(a.folderName, /^[A-Za-z0-9._-]+$/, `${at}: folderName`);
     for (const k of ['releaseAssetFilter', 'appIconUrl', 'description']) {
       if (k in a) assert.ok(typeof a[k] === 'string' && a[k].trim(), `${at}: ${k} is a non-empty string`);

@@ -132,8 +132,11 @@ const CURATED_BADGE = '<span class="curated-badge" title="On the y4bo curated li
 const ROLE_LABEL = { engine: 'Engine', launcher: 'Launcher' };
 const portBadges = (p) => (p.curated ? CURATED_BADGE : '')
   + (p.sourceOnly ? '<span class="state-badge source-only" title="Publishes source code but no download">Source only</span>' : '')
+  + (p.bookmark ? `<span class="state-badge source-only" title="Kept as a link: install it from its ${p.host} page">Bookmark</span>` : '')
   + (p.workInProgress ? '<span class="state-badge wip" title="Not finished yet; installs if a release exists">Work in progress</span>' : '')
   + (p.role ? `<span class="state-badge role" title="A plain app: bring your own game data">${ROLE_LABEL[p.role]}</span>` : '');
+// Nothing for the launcher to download: source only, or a bookmark the user installs by hand
+const noDownload = (p) => p.sourceOnly || p.bookmark;
 const USER_BADGE = '<span class="user-badge" title="From a source you added. We don\'t monitor it.">Your source · not reviewed</span>';
 
 function stripHtml(html) {
@@ -258,11 +261,12 @@ function portFromItem(it, cat) {
     // the curated list has this repository, whichever shelf lists it
     curated:            !!it.curated,
     sourceOnly:         !!it.sourceOnly,
+    bookmark:           !!it.bookmark,
     workInProgress:     !!it.workInProgress,
     role:               it.role || null,
     description:        it.description || '',
     repositoryUrl:      it.repositoryUrl || null,
-    host:               it.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub',
+    host:               ({ gitlab: 'GitLab', codeberg: 'Codeberg' })[it.repositorySource] || 'GitHub',
     sourceLabel:        cat.curated ? 'y4bo curated list' : cat.shelf,
     catalogUrl:         cat.url,
   };
@@ -431,7 +435,7 @@ function portCard(p) {
     : `<div class="noart">${esc(p.name)}</div>`;
   return `<button class="card port-card" data-open="port" data-id="${esc(p.id)}" title="${esc(p.name)}">
     <div class="art icon" style="background:${tint(p.repository)}">${art}
-      ${p.sourceOnly ? '' : `<span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span>`}<span class="menu-btn" data-card-menu aria-label="More"></span></div>
+      ${noDownload(p) ? '' : `<span class="play-btn ${added ? 'check' : 'get'}" aria-hidden="true"></span>`}<span class="menu-btn" data-card-menu aria-label="More"></span></div>
     <div class="title">${esc(p.name)}</div>
     <div class="sub">${esc(p.project || p.repository)}</div>
     ${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.userSource ? USER_BADGE : ''}
@@ -1359,6 +1363,7 @@ function portActions(p) {
   if (p.sourceOnly) {
     return `<span class="source-only-note">Source only, no download</span>` + pill('Open repository', `data-href="${esc(p.repositoryUrl)}"`, { primary: true });
   }
+  if (p.bookmark) return pill(`Open on ${p.host}`, `data-href="${esc(p.repositoryUrl)}"`, { primary: true, icon: 'globe' });
   return pill('Install', 'id="btn-install-port" data-action="install"', { primary: true, icon: 'download' });
 }
 function portProgress(p) {
@@ -1370,8 +1375,8 @@ function portProgress(p) {
 
 // What a port's install brings down, as a track list: the release binary, and only that
 function portTracks(p) {
-  const rows = p.sourceOnly
-    ? [['No download', 'The project publishes its source only', '']]
+  const rows = p.sourceOnly ? [['No download', 'The project publishes its source only', '']]
+    : p.bookmark ? [['Nothing installs', `A bookmark: install it by following its ${p.host} page`, '']]
     : [['Windows build', `${p.host} release from ${p.repository}`, p.releaseAssetFilter ? `matches ${p.releaseAssetFilter}` : 'latest release']];
   return `<section class="section album-tracks"><div class="tracklist ports-tracks" role="list">
     <div class="track-head"><span class="num">#</span><span>What installs</span><span>From</span><span></span></div>
@@ -1392,7 +1397,7 @@ function portDetail(d) {
     wash: `background:${tint(p.repository)}${p.iconUrl ? `;background-image:url('${esc(p.iconUrl)}')` : ''}`,
     sub: `<button class="album-sub by" data-href="${esc(p.repositoryUrl)}">${esc(p.project || p.repository)}</button>`,
     meta: portMeta(p),
-    actions: portActions(p) + (p.sourceOnly && !added ? '' : pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`)) + moreBtn('data-detail-menu'),
+    actions: portActions(p) + (noDownload(p) && !added ? '' : pill(added ? 'Remove from library' : 'Add to library', `data-toggle-port="${esc(p.id)}"`)) + moreBtn('data-detail-menu'),
     extra: `${portBadges(p) ? `<div class="badges">${portBadges(p)}</div>` : ''}${p.description ? `<p class="port-desc">${esc(p.description)}</p>` : ''}
       ${p.userSource ? `<div class="user-note">${USER_BADGE}<span>A port you added. We don't monitor it.</span></div>` : ''}
       ${portProgress(p)}${exePicker(d)}`,
@@ -1480,6 +1485,11 @@ async function installPort(p, { acceptHashChange = false } = {}) {
   await reloadLibrary();
   render();
   if (job.hashChange) return (await confirmHashChange(job, p.name)) && installPort(p, { acceptHashChange: true });
+  // Nothing to download from a repo of the user's: offer the bookmark instead
+  if (job.noDownload && p.userSource) {
+    if (confirm(`Nothing to download: ${job.error}.\n\nKeep ${p.name} as a bookmark that opens its ${p.host} page?`)) return setBookmark(p, true);
+    return;
+  }
   if (job.status === 'done') toast(`${p.name} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
 }
@@ -1502,6 +1512,18 @@ async function launch(v, exePath) {
 async function addToSteam(v, exePath) {
   const r = await api.addToSteam({ appName: getTitle(v), exePath, startDir: exePath.replace(/[\\/][^\\/]*$/, '') });
   toast(r.ok ? `Added ${getTitle(v)} to Steam. Restart Steam to see it.` : `Couldn't add to Steam: ${r.error}`);
+}
+
+// A repo of the user's either downloads its releases or is a bookmark to its
+// page; they switch between the two at any time
+async function setBookmark(p, bookmark) {
+  const mine = (await api.getRepos()).find(r => r.repository.toLowerCase() === p.repository.toLowerCase());
+  if (!mine) return toast(`${p.name} comes from your user.json: set "bookmark" on it there.`, 6000);
+  const r = await api.saveRepo(mine.repository, { ...mine, bookmark });
+  if (!r.ok) return toast(`Couldn't change it: ${r.error}`, 6000);
+  toast(bookmark ? `${p.name} is a bookmark: it opens its ${p.host} page.` : `${p.name} downloads its releases again.`);
+  await loadPorts();
+  if (state.detail?.kind === 'port' && state.detail.id === p.id) { state.detail = detailFor('port', p.id); render(); }
 }
 
 async function togglePort(id) {
@@ -1529,17 +1551,20 @@ function viewAddRepo() {
     api.getRepos().then(r => { f.repos = r; const el = $('#repo-list'); if (el) el.innerHTML = repoListHtml(); }).catch(() => {});
   }
   const off = !state.settings.allowAdditionalSources;
-  return `<div class="editor"><p class="lede">A GitHub repo with Windows releases. It shows on Your ports, and Install takes its latest release's build. Any game data it needs is up to you.</p>
+  return `<div class="editor"><p class="lede">A GitHub, GitLab or Codeberg repo with Windows releases, or one that is a PowerShell install script. It shows on Your ports, and Install takes its latest release's build (or the script, which Play runs). Any game data it needs is up to you.</p>
     ${off ? '<div class="notice"><div class="grow">Turn on <b>Allow additional sources</b> in Settings to add your own repos.</div></div>' : ''}
-    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo" spellcheck="false"></div>
+    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo, or a link to the repo" spellcheck="false"></div>
       <div><label for="repo-name">Name</label><input type="text" id="repo-name" data-repo-field="name" value="${esc(f.name)}" placeholder="Optional; the repo's name otherwise" spellcheck="false"></div></div>
+    <div class="field"><label class="switch-row" for="repo-bookmark">
+        <span><b>Bookmark only</b><span class="hint">For something you install by hand, following its page. Its tile opens the page instead of installing.</span></span>
+        <input type="checkbox" class="switch" id="repo-bookmark" role="switch"></label></div>
     <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save" ${off ? 'disabled' : ''}>Add</button></div>
     <div id="repo-list">${repoListHtml()}</div></div>`;
 }
 
 function repoListHtml() {
   const repos = state.repoForm?.repos || [];
-  return repos.length ? `<div class="field"><label>Your repos</label>${repos.map(r => `<div class="repo-row"><div class="grow"><b>${esc(r.name || r.repository)}</b> <span class="meta">${esc(r.repository)}</span></div>
+  return repos.length ? `<div class="field"><label>Your repos</label>${repos.map(r => `<div class="repo-row"><div class="grow"><b>${esc(r.name || r.repository)}</b> <span class="meta">${esc(r.repository)}${r.bookmark ? ' · bookmark' : ''}</span></div>
       <button class="btn" data-action="repo-remove" data-repo="${esc(r.repository)}">Remove</button></div>`).join('')}</div>` : '';
 }
 
@@ -1547,10 +1572,11 @@ async function repoSave() {
   // Read from the inputs: they are what the user sees
   const repo = ($('#repo-repository')?.value || '').trim();
   const name = ($('#repo-name')?.value || '').trim();
-  if (!repo) return toast('Type the repository as owner/repo.');
-  const r = await api.saveRepo(repo, name ? { name } : {});
+  if (!repo) return toast('Type the repository as owner/repo, or paste a link to it.');
+  const bookmark = !!$('#repo-bookmark')?.checked;
+  const r = await api.saveRepo(repo, { ...(name ? { name } : {}), ...(bookmark ? { bookmark } : {}) });
   if (!r.ok) return toast(`Couldn't add it: ${r.error}`, 6000);
-  toast(`Added ${r.entry.name || repo}. It's on Your ports, unless a shelf already lists it.`);
+  toast(`Added ${r.entry.name || r.entry.repository}. It's on Your ports, unless a shelf already lists it.`);
   state.repoForm = { repository: '', name: '' };
   render();
   loadPorts();
@@ -1665,7 +1691,7 @@ const ROW_ACTIONS = [
   { id: 'launch', label: 'Launch', icon: 'play', group: 'play', kinds: ['port'],
     when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), run: (p) => launchPort(p) },
   { id: 'install', label: (x, ctx) => (ctx.kind === 'port' ? 'Download' : 'Install'), icon: 'download', group: 'play',
-    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual && !x.sourceOnly,
+    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual && !noDownload(x),
     run: (x, ctx) => (ctx.kind === 'port' ? installPort(x) : installGame(x)) },
   { id: 'cancel', label: 'Cancel Download', icon: 'close', group: 'play', when: (x, ctx) => !!itemDl(x, ctx),
     run: async (x, ctx) => { const dl = itemDl(x, ctx); if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId }); } },
@@ -1706,8 +1732,10 @@ const ROW_ACTIONS = [
       render();
     } },
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
-    when: (p) => !p.sourceOnly || inPortLibrary(p),
+    when: (p) => !noDownload(p) || inPortLibrary(p),
     run: (p) => togglePort(p.id) },
+  { id: 'bookmark', label: (p) => (p.bookmark ? 'Download Releases Instead' : 'Keep as Bookmark'), icon: 'globe', group: 'manage', kinds: ['port'],
+    when: (p, ctx) => p.userSource && !itemInstalled(p, ctx) && idle(p, ctx), run: (p) => setBookmark(p, !p.bookmark) },
   { id: 'manual-rename', label: 'Rename…', icon: 'edit', group: 'manage', kinds: ['game'],
     when: (g) => g._manual, run: (g, ctx) => { if (!ctx.onDetail) openDetail('game', g.identifier); return onAction('manual-rename'); } },
   // Opens the details page; not offered on that page
@@ -1719,8 +1747,8 @@ const ROW_ACTIONS = [
     when: (g) => state.sources.some(s => s.uploader === g._uploader && s.enabled !== false), run: (g) => go('uploader', g._uploader) },
   { id: 'shelf', label: 'Go to Shelf', icon: 'wall', group: 'goto', kinds: ['port'],
     when: (p) => state.ports?.shelves.some(s => s.id === p.shelf), run: (p) => go('shelf', p.shelf) },
-  { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
-    run: (p) => api.openExternal(p.repositoryUrl) },
+  { id: 'repo', label: (p) => `View on ${p.host}`, icon: 'code', group: 'goto', kinds: ['port'],
+    when: (p) => !!p.repositoryUrl, run: (p) => api.openExternal(p.repositoryUrl) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
     when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),

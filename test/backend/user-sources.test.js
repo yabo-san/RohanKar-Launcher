@@ -242,3 +242,19 @@ test('API: installs from user.json check the sha1 given, else pin it and ask bef
   assert.equal((await install('rk-e2e-halo-ce')).status, 'done', 'curated uploads are not pinned');
   assert.deepEqual(Object.keys(JSON.parse(fs.readFileSync(path.join(backend.dataDir, 'pins.json'), 'utf8'))), ['archive:my-demo\nmy-demo.zip']);
 });
+
+test('user.json: github entries can live on GitLab or Codeberg, by repositorySource or by link', () => {
+  const r = us.validateUserFile({ schemaVersion: 1, github: [
+    { repository: 'me/tool' },
+    { repository: 'group/sub/port', repositorySource: 'gitlab' },
+    { repository: 'https://codeberg.org/testamentenjoyment/SpikeOut-Installer' },
+    { repository: 'me/x', repositorySource: 'sourceforge' },
+    { repository: 'https://example.com/me/x' },
+  ] });
+  assert.deepEqual(r.entries.github.map(g => [g.repository, g.repositorySource]),
+    [['me/tool', 'github'], ['group/sub/port', 'gitlab'], ['testamentenjoyment/SpikeOut-Installer', 'codeberg']]);
+  assert.deepEqual(r.invalid.map(i => [i.index, i.errors]), [
+    [3, ['repositorySource must be "github", "gitlab" or "codeberg"']],
+    [4, ['repository must be owner/repo, or a link to a GitHub, GitLab or Codeberg repo']],
+  ]);
+});

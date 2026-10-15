@@ -45,7 +45,9 @@ A local file (no URLs for now), named by its full path in Settings. Schema versi
 
 - `archive`: a standalone archive.org download. `title` is optional (archive.org's title
   otherwise); `files` lists sha1s for files you want checked.
-- `github`: a standalone GitHub release binary: `repository`, and optionally `name`,
+- `github`: a standalone release binary from GitHub, GitLab or Codeberg: `repository` (`owner/repo`
+  with `repositorySource` `"gitlab"` or `"codeberg"` when it isn't on GitHub, or a link to the repo), and optionally `name`,
+  `bookmark: true` (a tile that opens the repo's page, for something installed by hand),
   `folderName`, `assetPattern` and the `sha1` of the release asset. A repository no catalog lists
   shows on Your ports.
 
