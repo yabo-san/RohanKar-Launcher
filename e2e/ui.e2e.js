@@ -161,8 +161,8 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
   await expect(items).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
   const dates = await items.locator('.sub').evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
   expect(dates).toEqual([...dates].sort().reverse());
-  // Then the rows the old Home had: each uploader's most played, each shelf's ports
-  await expect(page.locator('#body h2', { hasText: /^Most Played from/ }).first()).toBeVisible();
+  // Then each shelf's ports; no per-uploader "Most Played" rows
+  await expect(page.locator('#body h2', { hasText: /^Most Played from/ })).toHaveCount(0);
   await expect(page.locator('#body h2', { hasText: / ports$/ }).first()).toBeVisible();
 
   await items.first().click();
@@ -212,16 +212,16 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   // without Properties since this is that page; Escape closes it and stays
   await detail.locator('[data-detail-menu]').click();
   const menu = page.locator('#ctxmenu');
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(2);
-  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(5);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(6);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
   // Right-click on the page's head opens the same menu
   await detail.locator('.album-title').click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
@@ -499,7 +499,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await row.locator('.lr-more').click();
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await menu.locator('[data-menu="favorite"]').click();
   await expect(menu).toBeHidden();
   await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
@@ -542,7 +542,7 @@ test('The sidebar is no window drag region, so its search box takes clicks on Wi
 
 test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
   await page.locator('[data-view="home"]').click();
-  const card = page.locator('#body .row .game-card').first();
+  const card = page.locator('#body .row.ports .card').first();
   await card.hover();
   await expect.poll(() => card.evaluate(c => getComputedStyle(c).transform)).not.toBe('none');
   // Whether the next page change runs the page-enter animation
