@@ -14,7 +14,7 @@ const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
 const { createManualApp } = require('./manual');
-const { sourcesFromSettings } = require('./sources');
+const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
 
 const API_VERSION = 'v1';
@@ -361,6 +361,13 @@ function createApi(backend) {
     if ('morePorts' in s && typeof s.morePorts !== 'boolean') {
       throw new HttpError(400, 'bad_request', 'morePorts must be true or false');
     }
+    // Uploads to leave out, stored as identifiers (an item URL is read as its identifier)
+    if ('excludeItems' in s) {
+      if (!Array.isArray(s.excludeItems)) throw new HttpError(400, 'bad_request', 'excludeItems must be a list of archive.org identifiers or item URLs');
+      const bad = s.excludeItems.filter(x => !itemIdFrom(x));
+      if (bad.length) throw new HttpError(400, 'bad_request', `Not an archive.org upload: ${bad.map(String).join(', ')}`);
+      s.excludeItems = [...new Set(s.excludeItems.map(itemIdFrom))];
+    }
     if ('userSourcesFile' in s && s.userSourcesFile !== null) {
       const f = s.userSourcesFile;
       if (typeof f !== 'string') throw new HttpError(400, 'bad_request', 'userSourcesFile must be a file path');
@@ -379,7 +386,7 @@ function createApi(backend) {
     const count = (k) => f.entries[k].length;
     return { body: {
       file: f.file, error: f.error, invalid: f.invalid,
-      entries: { archive: count('archive'), github: count('github') },
+      entries: { archive: count('archive'), github: count('github'), exclude: count('exclude') },
       conflicts: [...catalogs.userConflicts(), ...items.conflicts()],
     } };
   });

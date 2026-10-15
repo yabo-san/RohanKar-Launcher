@@ -1042,9 +1042,11 @@ function viewSettings() {
   const s = state.settings;
   return `<div class="form">
     <div class="field"><label for="setting-sources">Uploaders</label>
-      <div class="hint">One archive.org uploader per line, optional ", label". A leading # turns a line off. The wall queries them one at a time.
+      <div class="hint">One archive.org uploader per line: an email, an @handle or a profile link (archive.org/details/@name), optional ", label".
+        Add ", -word|word" to leave out uploads whose title has any of those words, or ", +word|word" to keep only titles with one.
+        A line "- " plus an upload's link or identifier leaves that one upload out. A leading # turns a line off. The wall queries them one at a time.
         Add any uploader you like; the ones we ship with are just a starting point.</div>
-      <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources))}</textarea></div>
+      <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources, state.settings.excludeItems))}</textarea></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
       <button class="btn" data-action="choose-install">Choose…</button>
@@ -1581,14 +1583,14 @@ async function setMorePorts(on) {
 
 // ─── Your sources (Settings) ─────────────────────────────────────────────────
 
-const SECTION_NAME = { collisions: 'collisions', archive: 'archive', github: 'github' };
+const SECTION_NAME = { collisions: 'collisions', archive: 'archive', github: 'github', exclude: 'exclude' };
 function additionalHtml() {
   const u = state.userSources;
   if (!u) { loadUserSources(); return '<div class="hint">Loading…</div>'; }
   const n = (k) => u.entries[k];
   const status = !u.file ? '<div class="hint">No user.json yet. Pick a file on this computer: <code>{ "schemaVersion": 1, "archive": [], "github": [] }</code>.</div>'
     : u.error ? `<div class="notice warn" id="user-file-error"><div class="grow">${esc(u.error)}</div></div>`
-    : `<div class="hint" id="user-file-counts">Loaded: ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}.</div>`;
+    : `<div class="hint" id="user-file-counts">Loaded: ${n('archive')} archive.org download${n('archive') === 1 ? '' : 's'}, ${n('github')} GitHub release${n('github') === 1 ? '' : 's'}${n('exclude') ? `, ${n('exclude')} excluded upload${n('exclude') === 1 ? '' : 's'}` : ''}.</div>`;
   const invalid = u.invalid.length ? `<div class="notice warn user-list" id="user-invalid"><div class="grow"><b>${u.invalid.length} invalid entr${u.invalid.length === 1 ? 'y' : 'ies'}, not loaded:</b>
       ${u.invalid.map(i => `<div>${esc(SECTION_NAME[i.section])}[${i.index}]${i.key ? ` ${esc(i.key)}` : ''}: ${esc(i.errors.join('; '))}</div>`).join('')}</div></div>` : '';
   const conflicts = u.conflicts.length ? `<div class="notice user-list" id="user-conflicts"><div class="grow"><b>Ignored, already built in:</b>
@@ -1856,13 +1858,18 @@ document.addEventListener('touchmove', userScroll, { capture: true, passive: tru
 async function saveSettingsForm() {
   const sources = parseSources($('#setting-sources').value);
   if (!sources.length) return toast('Add at least one uploader.');
-  const patch = { sources, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
-  await api.saveSettings(patch);
+  const excludeItems = parseExcludes($('#setting-sources').value);
+  const patch = { sources, excludeItems, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
+  const saved = await api.saveSettings(patch);
+  if (saved && saved.ok === false) return toast(saved.body?.detail || 'Settings not saved.');
+  patch.excludeItems = saved?.body?.excludeItems || excludeItems;
+  // New uploaders or filters refetch; excluded uploads only need the list again
   const changed = formatSources(sources) !== formatSources(state.sources);
+  const excludesChanged = formatSources([], patch.excludeItems) !== formatSources([], state.settings.excludeItems);
   state.settings = { ...state.settings, ...patch };
   state.sources = sources;
   toast('Settings saved.');
-  if (changed) loadWall({ refresh: true });
+  if (changed || excludesChanged) loadWall({ refresh: changed });
 }
 
 // A port acts through its library row, keyed by the catalog item id

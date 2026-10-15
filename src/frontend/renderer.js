@@ -19,6 +19,7 @@ let allGames      = [];   // one entry per title (first version of each group)
 let pendingOpenItem = null;  // identifier Playnite asked to show, until the games load
 let allVersions   = [];   // every fetched item, across all sources
 let defaultSources = [];   // from catalog/uploaders.json, used when settings has no `sources`
+let excludeItemsSaved = []; // settings.excludeItems: the "- <upload>" lines of the sources text
 let sources       = [];
 let library       = {};
 let collections   = [];
@@ -500,6 +501,7 @@ async function init() {
   const initSettings = await api.getSettings();
   defaultSources     = (await api.getSources()).defaults;
   sources            = loadSourcesSetting(initSettings);
+  excludeItemsSaved  = Array.isArray(initSettings.excludeItems) ? initSettings.excludeItems : [];
   installedFirst     = !!initSettings.installedFirst;
   showInstalledBadge = initSettings.showInstalledBadge !== false; // default true
   applyInstalledBadgeSetting();
@@ -681,7 +683,7 @@ async function openSettings() {
   showInstalledBadgeCheck.checked   = s.showInstalledBadge !== false;
   document.getElementById('setting-check-updates').checked = !!s.checkForUpdates;
   document.getElementById('setting-beta-updates').checked  = !!s.betaUpdates;
-  document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s));
+  document.getElementById('setting-sources').value = formatSources(loadSourcesSetting(s), s.excludeItems);
   settingsModal.classList.remove('hidden');
 }
 
@@ -690,8 +692,10 @@ function closeSettings() {
 }
 
 async function saveSettings() {
-  const newSources     = parseSources(document.getElementById('setting-sources').value);
-  const sourcesChanged = JSON.stringify(newSources) !== JSON.stringify(sources);
+  const sourcesText    = document.getElementById('setting-sources').value;
+  const newSources     = parseSources(sourcesText);
+  const excludeItems   = parseExcludes(sourcesText);
+  const sourcesChanged = JSON.stringify([newSources, excludeItems]) !== JSON.stringify([sources, excludeItemsSaved]);
   await api.saveSettings({
     downloadPath:        downloadPathInput.value.trim(),
     installPath:         installPathInput.value.trim(),
@@ -699,6 +703,7 @@ async function saveSettings() {
     installedFirst:      installedFirstCheck.checked,
     showInstalledBadge:  showInstalledBadgeCheck.checked,
     sources:             newSources,
+    excludeItems,
     checkForUpdates:     document.getElementById('setting-check-updates').checked,
     betaUpdates:         document.getElementById('setting-beta-updates').checked,
   });
@@ -708,6 +713,7 @@ async function saveSettings() {
   closeSettings();
   if (sourcesChanged) {
     sources = newSources;
+    excludeItemsSaved = excludeItems;
     fetchGames({ refresh: true });
   } else {
     renderLibraryGrid();

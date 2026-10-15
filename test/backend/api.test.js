@@ -380,7 +380,7 @@ test('GET /sources: catalog defaults, fetched from main or bundled; a saved list
   const { createBackend } = require('../../src/backend');
   const other = createBackend({ dataDir: backend.dataDir + '-2', archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });
   t.after(() => { other.close(); fs.rmSync(backend.dataDir + '-2', { recursive: true, force: true }); });
-  assert.deepEqual(await other.getDefaultSources(), [{ uploader: 'f@x', label: 'fetched', enabled: true }]);
+  assert.deepEqual(await other.getDefaultSources(), [{ uploader: 'f@x', label: 'fetched', enabled: true, handles: ['fetched'] }]);
 
   fake.routes['/uploaders.json'] = (req, res) => { res.writeHead(200); res.end('{"uploaders":[]}'); };
   const none = createBackend({ dataDir: backend.dataDir + '-3', appDir: backend.dataDir, archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });

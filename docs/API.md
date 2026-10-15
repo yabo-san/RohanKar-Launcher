@@ -430,8 +430,10 @@ es.addEventListener('install', (e) => console.log(JSON.parse(e.data)));
 
 The archive.org uploaders the wall loads. `defaults` come from `catalog/uploaders.json` (the copy
 on main at launch, the bundled one as fallback): on only where `launcher` is true, `track` isn't
-false and there's an `uploaderEmail`. `sources` is the saved list from settings when there is
-one, else the defaults.
+false and there's an `uploaderEmail`. A default also carries `handles` (every @handle the account
+goes by, when it has an email) and the catalog's `titleInclude`/`titleExclude`. `sources` is the
+saved list from settings when there is one, else the defaults. A source's `uploader` is what the
+user typed: an email, an @handle, a profile URL or an item URL ([USER-SOURCES.md](USER-SOURCES.md)).
 
 ```sh
 curl http://127.0.0.1:7777/v1/sources
@@ -442,7 +444,9 @@ curl http://127.0.0.1:7777/v1/sources
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
 `morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
-(`null` or empty clears it; a URL is `400`).
+(`null` or empty clears it; a URL is `400`). `excludeItems`, uploads to leave off the wall, must be a
+list of archive.org identifiers or item URLs; they are stored as identifiers, and anything else is
+`400` naming it.
 
 ```sh
 curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://127.0.0.1:7777/v1/settings
@@ -458,7 +462,7 @@ built-in list has them (`from`, `key`, `reason`).
 
 ```sh
 curl http://127.0.0.1:7777/v1/user-sources
-# {"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a built-in uploader has it"}]}
+# {"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1,"exclude":0},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a built-in uploader has it"}]}
 ```
 
 ### `POST /export/playnite`

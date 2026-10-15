@@ -17,11 +17,11 @@ const FIX = path.join(__dirname, '..', 'fixtures', 'user-sources');
 const fixture = (name) => path.join(FIX, `${name}.json`);
 const sha1 = (b) => crypto.createHash('sha1').update(b).digest('hex');
 
-test('user.json: a valid file gives its two sections', () => {
+test('user.json: a valid file gives its sections', () => {
   const r = us.readUserFile(fixture('valid'));
   assert.equal(r.error, null);
   assert.deepEqual(r.invalid, []);
-  assert.deepEqual(Object.keys(r.entries), ['archive', 'github']);
+  assert.deepEqual(Object.keys(r.entries), ['archive', 'github', 'exclude']);
   assert.deepEqual(r.entries.archive.map(a => a.identifier), ['my-homebrew', 'my-demo']);
   assert.deepEqual(r.entries.github.map(g => g.repository), ['me/tool', 'me/my-port']);
 });
@@ -36,7 +36,7 @@ test('user.json: every invalid entry is named with why; the good ones still load
   assert.equal(r.invalid.length, 7);
   assert.deepEqual(at('collisions', 0).errors, ['collisions are no longer supported; list the repo under github instead']);
   assert.deepEqual([at('collisions', 1).key, at('collisions', 1).errors.length], ['me/fine-port', 1]);
-  assert.deepEqual(at('archive', 0).errors, ['identifier must be an archive.org identifier']);
+  assert.deepEqual(at('archive', 0).errors, ['identifier must be an archive.org identifier or item URL']);
   assert.deepEqual(at('archive', 1), { section: 'archive', index: 1, key: 'my-demo', errors: ['files[0].sha1 must be 40 hex characters'] });
   assert.deepEqual(at('archive', 3).errors, ['repeats OK-item, listed earlier in archive']);
   assert.deepEqual(at('archive', 4), { section: 'archive', index: 4, key: null, errors: ['entry must be an object'] });
@@ -153,7 +153,7 @@ async function userApi(t, name) {
 test('API: your entries load as soon as the file is set, with their flag', async (t) => {
   const { call } = await userApi(t, 'valid');
   const us1 = (await call('GET', '/user-sources')).body;
-  assert.deepEqual([us1.error, us1.invalid, us1.entries, us1.conflicts], [null, [], { archive: 2, github: 2 }, []]);
+  assert.deepEqual([us1.error, us1.invalid, us1.entries, us1.conflicts], [null, [], { archive: 2, github: 2, exclude: 0 }, []]);
   const items = (await call('GET', '/items')).body.items;
   const demo = items.find(i => i.id === 'my-demo');
   assert.deepEqual([demo.title, demo.userSource, demo.versions[0].user, demo.source.label], ['My Demo', true, true, 'Your sources']);
@@ -177,7 +177,7 @@ test('API: an invalid file lists each bad entry; a bad path or a URL is refused'
   const { call } = await userApi(t, 'invalid');
   const r = (await call('GET', '/user-sources')).body;
   assert.equal(r.invalid.length, 7);
-  assert.deepEqual(r.entries, { archive: 1, github: 0 });
+  assert.deepEqual(r.entries, { archive: 1, github: 0, exclude: 0 });
   const refused = await call('PUT', '/settings', { userSourcesFile: 'https://example.com/user.json' });
   assert.deepEqual([refused.status, refused.body.detail], [400, 'user.json must be a file on this computer, not a URL']);
   assert.equal((await call('PUT', '/settings', { userSourcesFile: 'user.json' })).status, 400);

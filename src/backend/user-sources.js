@@ -7,7 +7,12 @@
  *
  *   { "schemaVersion": 1,
  *     "archive":    [...],  // { identifier, title?, files?: [{ name, sha1? }] }, a standalone archive.org download
- *     "github":     [...] } // { repository, name?, folderName?, assetPattern?, sha1? }, a standalone release binary
+ *     "github":     [...],  // { repository, name?, folderName?, assetPattern?, sha1? }, a standalone release binary
+ *     "exclude":    [...] } // identifiers or item URLs: uploads to leave off the wall
+ *
+ * An archive identifier, or an exclude, may be an item URL
+ * (https://archive.org/details/<id>, /download/<id>/...); it is read as the
+ * identifier (sources.js itemIdFrom).
  *
  * Rules: every entry is validated on load and a bad one is reported with its
  * reason, never skipped silently; a user entry with the same repository or
@@ -18,10 +23,10 @@
 const fs   = require('fs');
 const path = require('path');
 const { toRegExp } = require('./ports');
+const { itemIdFrom } = require('./sources');
 
 const SCHEMA_VERSION = 1;
 const SECTIONS = ['archive', 'github'];
-const IA_ID = /^[\w.-]+$/;
 const REPO  = /^[\w.-]+\/[\w.-]+$/;
 const SHA1  = /^[0-9a-f]{40}$/i;
 
@@ -32,7 +37,7 @@ const optSha1 = (v, at, errs) => { if (v != null && !(typeof v === 'string' && S
 function validateArchive(e) {
   if (!isObj(e)) return ['entry must be an object'];
   const errs = [];
-  if (typeof e.identifier !== 'string' || !IA_ID.test(e.identifier.trim())) errs.push('identifier must be an archive.org identifier');
+  if (!itemIdFrom(e.identifier)) errs.push('identifier must be an archive.org identifier or item URL');
   optString(e, 'title', errs);
   if (e.files != null && !Array.isArray(e.files)) errs.push('files must be an array');
   (Array.isArray(e.files) ? e.files : []).forEach((f, i) => {
@@ -58,27 +63,41 @@ function validateGithub(e) {
 
 const VALIDATE = { archive: validateArchive, github: validateGithub };
 const keyOf = (section, e) => (section === 'archive' ? e?.identifier : e?.repository);
+// The key an entry is stored and compared by: an archive item URL becomes its identifier
+const normKey = (section, raw) => (section === 'archive' ? itemIdFrom(raw) || raw.trim() : raw.trim());
+
+const emptyEntries = () => ({ archive: [], github: [], exclude: [] });
 
 // { error } for a file that isn't user.json at all; else { entries, invalid },
 // where invalid lists every bad entry as { section, index, key, errors }
 function validateUserFile(doc) {
   if (!isObj(doc)) return { error: 'user.json must be an object: { "schemaVersion": 1, "archive": [], "github": [] }' };
   if (doc.schemaVersion !== SCHEMA_VERSION) return { error: `schemaVersion must be ${SCHEMA_VERSION} (found ${JSON.stringify(doc.schemaVersion ?? null)})` };
-  const bad = SECTIONS.filter(s => doc[s] != null && !Array.isArray(doc[s]));
+  const bad = [...SECTIONS, 'exclude'].filter(s => doc[s] != null && !Array.isArray(doc[s]));
   if (bad.length) return { error: `${bad.join(', ')} must be ${bad.length > 1 ? 'arrays' : 'an array'}` };
-  const entries = { archive: [], github: [] };
+  const entries = emptyEntries();
   const invalid = [];
   for (const section of SECTIONS) {
     const seen = new Set();
     (doc[section] || []).forEach((e, index) => {
       const errors = VALIDATE[section](e);
-      const key = typeof keyOf(section, e) === 'string' ? keyOf(section, e).trim() : null;
+      const key = typeof keyOf(section, e) === 'string' ? normKey(section, keyOf(section, e)) : null;
       if (!errors.length && seen.has(key.toLowerCase())) errors.push(`repeats ${key}, listed earlier in ${section}`);
       if (errors.length) return invalid.push({ section, index, key, errors });
       seen.add(key.toLowerCase());
       entries[section].push({ ...e, [section === 'archive' ? 'identifier' : 'repository']: key });
     });
   }
+  // Uploads to leave off the wall: identifiers or item URLs
+  const seenExcl = new Set();
+  (doc.exclude || []).forEach((e, index) => {
+    const id = itemIdFrom(e);
+    const key = typeof e === 'string' ? e.trim() : null;
+    if (!id) return invalid.push({ section: 'exclude', index, key, errors: ['must be an archive.org identifier or item URL'] });
+    if (seenExcl.has(id.toLowerCase())) return invalid.push({ section: 'exclude', index, key: id, errors: [`repeats ${id}, listed earlier in exclude`] });
+    seenExcl.add(id.toLowerCase());
+    entries.exclude.push(id);
+  });
   // An older file's collisions are reported, not read (collisions are parked)
   if (Array.isArray(doc.collisions)) {
     doc.collisions.forEach((e, index) => invalid.push({ section: 'collisions', index, key: typeof e?.repository === 'string' ? e.repository : null,
@@ -89,7 +108,7 @@ function validateUserFile(doc) {
 
 // Reads the file named in Settings. { file, entries, invalid, error }
 function readUserFile(file) {
-  const empty = { archive: [], github: [] };
+  const empty = emptyEntries();
   if (!file) return { file: null, entries: empty, invalid: [], error: null };
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(file)) return { file, entries: empty, invalid: [], error: 'user.json must be a file on this computer, not a URL' };
   if (!path.isAbsolute(file)) return { file, entries: empty, invalid: [], error: 'user.json must be a full path' };
