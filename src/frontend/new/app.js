@@ -589,7 +589,6 @@ const pageObserver = new IntersectionObserver((entries) => {
 // ─── views ───────────────────────────────────────────────────────────────────
 
 const byNewest = (a, b) => String(b.addeddate || '').localeCompare(String(a.addeddate || ''));
-const byDownloads = (a, b) => (b.downloads || 0) - (a.downloads || 0);
 const byTitle = (a, b) => getTitle(a).localeCompare(getTitle(b));
 
 function wallNotice(uploader = null) {
@@ -927,7 +926,7 @@ function viewLibrary() {
 // Home, laid out like Cider's New page: a wide carousel of the hand-picked
 // games and ports (catalog/featured.json), then a compact list of what landed
 // most recently, this week's uploads and the ports new in the catalogs, then
-// rows of each uploader's most played games and each shelf's ports.
+// a row of each shelf's ports.
 const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
 const blurbOf = (text) => {
   const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
@@ -1004,13 +1003,7 @@ function viewHome() {
   const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
   if (newPorts.length) html += section('New Ports', newPorts.map(portCard).join(''), { cls: 'row squares ports', seeAll: ['updates'] });
 
-  // Then each uploader's most downloaded games and each shelf's ports
-  for (const s of state.sources.filter(x => x.enabled !== false)) {
-    if (state.wall.failed.some(f => f.src.uploader === s.uploader)) continue;
-    const list = state.games.filter(g => (g._versions || [g]).some(v => v._uploader === s.uploader)).sort(byDownloads);
-    if (!list.length) continue;
-    html += section(`Most Played from ${sourceName(s)}`, list.slice(0, 20).map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', s.uploader] });
-  }
+  // Then each shelf's ports
   const ports = state.ports;
   for (const shelf of ports?.shelves || []) {
     const items = ports.items.filter(i => i.shelf === shelf.id);

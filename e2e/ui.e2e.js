@@ -161,8 +161,8 @@ test('Home leads with the picks, then the latest uploads newest first', async ()
   await expect(items).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
   const dates = await items.locator('.sub').evaluateAll(els => els.map(e => e.textContent.match(/\d{4}-\d{2}-\d{2}/)?.[0] || ''));
   expect(dates).toEqual([...dates].sort().reverse());
-  // Then the rows the old Home had: each uploader's most played, each shelf's ports
-  await expect(page.locator('#body h2', { hasText: /^Most Played from/ }).first()).toBeVisible();
+  // Then each shelf's ports; no per-uploader "Most Played" rows
+  await expect(page.locator('#body h2', { hasText: /^Most Played from/ })).toHaveCount(0);
   await expect(page.locator('#body h2', { hasText: / ports$/ }).first()).toBeVisible();
 
   await items.first().click();
