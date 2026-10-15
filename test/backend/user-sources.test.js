@@ -61,7 +61,7 @@ test('user.json: a file that is not one says why', (t) => {
     { kept: [{ identifier: 'b' }], conflicts: [{ section: 'archive', key: 'A' }] });
 });
 
-test('createUserSources: off unless allowed, re-read when the file changes', (t) => {
+test('createUserSources: always on, re-read when the file changes', (t) => {
   const dir = tmpDir(t);
   const settings = createSettings(path.join(dir, 'settings.json'));
   const logs = [];
@@ -69,11 +69,8 @@ test('createUserSources: off unless allowed, re-read when the file changes', (t)
   const file = path.join(dir, 'user.json');
   fs.copyFileSync(fixture('valid'), file);
   settings.save({ userSourcesFile: file });
-  assert.equal(u.enabled(), false);
-  assert.equal(u.entries().archive.length, 0);
-  assert.equal(u.read().entries.archive.length, 2, 'Settings can still show the file');
-  settings.save({ allowAdditionalSources: true });
   assert.equal(u.entries().archive.length, 2);
+  assert.equal(u.read().entries.archive.length, 2);
   fs.writeFileSync(file, '{"schemaVersion":1,"archive":[{"identifier":"one"}]}');
   fs.utimesSync(file, new Date(), new Date(Date.now() + 5000));
   assert.deepEqual(u.entries().archive, [{ identifier: 'one' }]);
@@ -153,40 +150,25 @@ async function userApi(t, name) {
   return { ...ctx, file, zip };
 }
 
-test('API: off by default, the file is still checked, and turning it on shows your entries with their flag', async (t) => {
-  const { call, backend } = await userApi(t, 'valid');
-  const ids = async () => (await call('GET', '/items')).body.items.map(i => i.id);
-  let us1 = (await call('GET', '/user-sources')).body;
-  assert.deepEqual([us1.enabled, us1.error, us1.invalid, us1.entries, us1.conflicts], [false, null, [], { archive: 2, github: 2 }, []]);
-  assert.equal((await ids()).includes('my-demo'), false);
-  assert.equal((await call('GET', '/catalogs/local/items')).status, 404);
-
-  await call('PUT', '/settings', { allowAdditionalSources: true });
+test('API: your entries load as soon as the file is set, with their flag', async (t) => {
+  const { call } = await userApi(t, 'valid');
+  const us1 = (await call('GET', '/user-sources')).body;
+  assert.deepEqual([us1.error, us1.invalid, us1.entries, us1.conflicts], [null, [], { archive: 2, github: 2 }, []]);
   const items = (await call('GET', '/items')).body.items;
   const demo = items.find(i => i.id === 'my-demo');
   assert.deepEqual([demo.title, demo.userSource, demo.versions[0].user, demo.source.label], ['My Demo', true, true, 'Your sources']);
   assert.equal(items.find(i => i.id === 'my-homebrew').title, 'My Homebrew', 'your title wins over archive.org');
-  assert.equal(items.find(i => i.id === 'rk-e2e-halo-ce').userSource, false, 'curated cards never carry the flag');
+  assert.equal(items.find(i => i.id === 'rk-e2e-halo-ce').userSource, false, 'built-in cards never carry the flag');
   const ports = (await call('GET', '/catalogs/local/items')).body.items;
   assert.deepEqual(ports.map(p => [p.repository, p.userSource]).sort(), [['me/my-port', true], ['me/tool', true]]);
 
-  // Off again: hidden, and nothing on disk is touched
-  backend.library.recordInstall('my-demo', '/g/demo', null);
-  await call('PUT', '/settings', { allowAdditionalSources: false });
-  assert.equal((await ids()).includes('my-demo'), false);
-  assert.equal(backend.library.all()['my-demo'].install_dir, '/g/demo');
-  us1 = (await call('GET', '/user-sources')).body;
-  assert.equal(us1.enabled, false);
 });
 
-test('API: uploaders not in the curated list load only with additional sources on', async (t) => {
+test('API: an uploader the user adds loads like a built-in one, marked as theirs', async (t) => {
   const { call, backend, fake } = await testApi(t);
   fake.search = { ...fake.search, 'friend@example.com': [{ identifier: 'friend-game', title: 'Friend Game' }] };
   backend.settings.save({ sources: [{ uploader: 'rohanjackson071@gmail.com' }, { uploader: 'friend@example.com' }] });
   const find = async () => (await call('GET', '/items?refresh=1')).body.items.find(i => i.id === 'friend-game');
-  assert.equal(await find(), undefined);
-  assert.ok(!fake.requests.some(r => r.includes('friend%40example.com')), 'never queried while off');
-  await call('PUT', '/settings', { allowAdditionalSources: true });
   const friend = await find();
   assert.deepEqual([friend.userSource, friend.versions[0].user], [true, true]);
 });
@@ -200,27 +182,25 @@ test('API: an invalid file lists each bad entry; a bad path or a URL is refused'
   assert.deepEqual([refused.status, refused.body.detail], [400, 'user.json must be a file on this computer, not a URL']);
   assert.equal((await call('PUT', '/settings', { userSourcesFile: 'user.json' })).status, 400);
   assert.equal((await call('PUT', '/settings', { userSourcesFile: 5 })).status, 400);
-  assert.equal((await call('PUT', '/settings', { allowAdditionalSources: 'yes' })).status, 400);
   assert.equal((await call('PUT', '/settings', { userSourcesFile: '  ' })).body.userSourcesFile, null);
   assert.equal((await call('GET', '/user-sources')).body.file, null);
 });
 
 test('API: curated wins; a user entry for a curated identifier is a conflict', async (t) => {
   const { call } = await userApi(t, 'conflicting');
-  await call('PUT', '/settings', { allowAdditionalSources: true });
   const items = (await call('GET', '/items')).body.items;
   const halo = items.find(i => i.id === 'rk-e2e-halo-ce');
   assert.deepEqual([halo.title, halo.userSource, halo.versions.length], ['Halo: Combat Evolved', false, 1]);
   assert.equal(items.find(i => i.id === 'my-demo').userSource, true);
   const { conflicts } = (await call('GET', '/user-sources')).body;
   assert.deepEqual(conflicts.map(c => [c.from, c.key, c.reason]), [
-    ['user.json archive', 'rk-e2e-halo-ce', 'a curated uploader has it'],
+    ['user.json archive', 'rk-e2e-halo-ce', 'a built-in uploader has it'],
   ]);
 });
 
 test('API: installs from user.json check the sha1 given, else pin it and ask before a changed file', async (t) => {
   const { call, backend, fake, zip } = await userApi(t, 'valid');
-  await call('PUT', '/settings', { allowAdditionalSources: true, installPath: path.join(backend.dataDir, 'games') });
+  await call('PUT', '/settings', { installPath: path.join(backend.dataDir, 'games') });
   const install = async (id, extra = {}) => {
     const r = await call('POST', '/installs', { id, ...extra });
     assert.equal(r.status, 202);

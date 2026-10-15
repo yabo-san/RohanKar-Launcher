@@ -1,30 +1,17 @@
 # User-added sources
 
-The launcher's default is the curated list only: the archive.org uploaders in
-`catalog/uploaders.json`, plus the curated port shelf (`catalog/curated-ports.json`). Anything else is an **additional source**, and needs Settings >
-**Allow additional sources**, which is off by default.
+The launcher ships with a starting list: the archive.org uploaders in `catalog/uploaders.json`
+and the built-in port shelf (`catalog/curated-ports.json`). Anyone can add their own on top, with
+no switch to turn on and no warning to click through. What you add loads next to what ships and
+looks the same.
 
-Turning it on shows a warning every time it goes from off to on:
-
-> **Additional sources**
-> Warning: we do not monitor additional sources. Make sure you trust the repo or uploader before
-> you add it.
-> [Cancel] [I understand]
-
-Cancel (or Escape, or a click on the dimmed backdrop) leaves it off. Turning it off needs no
-confirmation: everything from additional sources is hidden, and installed files stay on disk.
-
-## What counts as an additional source
+## Where you add your own
 
 | Source | Where it's added |
 | --- | --- |
-| `user.json` | Settings > Allow additional sources > user.json (a file path) |
+| `user.json` | Settings > Your sources > user.json (a file path) |
 | Your own GitHub repos | Add a GitHub repo |
-| Uploaders not in `catalog/uploaders.json` | Settings > Uploaders (saving one we don't list shows the warning above first) |
-
-Every card from one of these carries a **Your source · not reviewed** badge: a wall game whose
-every upload is from an additional source, and a port on Your ports. Curated cards never carry it. A single upload from an
-additional source inside a curated game's versions is badged in the details page's version list.
+| Any other uploader | Settings > Uploaders |
 
 ## user.json
 
@@ -56,12 +43,10 @@ no longer supported"), since collisions are parked on the `parked/collisions` br
 
 ## Rules
 
-1. **Badge.** Every card from user.json (and every other additional source) shows
-   "Your source · not reviewed". Curated cards never do.
-2. **Curated wins.** A user entry with the same repository or identifier as a curated one is
+1. **Built-in wins.** A user entry with the same repository or identifier as a built-in one is
    ignored and listed under the file in Settings as a conflict: a `github` entry for a repository a
-   port shelf lists, and an `archive` entry for an item a curated uploader has.
-3. **sha1.** A file with a sha1 is checked, and a mismatch fails the install.
+   port shelf lists, and an `archive` entry for an item a built-in uploader has.
+2. **sha1.** A file with a sha1 is checked, and a mismatch fails the install.
    A file without one has its sha1 recorded on first install (`pins.json` in the data folder). If
    a later install of the same file gets a different sha1, the install stops before anything is
    written and a modal asks:
@@ -69,12 +54,10 @@ no longer supported"), since collisions are parked on the `parked/collisions` br
    source." [Cancel] [Install anyway]. Install anyway re-pins the new sha1.
    archive.org files are pinned per item and file name; GitHub release assets per release tag and
    asset name, so a new release pins afresh and a replaced asset in the same release asks.
-4. **Validation.** The file is validated whenever it is read. A file that can't be used at all
+3. **Validation.** The file is validated whenever it is read. A file that can't be used at all
    (missing, not JSON, wrong `schemaVersion`, a section that isn't an array) shows its error; each
    invalid entry is listed with its section, index, key and every reason, and the valid entries
    still load. Nothing is skipped silently.
-5. **Off hides.** Turning Allow additional sources off hides every user entry; installed files and
-   library rows stay.
 
 The logic is in `src/backend/user-sources.js` (read, validate, pins), `catalogs.js` (`github`
 entries and Your ports), `items.js` (uploaders and `archive` entries) and `installs.js` (sha1 checks

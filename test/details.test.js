@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory,
+  platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory, issueUrl,
 } = require('../src/frontend/details.js');
 
 test('platformOf: the first subject naming a platform', () => {
@@ -88,4 +88,17 @@ test('createHistory: back returns the page with its scroll, forward redoes, a ne
   assert.equal(h.canForward, false);
   // A search is its own page
   assert.equal(h.push({ name: 'home', query: 'halo' }, { name: 'home' }), true);
+});
+
+test('issueUrl: a prefilled issue with the app version, and the game or port when there is one', () => {
+  const parse = (u) => { const url = new URL(u); return { base: url.origin + url.pathname, title: url.searchParams.get('title'), body: url.searchParams.get('body') }; };
+  const plain = parse(issueUrl({ version: '1.6.0-fork.21' }));
+  assert.equal(plain.base, 'https://github.com/yabo-san/RohanKar-Launcher/issues/new');
+  assert.equal(plain.title, '');
+  assert.match(plain.body, /App: y4bo 1\.6\.0-fork\.21$/);
+  const game = parse(issueUrl({ version: '1.0', item: { kind: 'game', title: 'Halo', id: 'halo-ce', source: 'a@b.c' } }));
+  assert.equal(game.title, 'Halo: ');
+  assert.match(game.body, /Game: Halo \(archive\.org item halo-ce, uploader a@b\.c\)$/);
+  const port = parse(issueUrl({ item: { kind: 'port', title: 'Star Fox 64', id: 'quiver:curated:x', source: 'sonicdcer/Starfox64Recomp' } }));
+  assert.match(port.body, /App: y4bo unknown version\nPort: Star Fox 64 \(sonicdcer\/Starfox64Recomp\)$/);
 });
