@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0-fork.22](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.21...v1.6.0-fork.22) (2026-10-30)
+
+
+### Bug Fixes
+
+* **ui:** sidebar search box takes clicks in the installed app ([#153](https://github.com/yabo-san/RohanKar-Launcher/issues/153)) ([d6d5be1](https://github.com/yabo-san/RohanKar-Launcher/commit/d6d5be1c692bdee81e82891845095523ae3eba50))
+
 ## [1.6.0-fork.21](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.20...v1.6.0-fork.21) (2026-10-07)
 
 
