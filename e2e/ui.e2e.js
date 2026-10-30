@@ -212,16 +212,16 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   // without Properties since this is that page; Escape closes it and stays
   await detail.locator('[data-detail-menu]').click();
   const menu = page.locator('#ctxmenu');
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(2);
-  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(5);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(6);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
   // Right-click on the page's head opens the same menu
   await detail.locator('.album-title').click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
@@ -499,7 +499,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await row.locator('.lr-more').click();
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
   await menu.locator('[data-menu="favorite"]').click();
   await expect(menu).toBeHidden();
   await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
@@ -536,8 +536,25 @@ test('The sidebar is no window drag region, so its search box takes clicks on Wi
     .filter(el => getComputedStyle(el).getPropertyValue('-webkit-app-region') === 'drag')
     .map(el => el.id || el.className));
   expect(dragging).toEqual([]);
-  // the title row still moves the window
-  await expect(page.locator('.chrome')).toHaveCSS('-webkit-app-region', 'drag');
+});
+
+test('Clicks on the search box reach it in the app: no drag region covers it, and the title row still moves the window', async () => {
+  // Electron applies drag/no-drag rectangles in document order, later ones
+  // winning, whatever the stacking order. Replay that over a few points.
+  const hits = await page.evaluate(() => {
+    const regions = [...document.querySelectorAll('*')]
+      .map(el => ({ r: el.getBoundingClientRect(), v: getComputedStyle(el).getPropertyValue('-webkit-app-region') }))
+      .filter(({ r, v }) => (v === 'drag' || v === 'no-drag') && r.width && r.height);
+    const drags = (x, y) => regions.reduce((on, { r, v }) =>
+      (x >= r.left && x < r.right && y >= r.top && y < r.bottom ? v === 'drag' : on), false);
+    const mid = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+    return {
+      search: drags(...mid(document.querySelector('#q'))),
+      spacer: drags(...mid(document.querySelector('.chrome .drag'))),
+      back:   drags(...mid(document.querySelector('#nav-back'))),
+    };
+  });
+  expect(hits).toEqual({ search: false, spacer: true, back: false });
 });
 
 test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
