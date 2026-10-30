@@ -95,10 +95,10 @@ test('matchInstallFolders: loose names, identifiers and unique prefixes (real up
     '(5)Halo/': null,
     '(7)Oni/': null,
   });
-  const found = disk.matchInstallFolders(root, ['oni-ae', 'outrun-2006', 'banjo-kazooie-recompiled-7z', 'sh2-ee', 'halo-ce', 'halo-2'], {
+  const found = disk.matchInstallFolders(root, ['oni-ae', 'outrun-2006', 'banjo-kazooie-recompiled.-7z', 'sh2-ee', 'halo-ce', 'halo-2'], {
     'Oni: Anniversary Edition': 'oni-ae',
     'OutRun 2006: Coast 2 Coast': 'outrun-2006',
-    'Banjo-Kazooie (Recompiled)': 'banjo-kazooie-recompiled-7z',
+    'Banjo Kazooie': 'banjo-kazooie-recompiled.-7z',
     'Silent Hill 2: Enhanced Edition': 'sh2-ee',
     'Halo: Combat Evolved': 'halo-ce',
     'Halo 2': 'halo-2',
@@ -106,7 +106,7 @@ test('matchInstallFolders: loose names, identifiers and unique prefixes (real up
   assert.deepEqual(found.map(f => [path.basename(f.folderPath), f.identifier, f.matchedBy]).sort(), [
     ['(137)Oni - Anniversary Edition', 'oni-ae', 'loose'],
     ['(139)OutRun 2006 Coast 2 Coast', 'outrun-2006', 'loose'],
-    ['(16)Banjo Kazooie Recompiled', 'banjo-kazooie-recompiled-7z', 'loose'],
+    ['(16)Banjo Kazooie Recompiled', 'banjo-kazooie-recompiled.-7z', 'loose'],
     ['(181)Silent Hill 2', 'sh2-ee', 'prefix'],
   ]);
 });
@@ -121,6 +121,6 @@ test('matchInstallFolders: identifier loose match and prefix on identifiers', (t
 
 test('looseKey: drops case, punctuation, spaces and archive suffixes', () => {
   assert.equal(disk.looseKey('Oni: Anniversary Edition'), disk.looseKey('oni - anniversary edition'));
-  assert.equal(disk.looseKey('banjo-kazooie-recompiled-7z'), 'banjokazooierecompiled');
+  assert.equal(disk.looseKey('banjo-kazooie-recompiled.-7z'), 'banjokazooierecompiled');
   assert.equal(disk.looseKey('Pokémon Red'), 'pokemonred');
 });
