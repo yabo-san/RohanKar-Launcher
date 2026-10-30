@@ -84,3 +84,43 @@ test('matchInstallFolders: by identifier, sanitized identifier, then title', (t)
   assert.deepEqual(disk.matchInstallFolders(path.join(root, 'nope'), [], {}), []);
   assert.deepEqual(disk.matchInstallFolders(null), []);
 });
+
+test('matchInstallFolders: loose names, identifiers and unique prefixes (real upstream folders)', (t) => {
+  const root = tree(tmpDir(t), {
+    '(137)Oni - Anniversary Edition/': null,
+    '(139)OutRun 2006 Coast 2 Coast/': null,
+    '(16)Banjo Kazooie Recompiled/': null,
+    '(181)Silent Hill 2/': null,
+    '(200)Silent Hill 3/': null,
+    '(5)Halo/': null,
+    '(7)Oni/': null,
+  });
+  const found = disk.matchInstallFolders(root, ['oni-ae', 'outrun-2006', 'banjo-kazooie-recompiled.-7z', 'sh2-ee', 'halo-ce', 'halo-2'], {
+    'Oni: Anniversary Edition': 'oni-ae',
+    'OutRun 2006: Coast 2 Coast': 'outrun-2006',
+    'Banjo Kazooie': 'banjo-kazooie-recompiled.-7z',
+    'Silent Hill 2: Enhanced Edition': 'sh2-ee',
+    'Halo: Combat Evolved': 'halo-ce',
+    'Halo 2': 'halo-2',
+  });
+  assert.deepEqual(found.map(f => [path.basename(f.folderPath), f.identifier, f.matchedBy]).sort(), [
+    ['(137)Oni - Anniversary Edition', 'oni-ae', 'loose'],
+    ['(139)OutRun 2006 Coast 2 Coast', 'outrun-2006', 'loose'],
+    ['(16)Banjo Kazooie Recompiled', 'banjo-kazooie-recompiled.-7z', 'loose'],
+    ['(181)Silent Hill 2', 'sh2-ee', 'prefix'],
+  ]);
+});
+
+test('matchInstallFolders: identifier loose match and prefix on identifiers', (t) => {
+  const root = tree(tmpDir(t), { 'Banjo Kazooie Recompiled/': null, 'Perfect/': null });
+  const found = disk.matchInstallFolders(root, ['BanjoKazooieRecompiled.7z', 'perfect-dark-pc-port'], {});
+  assert.deepEqual(found.map(f => [f.identifier, f.matchedBy]).sort(), [
+    ['BanjoKazooieRecompiled.7z', 'loose'], ['perfect-dark-pc-port', 'prefix'],
+  ]);
+});
+
+test('looseKey: drops case, punctuation, spaces and archive suffixes', () => {
+  assert.equal(disk.looseKey('Oni: Anniversary Edition'), disk.looseKey('oni - anniversary edition'));
+  assert.equal(disk.looseKey('banjo-kazooie-recompiled.-7z'), 'banjokazooierecompiled');
+  assert.equal(disk.looseKey('Pokémon Red'), 'pokemonred');
+});
