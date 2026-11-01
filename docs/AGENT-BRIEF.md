@@ -12,8 +12,10 @@ through our one Playnite extension. Keep it small. Every feature is something th
 ## In scope
 
 - **Curated archive.org uploaders** (`catalog/uploaders.json`). Their uploads are the game wall.
-- **Curated port shelf** (`catalog/curated-ports.json`, edited by hand, format in
-  `catalog/README.md`). Installs the release binary from GitHub or
+- **Port shelf = personal picks only** (`catalog/curated-ports.json`, edited by hand, format in
+  `catalog/README.md`): Project Midas, Perfect Dark, Star Fox 64: Recompiled. No other curation
+  of ports: given the state of AI game porting, the launcher offers no judgement on which ports
+  are good. Users add any other repo themselves. Installs the release binary from GitHub or
   GitLab. Nothing else: no data files, no wiring between apps.
 - **Imports:** `user.json` with single archive.org items and single GitHub (or GitLab) repos.
 - **Playnite export** (`playnite-export.json`, `--export-playnite`, `--install`, `--uninstall`).
@@ -45,8 +47,8 @@ through our one Playnite extension. Keep it small. Every feature is something th
 - **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
   Drop its `collisions` section. Validation and "curated wins on conflict" stay.
 - **`catalog/curated-ports.json` is the source of truth, edited by hand.** Entries change by pull
-  request; no script, outside list or workflow generates it. Entries with `"more": true` show only
-  with Settings > More ports on. `test/curated-ports.test.js` checks
+  request; no script, outside list or workflow generates it. Don't grow it back into a
+  recommendation list; Settings > More ports is gone. `test/curated-ports.test.js` checks
   every entry. It used to be scraped from an outside list; never write that list's URL, document
   ID or author anywhere.
 
@@ -97,8 +99,8 @@ through our one Playnite extension. Keep it small. Every feature is something th
      asset picked, and OK / renamed / no match / HTTP error. It catches a port renaming its
      repository or release files, or breaking its filter, without downloading a game.
    - **Full installs** (workflow_dispatch only, run by hand before a release, not nightly):
-     install the five Acceptance ports below (Zelda 64: Recompiled, Star Fox 64, ironwail,
-     Doom Launcher, r2modman) into a temp folder with the app's own install engine: pick the
+     install the three Acceptance ports below (Project Midas, Perfect Dark, Star Fox 64) into a
+     temp folder with the app's own install engine: pick the
      asset, download, extract, list what landed. No game data. Results in the job summary.
 10. **README**: replace it with exactly the text in "README" below; move Development and Releases
    into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
@@ -114,12 +116,9 @@ the log lines to the PR:
 
 | tile | source | why |
 |---|---|---|
-| Zelda 64: Recompiled | GitHub | the common case |
+| Project Midas | GitHub | a `.7z` release (needs 7-Zip); releaseAssetFilter `windows` skips the Linux and Steam Deck builds |
+| Perfect Dark | GitHub | the common case; the release zip holds one folder |
 | Star Fox 64: Recompiled | GitLab | item 5 |
-| Quake (ironwail) | GitHub, owner pick | releaseAssetFilter `win64` |
-| Doom Launcher | GitHub, owner pick | two zips in the release; the portable one must win |
-| r2modman | GitHub, owner pick | portable exe, not the Setup installer |
-| a "source only" entry | n/a | shows no Install button |
 
 ## README
 
@@ -128,18 +127,26 @@ Use this text exactly:
 ```markdown
 # y4bo
 
-A launcher that downloads and installs games and ports from archive.org and GitHub.
-It's a semi-curated list: my picks are built in, and you can add your own.
+An easy way to download games from the Internet Archive. It also downloads and installs
+release builds from GitHub and GitLab.
+
+It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
+ports are good or bad. The shelf has a few personal picks (Project Midas, Perfect Dark,
+Star Fox 64: Recompiled), and everything else is yours to add: any archive.org uploader
+or upload, any GitHub or GitLab repo.
 
 I made this to test a CI/CD pipeline (see the commit history), not to show what a
 proper frontend looks like. **The frontend is vibecoded.**
 
 ## What it does
 
-- **archive.org:** browse a few uploaders I trust; one-click download and extract (zip, 7z, rar).
-- **GitHub and GitLab:** install release builds of decomp and recomp ports.
-- **Add your own:** single archive.org items or GitHub repos in a `user.json`.
-  Want a different curated list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
+- **archive.org:** a few uploaders are built in (Rohan's uploads, pstriple, r4ze, with box art
+  and titles cleaned up by hand); add any other uploader or single upload. One-click download
+  and extract (zip, 7z, rar).
+- **GitHub and GitLab:** install a repo's latest release build. A few personal picks are built in;
+  add any other repo yourself.
+- **Add your own:** archive.org uploaders in Settings, single archive.org items or repos in a `user.json`.
+  Want your own built-in list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
 - **Launch:** picks the right exe, or lets you choose when there are several.
 - **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).
 - **Playtime:** tracks how long you've played each game.

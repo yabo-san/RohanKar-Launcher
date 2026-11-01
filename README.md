@@ -1,17 +1,25 @@
 # y4bo
 
-A launcher that downloads and installs games and ports from archive.org and GitHub.
-It's a semi-curated list: my picks are built in, and you can add your own.
+An easy way to download games from the Internet Archive. It also downloads and installs
+release builds from GitHub and GitLab.
+
+It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
+ports are good or bad. The shelf has a few personal picks (Project Midas, Perfect Dark,
+Star Fox 64: Recompiled), and everything else is yours to add: any archive.org uploader
+or upload, any GitHub or GitLab repo.
 
 I made this to test a CI/CD pipeline (see the commit history), not to show what a
 proper frontend looks like. **The frontend is vibecoded.**
 
 ## What it does
 
-- **archive.org:** browse a few uploaders I trust; one-click download and extract (zip, 7z, rar).
-- **GitHub and GitLab:** install release builds of decomp and recomp ports.
-- **Add your own:** single archive.org items or GitHub repos in a `user.json`.
-  Want a different curated list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
+- **archive.org:** a few uploaders are built in (Rohan's uploads, pstriple, r4ze, with box art
+  and titles cleaned up by hand); add any other uploader or single upload. One-click download
+  and extract (zip, 7z, rar).
+- **GitHub and GitLab:** install a repo's latest release build. A few personal picks are built in;
+  add any other repo yourself.
+- **Add your own:** archive.org uploaders in Settings, single archive.org items or repos in a `user.json`.
+  Want your own built-in list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
 - **Launch:** picks the right exe, or lets you choose when there are several.
 - **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).
 - **Playtime:** tracks how long you've played each game.

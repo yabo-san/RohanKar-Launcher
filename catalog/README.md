@@ -5,9 +5,9 @@ fallback. Every file changes by pull request.
 
 | file | what | entries |
 | --- | --- | --- |
-| `uploaders.json` | curated archive.org uploaders: handle, email (what `uploader:` matches), aliases, `track`, notes | 14 |
+| `uploaders.json` | the built-in archive.org uploaders (Rohan, r4ze, pstriple): handle, email (what `uploader:` matches), aliases, `track`, notes | 3 |
 | `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
-| `curated-ports.json` | the port shelf, edited by hand (see Port shelf below) | 46 |
+| `curated-ports.json` | the port shelf: three personal picks, edited by hand (see Port shelf below) | 3 |
 | `featured.json` | the Home page's hand-picked games and ports, in display order: `{ picks: [{ identifier \| repository, blurb?, banner? }] }` (see Home banners below) | per pick |
 | `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Also each featured pick's Home banner, keyed by archive.org identifier or lowercase `owner/repo`: `banner: { url, source: "pinned" \| "auto", hero?, artist?, steam64?, favorite?, sgdb? }`. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API; pinned banners are never overwritten | per item |
 
@@ -15,8 +15,10 @@ Rules: uploader emails are what archive.org's `uploader:` field matches; handles
 
 ## Port shelf
 
-`curated-ports.json` is the port shelf: GitHub and GitLab projects whose release binary the
-launcher installs. It is written by hand; nothing generates it. To add a port, copy an entry,
+`curated-ports.json` is the port shelf. It holds a few personal picks (Project Midas, Perfect
+Dark, Star Fox 64: Recompiled), not a list of recommended ports: given the state of AI game
+porting, the launcher doesn't judge which ports are good. Users add any other GitHub or GitLab
+repo themselves. It is written by hand; nothing generates it. To add a port, copy an entry,
 edit it and open a PR. `npm test` (`test/curated-ports.test.js`) checks every entry. The file
 keeps Quiver's catalog shape (`{ name, description, version, apps: [...] }`) because installed
 copies of the launcher fetch it from `main`.
@@ -43,7 +45,7 @@ copies of the launcher fetch it from `main`.
 | `appIconUrl` | optional | an https image for the tile when there is no cover |
 | `description` | optional | shown on the tile's page; for engines and launchers, say what the user brings |
 | `filesToAdd` | optional | empty files created in the install folder, e.g. `portable.txt` |
-| `more` | optional | `true`: shown only with Settings > More ports on (or once installed). Older launchers ignore it and show the entry |
+| `more` | legacy | `true`: hidden unless an older launcher's Settings > More ports is on (or once installed). No entry uses it now |
 
 Section tags decide how a tile behaves:
 
@@ -53,10 +55,6 @@ Section tags decide how a tile behaves:
 | `work in progress` | installs, with a "work in progress" badge |
 | `engine`, `launcher` | installs, and shows its description (what the user brings) |
 | `source only` | no Install button; links to the repository. The Live ports check skips it |
-
-**More ports.** Entries with `"more": true` are the rest of the community list the shelf started
-from: today the 21 `source only` decompilations. They stay off the shelf unless the user turns on
-Settings > More ports. To promote one, delete its `more` line.
 
 Covers and banners come from `art.json` / `overrides.json` as for everything else. The Live ports
 workflow checks every entry nightly, so a wrong `releaseAssetFilter` or a renamed repository
