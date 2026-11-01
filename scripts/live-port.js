@@ -36,8 +36,10 @@ const { sourcesFromCatalog } = require('../src/backend/sources');
 const ROOT = path.join(__dirname, '..');
 const GITLAB_API = 'https://gitlab.com/api/v4';
 // The brief's Acceptance ports, installed in full by --install
-const ACCEPTANCE = ['Zelda64Recomp/Zelda64Recomp', 'sonicdcer/Starfox64Recomp', 'andrei-drexler/ironwail', 'nstlaurent/DoomLauncher', 'ebkr/r2modmanPlus'];
+const ACCEPTANCE = ['murkantor/Project-Midas', 'perfect-dark-pc-port/perfect_dark', 'sonicdcer/Starfox64Recomp'];
 const DEFAULT_BYTES = 4096;
+// The runner's 7-Zip, for .7z releases (Project Midas); the app looks for the Windows one
+const LINUX_7Z = '/usr/bin/7z';
 const FAILED = new Set(['no match', 'HTTP error', 'failed']);
 
 function parseArgs(argv) {
@@ -241,7 +243,7 @@ async function run(opts, {
       const settings = createSettings(path.join(dir, 'settings.json'));
       settings.save({ installPath: path.join(dir, 'games'), downloadPath: path.join(dir, 'dl') });
       const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
-      const installs = createInstalls({ settings, library, archive: createArchive({ base: archiveBase, log: () => {} }), gamesDir: dir, log: () => {}, githubApi, ...(gitlabSupported() ? { gitlabApi } : {}) });
+      const installs = createInstalls({ settings, library, archive: createArchive({ base: archiveBase, log: () => {} }), gamesDir: dir, log: () => {}, githubApi, ...(gitlabSupported() ? { gitlabApi } : {}), ...(fs.existsSync(LINUX_7Z) ? { sevenZip: LINUX_7Z } : {}) });
       try {
         for (const repo of wanted) {
           const e = find(repo);
