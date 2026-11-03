@@ -3,26 +3,45 @@
 This file is the work order. Read it before every PR. It replaces the earlier brief (collisions,
 Quiver parity); that plan is retired.
 
-## What this is
+## The user loop
 
-y4bo downloads GitHub releases and archive.org zips, and gives people a few ways to import
-things. That is the whole product. Most users never look at its UI: Playnite is where they play,
-through our one Playnite extension. Keep it small. Every feature is something that can break.
+This is the definition of the product. A feature that doesn't serve one of these steps doesn't
+belong in the app. Curation is not the point.
 
-## In scope
+1. **Add.** The user pastes a link.
+   - An archive.org link adds a catalogue: either the single upload, or the uploader's whole
+     account. For a single upload's link, ask which one they mean.
+   - A GitHub or GitLab repo link adds a binary.
+2. **Browse.** Games come from the user's catalogues and Ports from their repos. Right-click
+   excludes an upload from a catalogue, and the exclusion can be undone.
+3. **Install.** One click.
+   - A repo installs its latest release's Windows build. A repo with no build stays as a tile
+     that opens its page.
+   - An archive.org upload downloads, and a zip, 7z or rar is extracted. Playing it only really
+     works for uploads shaped like Rohan's (one game per upload, ready to run). Anything else is
+     just downloaded: for that the app is an archive.org download manager, and the app and README
+     say so plainly.
+4. **Play.** Play, Add to Steam, Open folder, uninstall to the Recycle Bin, and the Playnite export.
+5. **Update.** The launcher updates both: a repo with a newer release, and a catalogue with new or
+   changed uploads, get a badge and a one-click update. It never updates on its own.
 
-- **Curated archive.org uploaders** (`catalog/uploaders.json`). Their uploads are the game wall.
-- **Port shelf = personal picks only** (`catalog/curated-ports.json`, edited by hand, format in
-  `catalog/README.md`): Project Midas, Perfect Dark, Star Fox 64: Recompiled. No other curation
-  of ports: given the state of AI game porting, the launcher offers no judgement on which ports
-  are good. Users add any other repo themselves. Installs the release binary from GitHub or
-  GitLab. Nothing else: no data files, no wiring between apps.
-- **Imports:** `user.json` with single archive.org items and single GitHub (or GitLab) repos.
-- **Playnite export** (`playnite-export.json`, `--export-playnite`, `--install`, `--uninstall`).
-- **Curation data:** `overrides.json`, `catalog/art.json`, `catalog/favorite-artists.json`, and
-  the dupe handling (separate cards where a shared title would merge different uploads).
-- Install, uninstall (folder to the Recycle Bin, entry kept), Open folder, Add to Steam, playtime,
-  update checks.
+The app ships with a starting set: the uploaders in `catalog/uploaders.json` (Rohan, r4ze,
+pstriple) and three personal picks in `catalog/curated-ports.json` (Project Midas, Perfect Dark,
+Star Fox 64: Recompiled). Given the state of AI game porting, the launcher offers no judgement on
+which ports are good: don't grow the picks back into a recommendation list; users add any other
+repo themselves. `curated-ports.json` is edited by hand, by pull request; never write the outside
+list it was once scraped from (URL, document ID or author) anywhere. It vouches for nothing: no badges, gates or warnings that set
+built-in sources apart from what users add. The art and title work in `overrides.json` and
+`catalog/art.json` stays, because it makes the starting set look right.
+
+The work order further down is history. Where it disagrees with this loop, the loop wins.
+
+## User data
+
+- What a user installed lives in their local `library.db` and survives updates and reinstalls of
+  the app. Never migrate it in a way that drops entries.
+- What a user added lives on their machine. Never copy it into the repo.
+- Uninstall moves the folder to the Recycle Bin; it never deletes outright.
 
 ## Out of scope. Do not build, propose or reopen
 
@@ -36,28 +55,6 @@ through our one Playnite extension. Keep it small. Every feature is something th
 - Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import. Remove both,
   including `src/backend/quiver-import.js` and the four Quiver catalog URLs in the frontend.
   The shelf file keeps Quiver's catalog shape only because installed copies of the app read it.
-- Adding a whole archive.org uploader from the app (see Locked down).
-
-## Locked down
-
-- **The curated uploader list changes only in source.** Remove the "trust this uploader" button
-  and the feed import of uploaders (`src/backend/feed.js` `trustUploaders`/`importFeed`,
-  `server.js` trust route, the frontend button). A user who wants different uploaders edits
-  `catalog/uploaders.json` and builds their own copy; `docs/BUILD-YOUR-OWN.md` explains how.
-- **`user.json` accepts single items only:** an archive.org identifier, or a GitHub repository.
-  Drop its `collisions` section. Validation and "curated wins on conflict" stay.
-- **`catalog/curated-ports.json` is the source of truth, edited by hand.** Entries change by pull
-  request; no script, outside list or workflow generates it. Don't grow it back into a
-  recommendation list; Settings > More ports is gone. `test/curated-ports.test.js` checks
-  every entry. It used to be scraped from an outside list; never write that list's URL, document
-  ID or author anywhere.
-
-## User data
-
-- What a user installed lives in their local `library.db` and survives updates and reinstalls of
-  the app. Never migrate it in a way that drops entries.
-- User additions live in their `user.json` (a path in Settings). Never copy them into the repo.
-- Uninstall moves the folder to the Recycle Bin; it never deletes outright.
 
 ## Work order, one PR each
 
