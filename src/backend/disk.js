@@ -99,8 +99,22 @@ function readReadme(installDir) {
   }
 }
 
-// Folders in scanDir that match a known item by identifier, sanitized
-// identifier, or title (case-insensitive). titleMap is { title: identifier }.
+// Lowercase letters and digits only, so "Oni - Anniversary Edition" and
+// "Oni: Anniversary Edition" compare equal. Trailing archive extensions go too.
+function looseKey(name) {
+  return String(name).normalize('NFKD').toLowerCase()
+    .replace(/[\s._-]*(7z|zip|rar)$/, '')
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+// Shortest folder key the prefix rule accepts, so "Halo" can't claim "Halo 2"
+// unless it's the only title starting that way.
+const MIN_PREFIX = 4;
+
+// Folders in scanDir that match a known item. In order: identifier, sanitized
+// identifier, title (case-insensitive), then loose title or identifier (case,
+// spaces and punctuation ignored), then a folder that is the loose prefix of
+// exactly one item. titleMap is { title: identifier }.
 // Returns [{ identifier, folderPath, matchedBy }] in directory order.
 function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
   const entries = scanDir && fs.existsSync(scanDir) ? readdir(scanDir) : null;
@@ -108,10 +122,21 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
 
   const ids = new Set(knownIdentifiers || []);
   const titles = {};
+  const loose = new Map(); // loose key -> identifier, first one wins
+  const addLoose = (key, identifier) => { if (key && !loose.has(key)) loose.set(key, identifier); };
   for (const [title, identifier] of Object.entries(titleMap || {})) {
     const key = sanitizeTitle(title).toLowerCase();
     if (key) titles[key] = identifier;
+    addLoose(looseKey(title), identifier);
   }
+  for (const id of ids) addLoose(looseKey(id), id);
+
+  const byPrefix = (key) => {
+    if (key.length < MIN_PREFIX) return null;
+    const hits = new Set();
+    for (const [k, identifier] of loose) if (k.startsWith(key)) hits.add(identifier);
+    return hits.size === 1 ? [...hits][0] : null;
+  };
 
   const out = [];
   for (const entry of entries) {
@@ -130,7 +155,10 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
       // Upstream RohanKar named its installs "(id)Title"; the number is its catalog id, not ours
       const bare = name.replace(/^\(\d+\)\s*/, '');
       const key = sanitizeTitle(bare).toLowerCase();
+      const lkey = looseKey(bare);
       if (titles[key]) { identifier = titles[key]; matchedBy = bare === name ? 'title' : 'title-prefixed'; }
+      else if (loose.has(lkey)) { identifier = loose.get(lkey); matchedBy = 'loose'; }
+      else if ((identifier = byPrefix(lkey))) matchedBy = 'prefix';
     }
     if (identifier) out.push({ identifier, folderPath: path.join(scanDir, name), matchedBy });
   }
@@ -139,5 +167,5 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
 
 module.exports = {
   IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, readReadme,
-  matchInstallFolders,
+  looseKey, matchInstallFolders,
 };
