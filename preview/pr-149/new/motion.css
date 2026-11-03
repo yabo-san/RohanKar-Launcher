@@ -21,9 +21,6 @@
   position: absolute; top: 0; bottom: 0; left: 0; z-index: 30; width: var(--sbw);
   background: rgb(31 32 31 / 64%); backdrop-filter: blur(40px) saturate(180%); -webkit-backdrop-filter: blur(40px) saturate(180%);
   box-shadow: inset -.5px 0 0 rgb(0 0 0 / 55%), inset -14px 0 14px -14px rgb(0 0 0 / 35%);
-  /* The title row below spans the full width under this column, and Electron
-     builds drag regions from rectangles, not stacking order: without this the
-     title row's drag strip swallows clicks on the search box. */
   -webkit-app-region: no-drag;
 }
 .main { width: 100%; }
@@ -32,6 +29,13 @@
   background: rgb(22 22 22 / 66%); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
   box-shadow: 0 .5px 0 transparent; transition: box-shadow .2s var(--ease), background .2s var(--ease);
 }
+/* The title row spans the full width, under the sidebar too. Electron builds
+   drag regions from rectangles in document order, not stacking order, and the
+   row comes after the sidebar, so a drag on the whole row overrode the
+   sidebar's no-drag and swallowed clicks on the search box. Only the spacer
+   between the toolbar buttons drags, and it starts right of the sidebar. */
+.chrome { -webkit-app-region: no-drag; }
+.chrome .drag { align-self: stretch; -webkit-app-region: drag; }
 .main.scrolled .chrome { background: rgb(26 26 26 / 72%); box-shadow: 0 .5px 0 rgb(255 255 255 / 10%); }
 .body { padding: var(--chrome-h) var(--pr) 72px calc(var(--sbw) + var(--pl)); overflow-x: hidden; }
 .announce { margin: calc(var(--chrome-h) + 4px) var(--pr) 8px calc(var(--sbw) + var(--pl)); }
@@ -165,7 +169,7 @@ button.album-sub:hover { text-decoration: underline; text-underline-offset: 3px;
 .album-more:hover { background: rgb(255 255 255 / 17%); }
 .album-more .ico { width: 18px; height: 18px; }
 .album-info .progress { max-width: 420px; }
-.album-info .user-note, .album-info .newer-note, .album-info .srcline, .album-info .manual-note { max-width: 640px; margin: 14px 0 0; }
+.album-info .newer-note, .album-info .srcline, .album-info .manual-note { max-width: 640px; margin: 14px 0 0; }
 .album-info .h3 { margin-top: 18px; }
 .album-info .versions { max-width: 640px; }
 .album-desc { max-width: 640px; margin-top: 16px; }
@@ -207,7 +211,6 @@ button.track:hover { background: var(--hover); }
 .tc.warn { color: var(--warn); }
 .tflags { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .tflags .tag { position: static; }
-.tflags .user-badge { margin: 0; }
 .track-sum { margin: 14px 12px 0; font-size: 12px; color: var(--text2); }
 .album-foot { margin: 22px 12px 0; grid-template-columns: 110px minmax(0, 1fr); gap: 6px 12px; font-size: 12px; }
 .album-foot dd { color: #b8b8b8; }
