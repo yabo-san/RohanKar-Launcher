@@ -119,8 +119,10 @@ test('packaged app: opens the new UI, shows default sources, downloads a stub it
   try {
     const { page } = app;
 
-    // The window opens the new UI (the default) with the wall from the stub
+    // The window opens the new UI (the default); the wall shows the stub's games. Home has no
+    // game cards for the fixtures' old uploads since the Most Played rows went (#149)
     await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
+    await page.locator('[data-view="wall"]').click();
     await expect(page.locator('#body .game-card').first()).toBeVisible({ timeout: 30_000 });
 
     await page.locator('#btn-settings').click();
