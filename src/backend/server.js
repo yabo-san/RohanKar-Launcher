@@ -16,6 +16,7 @@ const disk = require('./disk');
 const { createManualApp } = require('./manual');
 const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
+const { classifyLink } = require('./links');
 
 const API_VERSION = 'v1';
 const HOST = '127.0.0.1';
@@ -158,6 +159,20 @@ function createApi(backend) {
   });
   route('GET', '/catalogs/:id/review', ({ params }) => { catalog(params.id); return { body: catalogs.review(params.id) }; });
   route('POST', '/catalogs/:id/seen', ({ params }) => { catalog(params.id); catalogs.markSeen(params.id); return { status: 204 }; });
+
+  // ─── The Add box: what a pasted link points at ───────────────────────────
+  // A single upload also gets its title and uploader, so the app can ask
+  // whether to add just it or the whole account.
+  route('POST', '/add/resolve', async ({ body }) => {
+    const { link } = requireObject(body);
+    const r = classifyLink(link);
+    if (r.error) throw new HttpError(400, 'bad_link', r.error);
+    if (r.kind !== 'upload') return { body: r };
+    const it = await archive.item(r.identifier);
+    if (!it.ok || !Object.keys(it.metadata || {}).length) throw new HttpError(404, 'not_found', `${r.identifier} isn't an archive.org upload${it.error ? ` (${it.error})` : ''}`);
+    const t = it.metadata.title;
+    return { body: { ...r, title: (Array.isArray(t) ? t[0] : t) || r.identifier, uploader: it.metadata.uploader || null } };
+  });
 
   // ─── Your repos: GitHub repos the user adds on their own ("Your ports") ──
   // :repo is owner/repo, URL-encoded (owner%2Frepo).

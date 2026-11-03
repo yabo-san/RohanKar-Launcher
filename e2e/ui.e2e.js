@@ -214,16 +214,16 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   // without Properties since this is that page; Escape closes it and stays
   await detail.locator('[data-detail-menu]').click();
   const menu = page.locator('#ctxmenu');
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
-  await expect(menu.locator(':scope > .sep')).toHaveCount(2);
-  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(6);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
+  await expect(menu.locator(':scope > .sep')).toHaveCount(3);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(7);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
   // Right-click on the page's head opens the same menu
   await detail.locator('.album-title').click({ button: 'right' });
   await expect(menu).toBeVisible();
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
@@ -501,7 +501,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await row.locator('.lr-more').click();
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link']);
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
   await menu.locator('[data-menu="favorite"]').click();
   await expect(menu).toBeHidden();
   await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
@@ -589,7 +589,7 @@ test('Your sources: no switch or warning, user.json loads at once with no badge,
   const modal = page.locator('#modal');
   await page.locator('#btn-settings').click();
   await expect(page.locator('#setting-additional')).toHaveCount(0);
-  await expect(page.locator('#nav-add-repo')).toBeVisible();
+  await expect(page.locator('#nav-add')).toBeVisible();
 
   // user.json: loaded, its invalid entry and its conflict with the built-in list listed
   const file = path.join(stack.dataDir, 'user.json');
@@ -634,20 +634,43 @@ test('Your sources: no switch or warning, user.json loads at once with no badge,
 
 });
 
-test('Settings > Uploaders: any uploader saves without a warning', async () => {
+test('Add: an account link joins the wall, and Settings removes it', async () => {
   const modal = page.locator('#modal');
-  const box = page.locator('#setting-sources');
-  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).sources;
+  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).sources || [];
+  await page.locator('#nav-add').click();
+  await expect(modal.locator('.modal-title')).toHaveText('Add');
+  await modal.locator('#modal-input').fill('https://archive.org/details/@stranger');
+  await modal.locator('#modal-input').press('Enter');
+  // The fake archive.org has no such account, so only the saved list and the sidebar show it
+  await expect.poll(() => saved().some(s => s.uploader === '@stranger')).toBe(true);
+  await expect(page.locator('#nav-uploaders .navitem', { hasText: 'stranger' })).toBeVisible();
+
   await page.locator('#btn-settings').click();
-  const before = await box.inputValue();
-  await box.fill(before + '\n# stranger@example.invalid, Stranger');
-  await page.locator('#btn-save-settings').click();
-  await expect(page.locator('#toast')).toContainText('Settings saved.');
-  await expect(modal).toHaveCount(0);
-  await expect.poll(() => (saved() || []).some(s => s.uploader === 'stranger@example.invalid')).toBe(true);
-  await box.fill(before);
-  await page.locator('#btn-save-settings').click();
-  await expect.poll(() => saved().some(s => s.uploader === 'stranger@example.invalid')).toBe(false);
+  await expect(page.locator('#setting-sources')).toHaveCount(0);
+  const row = page.locator('#sources-list .repo-row', { hasText: 'stranger' });
+  await expect(row).toContainText('archive.org account');
+  await row.locator('[data-action="source-remove"]').click();
+  await expect.poll(() => saved().some(s => s.uploader === '@stranger')).toBe(false);
+  await expect(row).toHaveCount(0);
+
+  // Something that isn't a link says what to paste
+  await page.locator('#nav-add').click();
+  await modal.locator('#modal-input').fill('banjo');
+  await modal.locator('.md-btn-primary').click();
+  await expect(page.locator('#toast')).toContainText('Paste a link');
+});
+
+test('Hide from Wall: the upload leaves the wall, and Settings brings it back', async () => {
+  await page.locator('[data-view="wall"]').click();
+  const card = page.locator('.game-card', { hasText: 'The Sims' }).first();
+  await card.click({ button: 'right' });
+  await page.locator('#ctxmenu [data-menu="hide"]').click();
+  await expect(page.locator('#toast')).toContainText('Hid The Sims');
+  await expect(page.locator('.game-card', { hasText: 'The Sims' })).toHaveCount(0);
+  await page.locator('#btn-settings').click();
+  await page.locator('#hidden-uploads [data-action="unhide-all"]').click();
+  await page.locator('[data-view="wall"]').click();
+  await expect(page.locator('.game-card', { hasText: 'The Sims' }).first()).toBeVisible();
 });
 
 test('Report an issue: Settings, a game and a port each open a prefilled GitHub issue', async () => {
@@ -670,22 +693,27 @@ test('Report an issue: Settings, a game and a port each open a prefilled GitHub 
   await page.keyboard.press('Escape');
 });
 
-test('Add a GitHub repo: it lands on Your ports, and can be removed', async () => {
-  await page.locator('#nav-add-repo').click();
-  await expect(page.locator('#heading')).toHaveText('Add a GitHub repo');
-  await page.locator('#repo-repository').fill('someone/banjo-fork');
-  await page.locator('#repo-name').fill('Banjo Fork');
-  await page.locator('#btn-add-repo').click();
-  await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toBeVisible();
-  const saved = JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'catalogs', 'repos.local.json'), 'utf8'));
-  expect(saved).toEqual([{ repository: 'someone/banjo-fork', name: 'Banjo Fork' }]);
+test('Add a repo link: it lands on Your ports, tries to install, and Settings removes it', async () => {
+  const modal = page.locator('#modal');
+  await page.locator('#nav-add').click();
+  await modal.locator('#modal-input').fill('https://github.com/someone/banjo-fork/releases');
+  await modal.locator('.md-btn-primary').click();
+  const file = path.join(stack.dataDir, 'catalogs', 'repos.local.json');
+  const saved = () => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null);
+  await expect.poll(saved).toEqual([{ repository: 'someone/banjo-fork' }]);
+  // The fake GitHub has no such repo, so the install it starts fails and says so
+  await expect(page.locator('#detail')).toContainText('banjo-fork');
+  await expect(page.locator('#toast')).toContainText('banjo-fork', { timeout: 30_000 });
+  await page.keyboard.press('Escape');
 
   await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await expect(page.locator('.port-card', { hasText: 'Banjo Fork' })).toBeVisible();
+  await expect(page.locator('.port-card', { hasText: 'banjo-fork' })).toBeVisible();
 
-  await page.locator('#nav-add-repo').click();
-  await page.locator('.repo-row', { hasText: 'someone/banjo-fork' }).locator('[data-action="repo-remove"]').click();
-  await expect(page.locator('.repo-row', { hasText: 'someone/banjo-fork' })).toHaveCount(0);
+  await page.locator('#btn-settings').click();
+  const row = page.locator('#sources-list .repo-row', { hasText: 'someone/banjo-fork' });
+  await expect(row).toContainText('GitHub');
+  await row.locator('[data-action="repo-remove"]').click();
+  await expect(row).toHaveCount(0);
 });
 
 test('the announcement shows once and stays dismissed', async () => {

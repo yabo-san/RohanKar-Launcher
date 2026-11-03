@@ -11,59 +11,30 @@ launcher works as a download client for any archive.org upload; Open folder gets
 
 ## Where you add your own
 
-| Source | Where it's added |
+Everything goes in through **Add** (the sidebar, the + in the title row, or pasting a link
+anywhere in the window). Paste a link and press Enter:
+
+| You paste | What happens |
 | --- | --- |
-| `user.json` | Settings > Your sources > user.json (a file path) |
-| Your own GitHub repos | Add a GitHub repo |
-| Any other uploader | Settings > Uploaders |
-| A single upload pasted as a link | Settings > Uploaders, or `archive` in user.json |
+| `https://archive.org/details/@handle` (or `@handle`, or the account's email) | The account's software uploads join the game wall |
+| `https://archive.org/details/<identifier>` | It asks: just this upload, or the whole account that uploaded it |
+| `https://github.com/owner/repo` (or `owner/repo`) | The repo joins Your ports and its latest release's Windows build installs |
+| `https://gitlab.com/group/project` (subgroups too) | The same, from GitLab's releases |
 
-## Settings > Uploaders
+A repo whose latest release has no Windows build stays on Your ports; right-click opens its page.
 
-One line per uploader:
+Right-click a game and **Hide from Wall** to leave its uploads out (an installed game keeps its
+card). Settings > Your sources lists every account, upload and repo you added, each with Remove,
+and brings hidden uploads back.
 
-```text
-rohanjackson071@gmail.com, Rohan
-@pstriple
-https://archive.org/details/@eldritchpenumbra, Eldritch, +Windows|Linux, -DVD|PS3
-lawlessb991@gmail.com, thiago86, -discography
-https://archive.org/details/some-single-upload
-- https://archive.org/details/an-upload-i-dont-want
-# someone@example.com, turned off for now
-```
+Settings also takes an optional **GitHub token**. GitHub allows 60 release checks an hour without
+one; with one, it's sent on GitHub API requests only and never logged.
 
-What the first field can be:
-
-| You type | What loads |
-| --- | --- |
-| `me@example.com` | The account's software uploads (archive.org's `uploader:` field is the account email) |
-| `@handle` | The account's software uploads, from its profile's uploads list |
-| `handle` (no @) | The same as `@handle`. archive.org's `uploader:` field is always an email, so a name without @ can only be a handle |
-| `https://archive.org/details/@handle` | The same, with or without `/uploads`, a query string or `#...` after it; `http`, `www.` and `archive.org/@handle` work too |
-| `https://archive.org/search?query=uploader:"me@example.com"` | The same as the email (the form `catalog/uploaders.json` keeps in `url`) |
-| `https://archive.org/details/<identifier>` | That one upload (also `/download/<identifier>/...`) |
-
-Then, after commas, in any order:
-
-- a **label** (what the wall calls the uploader; default: the handle, the part of the email before
-  @, or the identifier);
-- **`-word|word`**: leave out uploads whose title contains any of the words;
-- **`+word|word`**: keep only uploads whose title contains one of the words.
-
-Matching is a case-insensitive substring of the archive.org title (not an `overrides.json`
-rename). Exclude beats include. A word can't contain a comma or `|`.
-
-A line starting with **`-`** leaves one upload out wherever it comes from: an identifier or any
-item URL as above. It's stored as `excludeItems` in settings, as identifiers; anything that isn't
-an upload is refused on save, naming it. A leading `#` turns a line off.
-
-An upload left out by a filter or an exclude still shows if it's installed, so an installed game
-keeps its card. Changing excludes needs no refetch; changing filters reloads the wall.
-
-A line names a built-in uploader when it matches the built-in entry's email or any of its handles
-(`handle` and `handles` in `catalog/uploaders.json`), so `@hailstormttv` and `@tirednonfire` are
-the built-in account, not one of your own. A built-in entry's `titleInclude`/`titleExclude` always apply
-on top of whatever the line adds; a line can't remove them.
+Under the hood, accounts and uploads are saved as `sources` in settings.json and hidden uploads as
+`excludeItems`. A source can carry `titleInclude` / `titleExclude` (pipe-separated words matched
+case-insensitively against the archive.org title); a built-in entry's filters from
+`catalog/uploaders.json` always apply. An account that matches a built-in entry's email or any of
+its `handles` is that built-in account, not a second one.
 
 ## user.json
 

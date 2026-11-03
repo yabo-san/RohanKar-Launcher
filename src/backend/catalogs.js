@@ -24,6 +24,7 @@ const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf:
 const CURATED_ID = 'curated';
 const CURATED_PORTS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/curated-ports.json';
 const REPO = /^[\w.-]+\/[\w.-]+$/;
+const GITLAB_REPO = /^[\w.-]+(?:\/[\w.-]+)+$/;
 
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
 
@@ -69,7 +70,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // repos.local.json. A repos list from before collisions were parked
   // (collisions.local.json) carries over once, keeping only the repo fields.
   const reposFile = path.join(dir, 'repos.local.json');
-  const REPO_FIELDS = ['repository', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
+  const REPO_FIELDS = ['repository', 'repositorySource', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
   const pickRepo = (c) => Object.fromEntries(REPO_FIELDS.filter(k => c[k] != null).map(k => [k, c[k]]));
   function localList() {
     if (!fs.existsSync(reposFile)) {
@@ -87,10 +88,14 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // Adds one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
   function addRepo(entry) {
     const errors = [];
-    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !REPO.test(entry.repository.trim())) errors.push('repository must be owner/repo');
+    const gitlab = entry?.repositorySource === 'gitlab';
+    if (entry?.repositorySource != null && !['github', 'gitlab'].includes(entry.repositorySource)) errors.push('repositorySource must be github or gitlab');
+    // GitLab projects can sit in subgroups: group/subgroup/project
+    const shape = gitlab ? GITLAB_REPO : REPO;
+    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !shape.test(entry.repository.trim())) errors.push(gitlab ? 'repository must be group/project' : 'repository must be owner/repo');
     for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (entry?.[k] != null && typeof entry[k] !== 'string') errors.push(`${k} must be a string`);
     if (errors.length) return { ok: false, errors };
-    const clean = pickRepo({ ...entry, repository: entry.repository.trim() });
+    const clean = pickRepo({ ...entry, repository: entry.repository.trim(), repositorySource: gitlab ? 'gitlab' : null });
     const key = repoKey(clean.repository);
     writeJson(reposFile, [...localList().filter(c => repoKey(c.repository) !== key), clean]);
     return { ok: true, entry: clean };
@@ -167,6 +172,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
       ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
       ...(c.assetPattern ? { assetPattern: c.assetPattern } : {}),
+      ...(c.repositorySource === 'gitlab' ? { repositorySource: 'gitlab' } : {}),
       ...(Array.isArray(c.filesToAdd) ? { filesToAdd: c.filesToAdd } : {}),
       ...(c.sha1 ? { sha1: String(c.sha1).toLowerCase() } : {}),
     }));

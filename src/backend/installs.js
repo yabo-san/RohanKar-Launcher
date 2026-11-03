@@ -256,6 +256,14 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { ok: true, jobs: [view(job)] };
   }
 
+  // Settings > GitHub token, when set, lifts GitHub's 60 requests an hour.
+  // Only sent to the GitHub API, never logged (netLog keeps response headers).
+  function githubHeaders() {
+    const token = String(settings.load().githubToken || '').trim();
+    return { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
+  const rateLimited = (r) => r.status === 429 || (r.status === 403 && String(r.headers?.['x-ratelimit-remaining']) === '0');
+
   // The newest published release, from GitHub or GitLab (repositorySource "gitlab")
   async function latestRelease(item) {
     const gitlab = item.repositorySource === 'gitlab' || item.entry?.repositorySource === 'gitlab';
@@ -263,8 +271,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const r = gitlab
       ? await getText(ports.gitlabReleasesUrl(gitlabApi, repository), { kind: 'gitlab', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/json' } })
       : await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
-        kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
+        kind: 'github', log: netLog, timeoutMs: 15000, headers: githubHeaders(),
       });
+    if (!gitlab && rateLimited(r)) {
+      throw new Error(settings.load().githubToken
+        ? "GitHub's hourly limit for your token is used up. Try again in an hour."
+        : "GitHub allows 60 release checks an hour without a token, and they're used up. Add a GitHub token in Settings, or try again in an hour.");
+    }
     if (r.status !== 200) throw new Error(`Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})`);
     const list = JSON.parse(r.body);
     const release = ports.pickRelease(gitlab ? ports.releasesFromGitlab(list) : list);

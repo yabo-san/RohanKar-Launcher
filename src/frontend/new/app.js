@@ -22,14 +22,13 @@ const state = {
   portsError: null,
   portLibrary: [],
   manualForm: null,     // { name, folder } while adding a manual app from the Library
-  review: [],
   featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   appVersion: '',       // GET /health version, for the Report an issue links
   libSearch: '',        // the search box in a library header (Cider's library pages)
   libPage: 1,           // the page, when a library header is set to paged
   detail: null,
   downloads: new Map(), // identifier -> { percent, status }
-  repoForm: null,       // { repository, name } while adding a GitHub repo (viewAddRepo)
+  myRepos: null,        // GET /repos: the repos the user added, for Settings
   userSources: null,    // GET /user-sources: user.json's state, invalid entries, conflicts
 };
 
@@ -279,10 +278,6 @@ async function loadPorts(refresh = false) {
     });
     state.ports = { shelves, items };
     state.portsError = null;
-    state.review = await Promise.all(catalogs.map(async c => {
-      const r = await api.reviewCatalog(c.id);
-      return { id: c.id, name: c.shelf, added: r.new, changed: r.changed, removed: r.removed };
-    }));
   } catch (e) {
     state.portsError = e.message;
   }
@@ -302,7 +297,6 @@ const installedVersion = (g) => (g._versions || [g]).find(v => state.library[v.i
 const inPortLibrary = (p) => state.portLibrary.some(r => r.id === p.id);
 // any version of the game has a library row (added, favorited or installed)
 const inGameLibrary = (g) => (g._versions || [g]).some(v => state.library[v.identifier]);
-const reviewCount = () => state.review.reduce((n, r) => n + r.added.length + r.changed.length + r.removed.length, 0);
 
 // ─── sidebar ─────────────────────────────────────────────────────────────────
 
@@ -321,7 +315,6 @@ function renderNav() {
   $('#n-wall').textContent = state.games.length || '';
   const libCount = Object.values(state.library).filter(l => l.install_dir || l.identifier.startsWith('quiver:')).length;
   $('#n-library').textContent = libCount || '';
-  $('#n-updates').textContent = reviewCount() || '';
   renderBadges();
   markActive();
 }
@@ -375,7 +368,6 @@ function goHistory(dir) {
   if (v) show(v.name, v.arg || null, v);
 }
 function show(name, arg, { query = '', scroll = 0 } = {}) {
-  if (name === 'add-repo') state.repoForm = { repository: '', name: '' };
   if (!DETAIL_VIEWS.has(name)) state.detail = null;
   state.view = { name, arg };
   state.query = query;
@@ -993,9 +985,6 @@ function viewHome() {
   const week = newest.filter(g => String(newestVersion(g).addeddate || '') >= weekAgo);
   if (week.length) html += section('New This Week', week.slice(0, 24).map(gameCard).join(''), { cls: 'row squares' });
 
-  const added = new Set(state.review.flatMap(r => r.added.map(a => `${r.id}|${String(a.repository).toLowerCase()}`)));
-  const newPorts = (state.ports?.items || []).filter(p => added.has(`${p.shelf}|${String(p.repository).toLowerCase()}`));
-  if (newPorts.length) html += section('New Ports', newPorts.map(portCard).join(''), { cls: 'row squares ports', seeAll: ['updates'] });
 
   // Then each uploader's most downloaded games and each shelf's ports
   for (const s of state.sources.filter(x => x.enabled !== false)) {
@@ -1015,38 +1004,13 @@ function viewHome() {
   return html;
 }
 
-function viewUpdates() {
-  let html = `<div class="toolbar"><span style="color:var(--text2)">What changed in the catalogs since you last looked. Nothing updates itself; you decide.</span>
-    <span class="grow"></span><button class="btn" data-action="refresh-ports">Check catalogs now</button>
-    ${reviewCount() ? '<button class="btn primary" data-action="mark-seen">Mark all seen</button>' : ''}</div>`;
-  if (!state.review.length) return html + '<p class="empty">Loading…</p>';
-  if (!reviewCount()) {
-    html += `<p class="empty"><b>Everything is current.</b><br>No catalog entries were added, changed or removed since you last marked them seen.</p>`;
-  }
-  for (const r of state.review) {
-    const rows = [...r.added.map(a => ['added', a]), ...r.changed.map(a => ['changed', a]), ...r.removed.map(a => ['removed', a])];
-    if (!rows.length) continue;
-    html += section(r.name, `<div class="review-list">${rows.map(([what, a]) => {
-      const item = state.ports?.items.find(i => i.shelf === r.id && i.repository === a.repository && i.folderName === (a.folderName || ''));
-      return `<div class="review-item"><span class="what ${what}">${what.toUpperCase()}</span>
-        ${a.appIconUrl ? `<img src="${esc(a.appIconUrl)}" alt="">` : ''}
-        <div class="grow"><div class="name">${esc(a.name)}</div><div class="repo">${esc(a.repository)}</div></div>
-        ${item && what !== 'removed' ? `<button class="btn ${inPortLibrary(item) ? '' : 'primary'}" data-toggle-port="${esc(item.id)}">${inPortLibrary(item) ? 'Remove' : 'Add'}</button>` : ''}
-      </div>`;
-    }).join('')}</div>`, { count: rows.length, cls: '' });
-  }
-  return html;
-}
-
 function viewSettings() {
   const s = state.settings;
   return `<div class="form">
-    <div class="field"><label for="setting-sources">Uploaders</label>
-      <div class="hint">One archive.org uploader per line: an email, an @handle or a profile link (archive.org/details/@name), optional ", label".
-        Add ", -word|word" to leave out uploads whose title has any of those words, or ", +word|word" to keep only titles with one.
-        A line "- " plus an upload's link or identifier leaves that one upload out. A leading # turns a line off. The wall queries them one at a time.
-        Add any uploader you like; the ones we ship with are just a starting point.</div>
-      <textarea id="setting-sources" spellcheck="false">${esc(formatSources(state.sources, state.settings.excludeItems))}</textarea></div>
+    <div class="field" id="your-sources"><label>Your sources</label>
+      <div class="hint">The game wall and Ports come from these. Paste any archive.org, GitHub or GitLab link into Add.</div>
+      <div id="sources-list">${sourcesListHtml()}</div>
+      <div class="field actions"><button class="btn primary" id="btn-add" data-action="add-open">Add…</button></div></div>
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
       <button class="btn" data-action="choose-install">Choose…</button>
@@ -1054,16 +1018,13 @@ function viewSettings() {
     <div class="field"><label for="setting-download">Download folder</label>
       <div class="inline"><input type="text" id="setting-download" value="${esc(s.downloadPath || '')}" placeholder="Default: the install folder">
       <button class="btn" data-action="choose-download">Choose…</button></div></div>
+    <div class="field"><label for="setting-github-token">GitHub token</label>
+      <div class="hint">Optional. GitHub allows 60 release checks an hour without one, which a few installs and updates can use up.
+        A token with no scopes is enough: GitHub, Settings, Developer settings, Personal access tokens.</div>
+      <input type="password" id="setting-github-token" value="${esc(s.githubToken || '')}" placeholder="Empty: no token" spellcheck="false" autocomplete="off"></div>
     <div class="field actions"><button class="btn primary" id="btn-save-settings" data-action="save-settings">Save</button></div>
-    <div class="field" id="port-catalogs"><label>Port shelf</label>
-      <div class="hint">${state.ports ? state.ports.shelves.map(sh => `${esc(sh.name)}: ${sh.count}${sh.error ? ' (unreachable)' : sh.fromCache ? (sh.bundled ? ' (bundled copy)' : ' (cached)') : ''}`).join(' · ') : 'Loading…'}
-</div>
-      <button class="btn" data-action="refresh-ports">Refresh catalogs</button></div>
-    <div class="field" id="more-ports"><label class="switch-row" for="setting-more-ports">
-        <span><b>More ports</b><span class="hint">Also show the rest of the community list we started from: mostly decompilations that publish source but no download.</span></span>
-        <input type="checkbox" class="switch" id="setting-more-ports" role="switch" ${s.morePorts ? 'checked' : ''}></label></div>
-    <div class="field" id="additional"><label>Your sources</label>
-      <div class="hint">Single archive.org uploads and GitHub repos of your own, listed in a user.json file. Repos also go in with Add a GitHub repo.</div>
+    <div class="field" id="additional"><label>user.json</label>
+      <div class="hint">For power users: a file listing uploads and repos, read at every start.</div>
       <div id="additional-body">${additionalHtml()}</div></div>
     <div class="field"><label>Interface</label>
       <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
@@ -1087,8 +1048,8 @@ function viewSearch(q) {
 }
 
 // The round reload button at the right of the page title (Cider's reload-btn)
-const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports', updates: 'refresh-ports' };
-const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', updates: 'Keep current', settings: 'Settings', 'add-repo': 'Add a GitHub repo' };
+const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports' };
+const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', settings: 'Settings' };
 
 function render() {
   const v = state.view;
@@ -1101,9 +1062,7 @@ function render() {
   else if (v.name === 'uploader') html = viewWall(v.arg);
   else if (v.name === 'shelf') html = viewShelf(v.arg);
   else if (v.name === 'library') html = viewLibrary();
-  else if (v.name === 'updates') html = viewUpdates();
   else if (v.name === 'settings') html = viewSettings();
-  else if (v.name === 'add-repo') html = viewAddRepo();
   else if (DETAIL_VIEWS.has(v.name)) html = viewDetail(v);
   else html = viewHome();
 
@@ -1112,8 +1071,14 @@ function render() {
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
     : HEADINGS[v.name] || 'Home';
 
-  // Keep the settings form as typed while the wall is still streaming in
-  if (v.name === 'settings' && !state.query && $('#setting-sources')) { renderNav(); return; }
+  // Keep the settings form as typed while the wall is still streaming in;
+  // only the sources list redraws
+  if (v.name === 'settings' && !state.query && $('#setting-install')) {
+    const list = $('#sources-list');
+    if (list) list.innerHTML = sourcesListHtml();
+    renderNav();
+    return;
+  }
   const body = $('#body');
   const typing = document.activeElement?.id === 'lib-search' ? document.activeElement.selectionStart : null;
   const reload = !state.query && RELOADS[v.name];
@@ -1490,7 +1455,9 @@ async function installPort(p, { acceptHashChange = false } = {}) {
   render();
   if (job.hashChange) return (await confirmHashChange(job, p.name)) && installPort(p, { acceptHashChange: true });
   if (job.status === 'done') toast(`${p.name} is installed.`);
-  else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
+  else if (/^No Windows build|has no published release/.test(job.error || '')) {
+    toast(`${p.name} has no Windows build to install. Its tile stays on Your ports; right-click opens its page.`, 8000);
+  } else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`, 8000);
 }
 
 async function playGame(v) {
@@ -1528,65 +1495,171 @@ async function togglePort(id) {
 }
 
 
-// ─── Add a GitHub repo: a port of the user's own, on "Your ports" ──────────
+// ─── Add: one box for every link (docs/AGENT-BRIEF.md, "The user loop") ──────
+// An archive.org account or upload joins the wall; a GitHub or GitLab repo
+// joins Your ports and installs right away.
 
-function viewAddRepo() {
-  const f = state.repoForm || (state.repoForm = { repository: '', name: '' });
-  // The list fills in when it arrives, without redrawing the form being typed in
-  if (!f.repos) {
-    f.repos = [];
-    api.getRepos().then(r => { f.repos = r; const el = $('#repo-list'); if (el) el.innerHTML = repoListHtml(); }).catch(() => {});
-  }
-  return `<div class="editor"><p class="lede">A GitHub repo with Windows releases. It shows on Your ports, and Install takes its latest release's build. Any game data it needs is up to you.</p>
-    <div class="field two"><div><label for="repo-repository">Repository</label><input type="text" id="repo-repository" data-repo-field="repository" value="${esc(f.repository)}" placeholder="owner/repo" spellcheck="false"></div>
-      <div><label for="repo-name">Name</label><input type="text" id="repo-name" data-repo-field="name" value="${esc(f.name)}" placeholder="Optional; the repo's name otherwise" spellcheck="false"></div></div>
-    <div class="field actions"><button class="btn primary" id="btn-add-repo" data-action="repo-save">Add</button></div>
-    <div id="repo-list">${repoListHtml()}</div></div>`;
+// A modal with several answers. Resolves the index of the button pressed, or
+// -1 for Escape and the backdrop. buttons[0] is the safe one and has focus.
+function choose({ title, body, buttons, input = null }) {
+  document.getElementById('modal')?.remove();
+  const el = document.createElement('div');
+  el.id = 'modal';
+  el.className = 'modal-fullscreen';
+  el.innerHTML = `<div class="modal-window" role="dialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
+    <div class="modal-header"><div class="modal-title" id="modal-title">${esc(title)}</div></div>
+    <div class="modal-content" id="modal-body">${esc(body)}${input ? `<input type="text" id="modal-input" class="modal-input" placeholder="${esc(input.placeholder || '')}" spellcheck="false" autocomplete="off">` : ''}</div>
+    <div class="modal-footer">${buttons.map((b, i) => `<button class="md-btn${i === buttons.length - 1 ? ' md-btn-primary' : ''}" data-modal="${i}">${esc(b)}</button>`).join('')}</div>
+  </div>`;
+  const back = document.activeElement;
+  document.body.appendChild(el);
+  (el.querySelector('#modal-input') || el.querySelector('[data-modal="0"]')).focus();
+  return new Promise(resolve => {
+    const done = (i) => {
+      const value = el.querySelector('#modal-input')?.value || '';
+      el.remove(); document.removeEventListener('keydown', key, true); back?.focus?.();
+      resolve(input ? { index: i, value } : i);
+    };
+    const key = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(-1); }
+      if (e.key === 'Enter' && e.target.id === 'modal-input') { e.preventDefault(); done(buttons.length - 1); }
+      if (e.key === 'Tab') {
+        const f = [...el.querySelectorAll('input, button')];
+        const i = f.indexOf(document.activeElement);
+        e.preventDefault();
+        f[(i + (e.shiftKey ? f.length - 1 : 1)) % f.length].focus();
+      }
+    };
+    document.addEventListener('keydown', key, true);
+    el.addEventListener('click', (e) => {
+      if (e.target === el) return done(-1);
+      const b = e.target.closest('[data-modal]');
+      if (b) done(Number(b.dataset.modal));
+    });
+  });
 }
 
-function repoListHtml() {
-  const repos = state.repoForm?.repos || [];
-  return repos.length ? `<div class="field"><label>Your repos</label>${repos.map(r => `<div class="repo-row"><div class="grow"><b>${esc(r.name || r.repository)}</b> <span class="meta">${esc(r.repository)}</span></div>
-      <button class="btn" data-action="repo-remove" data-repo="${esc(r.repository)}">Remove</button></div>`).join('')}</div>` : '';
+async function openAddBox(prefill = '') {
+  const pending = choose({
+    title: 'Add',
+    body: 'Paste a link: an archive.org upload or account, or a GitHub or GitLab repo.',
+    buttons: ['Cancel', 'Add'],
+    input: { placeholder: 'https://…' },
+  });
+  if (prefill) $('#modal-input').value = prefill;
+  const { index, value } = await pending;
+  if (index === 1 && value.trim()) return addLink(value.trim());
 }
 
-async function repoSave() {
-  // Read from the inputs: they are what the user sees
-  const repo = ($('#repo-repository')?.value || '').trim();
-  const name = ($('#repo-name')?.value || '').trim();
-  if (!repo) return toast('Type the repository as owner/repo.');
-  const r = await api.saveRepo(repo, name ? { name } : {});
+async function addLink(link) {
+  const r = await api.resolveLink(link);
+  if (!r.ok) return toast(r.error, 6000);
+  if (r.kind === 'repo') return addRepo(r);
+  if (r.kind === 'account') return addSource({ uploader: r.uploader });
+  // One upload: just it, or everything its uploader has put up?
+  const pick = r.uploader
+    ? await choose({ title: `Add ${r.title}`, body: 'Add just this upload, or everything from the account that uploaded it?', buttons: ['Cancel', 'Just this upload', 'Whole account'] })
+    : 1;
+  if (pick === 1) return addSource({ uploader: `https://archive.org/details/${r.identifier}`, label: r.title });
+  if (pick === 2) return addSource({ uploader: r.uploader });
+}
+
+const sameUploader = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+const isUploadSource = (s) => /archive\.org\/(?:details|download)\/(?!@)/i.test(s.uploader);
+const sourceLabel = (u) => (/@([^/?#\s]+)/.exec(u)?.[1] || u).split('@')[0];
+
+async function addSource({ uploader, label }) {
+  const have = state.sources.find(s => sameUploader(s.uploader, uploader));
+  if (have && have.enabled !== false) return toast(`${sourceName(have)} is already on your wall.`);
+  const sources = have
+    ? state.sources.map(s => (s === have ? { ...s, enabled: true } : s))
+    : [...state.sources, { uploader, label: label || sourceLabel(uploader), enabled: true }];
+  const r = await api.saveSettings({ sources });
+  if (r && r.ok === false) return toast(r.body?.detail || "Couldn't add it.", 6000);
+  state.sources = sources;
+  toast(`Added ${label || sourceLabel(uploader)}. Its uploads are loading onto the game wall.`);
+  render();
+  loadWall({ refresh: true });
+}
+
+async function removeSource(uploader) {
+  const sources = state.sources.filter(s => !sameUploader(s.uploader, uploader));
+  const r = await api.saveSettings({ sources });
+  if (r && r.ok === false) return toast(r.body?.detail || "Couldn't remove it.", 6000);
+  state.sources = sources;
+  render();
+  loadWall({ refresh: true });
+}
+
+// A repo joins Your ports and its latest release installs straight away
+async function addRepo({ repository, repositorySource }) {
+  const r = await api.saveRepo(repository, repositorySource === 'gitlab' ? { repositorySource } : {});
   if (!r.ok) return toast(`Couldn't add it: ${r.error}`, 6000);
-  toast(`Added ${r.entry.name || repo}. It's on Your ports, unless a shelf already lists it.`);
-  state.repoForm = { repository: '', name: '' };
+  state.myRepos = null;
+  await loadPorts();
+  const p = (state.ports?.items || []).find(i => String(i.repository).toLowerCase() === repository.toLowerCase());
+  if (!p) return toast(`Added ${repository}.`);
+  openDetail('port', p.id);
+  if (state.library[p.id]?.install_dir) return toast(`${p.name} is already installed.`);
+  return installPort(p);
+}
+
+async function removeRepo(repo) {
+  await api.removeRepo(repo);
+  state.myRepos = null;
   render();
   loadPorts();
 }
 
-async function repoRemove(repo) {
-  await api.removeRepo(repo);
-  state.repoForm = { ...state.repoForm, repos: null };
-  render();
-  loadPorts();
+// Hide from Wall: the uploads leave the wall, Home and search (installed ones stay)
+async function hideUploads(ids, name) {
+  const excludeItems = [...new Set([...(state.settings.excludeItems || []), ...ids])];
+  const r = await api.saveSettings({ excludeItems });
+  if (r && r.ok === false) return toast(r.body?.detail || "Couldn't hide it.", 6000);
+  state.settings = { ...state.settings, excludeItems };
+  toast(`Hid ${name}. Settings can bring it back.`);
+  loadWall();
 }
+
+async function unhideAll() {
+  const r = await api.saveSettings({ excludeItems: [] });
+  if (r && r.ok === false) return toast(r.body?.detail || "Couldn't save.", 6000);
+  state.settings = { ...state.settings, excludeItems: [] };
+  render();
+  loadWall();
+}
+
+// Settings > Your sources: one row per account, upload and repo, each removable
+function sourcesListHtml() {
+  if (!state.myRepos) {
+    state.myRepos = [];
+    api.getRepos().then(r => { state.myRepos = r; const el = $('#sources-list'); if (el) el.innerHTML = sourcesListHtml(); }).catch(() => {});
+  }
+  const row = (name, meta, action, key, value) => `<div class="repo-row"><div class="grow"><b>${esc(name)}</b> <span class="meta">${esc(meta)}</span></div>
+      <button class="btn" data-action="${action}" data-${key}="${esc(value)}">Remove</button></div>`;
+  const rows = [
+    ...state.sources.filter(s => s.enabled !== false).map(s =>
+      row(sourceName(s), isUploadSource(s) ? 'archive.org upload' : 'archive.org account', 'source-remove', 'uploader', s.uploader)),
+    ...state.myRepos.map(r => row(r.name || r.repository.split('/').pop(), `${r.repositorySource === 'gitlab' ? 'GitLab' : 'GitHub'} · ${r.repository}`, 'repo-remove', 'repo', r.repository)),
+  ];
+  const hidden = (state.settings.excludeItems || []).length;
+  return (rows.join('') || '<div class="hint">Nothing yet.</div>')
+    + (hidden ? `<div class="repo-row" id="hidden-uploads"><div class="grow">${hidden} upload${hidden === 1 ? '' : 's'} hidden from the wall</div>
+      <button class="btn" data-action="unhide-all">Show them again</button></div>` : '');
+}
+
+// A link pasted anywhere but a text field opens Add with it filled in
+document.addEventListener('paste', (e) => {
+  if (e.target.closest?.('input, textarea, [contenteditable]') || $('#modal')) return;
+  const text = e.clipboardData?.getData('text')?.trim();
+  if (text && /^(https?:\/\/)?(www\.)?(archive\.org|github\.com|gitlab\.com)\//i.test(text)) { e.preventDefault(); openAddBox(text); }
+});
 
 // Form inputs update state as you type; only structure changes re-render
 document.addEventListener('input', (e) => {
   const t = e.target;
-  if (t.id === 'manual-name' && state.manualForm) { state.manualForm.name = t.value; return; }
-  if (t.dataset.repoField && state.repoForm) state.repoForm[t.dataset.repoField] = t.value;
+  if (t.id === 'manual-name' && state.manualForm) state.manualForm.name = t.value;
 });
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'setting-more-ports') return setMorePorts(e.target.checked);
-});
-
-// Settings > More ports: the curated catalog's "more" entries join the shelf
-async function setMorePorts(on) {
-  const r = await api.saveSettings({ morePorts: on });
-  if (r && r.ok === false) { const box = $('#setting-more-ports'); if (box) box.checked = !on; return toast(`Couldn't save: ${r.body?.detail || r.status}`); }
-  state.settings = { ...state.settings, morePorts: on };
-  loadPorts();
-}
 
 // ─── Your sources (Settings) ─────────────────────────────────────────────────
 
@@ -1721,6 +1794,9 @@ const ROW_ACTIONS = [
       await reloadLibrary();
       render();
     } },
+  { id: 'hide', label: 'Hide from Wall', icon: 'close', group: 'remove', kinds: ['game'],
+    when: (g, ctx) => !g._manual && !itemInstalled(g, ctx) && idle(g, ctx),
+    run: (g) => hideUploads((g._versions || [g]).map(v => v.identifier), getTitle(g)) },
   { id: 'manual-remove', label: 'Remove from Library', icon: 'trash', group: 'remove', danger: true, kinds: ['game'],
     when: (g) => g._manual, run: (g, ctx) => { if (!ctx.onDetail) openDetail('game', g.identifier); return onAction('manual-remove'); } },
 ];
@@ -1863,20 +1939,15 @@ document.addEventListener('wheel', userScroll, { capture: true, passive: true })
 document.addEventListener('touchmove', userScroll, { capture: true, passive: true });
 
 async function saveSettingsForm() {
-  const sources = parseSources($('#setting-sources').value);
-  if (!sources.length) return toast('Add at least one uploader.');
-  const excludeItems = parseExcludes($('#setting-sources').value);
-  const patch = { sources, excludeItems, installPath: $('#setting-install').value.trim(), downloadPath: $('#setting-download').value.trim() };
+  const patch = {
+    installPath: $('#setting-install').value.trim(),
+    downloadPath: $('#setting-download').value.trim(),
+    githubToken: $('#setting-github-token').value.trim() || null,
+  };
   const saved = await api.saveSettings(patch);
   if (saved && saved.ok === false) return toast(saved.body?.detail || 'Settings not saved.');
-  patch.excludeItems = saved?.body?.excludeItems || excludeItems;
-  // New uploaders or filters refetch; excluded uploads only need the list again
-  const changed = formatSources(sources) !== formatSources(state.sources);
-  const excludesChanged = formatSources([], patch.excludeItems) !== formatSources([], state.settings.excludeItems);
   state.settings = { ...state.settings, ...patch };
-  state.sources = sources;
   toast('Settings saved.');
-  if (changed || excludesChanged) loadWall({ refresh: changed });
 }
 
 // A port acts through its library row, keyed by the catalog item id
@@ -1911,14 +1982,13 @@ async function onAction(action, el) {
     case 'reload-wall': return loadWall({ refresh: true });
     case 'reload-all': loadPorts(true); return loadWall({ refresh: true });
     case 'refresh-ports': toast('Checking the catalogs…', 2000); return loadPorts(true);
-    case 'mark-seen':
-      await Promise.all(state.review.map(r => api.markCatalogSeen(r.id)));
-      return loadPorts();
     case 'save-settings': return saveSettingsForm();
     case 'desc-more': return el.closest('.album-desc')?.classList.add('open');
     case 'user-file-save': return saveUserFile();
-    case 'repo-save': return repoSave();
-    case 'repo-remove': return repoRemove(el.dataset.repo);
+    case 'add-open': return openAddBox();
+    case 'source-remove': return removeSource(el.dataset.uploader);
+    case 'repo-remove': return removeRepo(el.dataset.repo);
+    case 'unhide-all': return unhideAll();
     case 'announce-dismiss':
       $('#announce').classList.add('hidden');
       return api.dismissAnnouncement(el.dataset.id);
@@ -2146,15 +2216,10 @@ document.addEventListener('click', (e) => {
 window.addEventListener('blur', closePop);
 window.addEventListener('resize', closePop);
 
-// The badges in the title row: a dot while something downloads, the count of
-// catalog changes to review on Notifications
+// The badge in the title row: a dot while something downloads
 function renderBadges() {
   const busy = [...state.downloads.values()].some(d => d.name);
   $('#dl-dot').hidden = !busy;
-  const n = reviewCount();
-  const b = $('#n-notices');
-  b.hidden = !n;
-  b.textContent = n > 99 ? '99+' : n || '';
 }
 
 // The pill at the bottom of the window follows the running download, if any
