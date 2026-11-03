@@ -4,11 +4,11 @@
   "version": 1,
   "apps": [
     {
-      "name": "Project Midas",
+      "name": "GoldenEye 007",
       "repository": "murkantor/Project-Midas",
       "folderName": "ProjectMidas",
       "releaseAssetFilter": "windows",
-      "description": "Work-in-progress PC port of GoldenEye 007 from the N64 decompilation. Bring your own US cart image and put it in the Data folder next to ProjectMidas.exe. The release is a .7z, so 7-Zip needs to be installed.",
+      "description": "Project Midas: a work-in-progress PC port of GoldenEye 007 from the N64 decompilation. Bring your own US cart image and put it in the Data folder next to ProjectMidas.exe. The release is a .7z, so 7-Zip needs to be installed.",
       "tags": [
         "decomp",
         "n64",

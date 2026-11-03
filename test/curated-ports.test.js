@@ -50,7 +50,8 @@ test('no repository or folder is listed twice', () => {
   assert.deepEqual(folders.filter((f, i) => folders.indexOf(f) !== i), []);
 });
 
-test('the shelf is the personal picks: Project Midas, Perfect Dark, Star Fox 64', () => {
+test('the shelf is the personal picks: GoldenEye 007 (Project Midas), Perfect Dark, Star Fox 64', () => {
+  assert.deepEqual(catalog.apps.map((a) => a.name), ['GoldenEye 007', 'Perfect Dark', 'Star Fox 64']);
   assert.deepEqual(catalog.apps.map((a) => a.repository),
     ['murkantor/Project-Midas', 'perfect-dark-pc-port/perfect_dark', 'sonicdcer/Starfox64Recomp']);
   assert.ok(catalog.apps.every((a) => !a.more), 'no entry hides behind More ports');

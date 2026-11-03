@@ -26,7 +26,7 @@ belong in the app. Curation is not the point.
    changed uploads, get a badge and a one-click update. It never updates on its own.
 
 The app ships with a starting set: the uploaders in `catalog/uploaders.json` (Rohan, r4ze,
-pstriple) and three personal picks in `catalog/curated-ports.json` (Project Midas, Perfect Dark,
+pstriple) and three personal picks in `catalog/curated-ports.json` (GoldenEye 007 via Project Midas, Perfect Dark,
 Star Fox 64: Recompiled). Given the state of AI game porting, the launcher offers no judgement on
 which ports are good: don't grow the picks back into a recommendation list; users add any other
 repo themselves. `curated-ports.json` is edited by hand, by pull request; never write the outside
@@ -96,7 +96,7 @@ The work order further down is history. Where it disagrees with this loop, the l
      asset picked, and OK / renamed / no match / HTTP error. It catches a port renaming its
      repository or release files, or breaking its filter, without downloading a game.
    - **Full installs** (workflow_dispatch only, run by hand before a release, not nightly):
-     install the three Acceptance ports below (Project Midas, Perfect Dark, Star Fox 64) into a
+     install the three Acceptance ports below (GoldenEye 007 via Project Midas, Perfect Dark, Star Fox 64) into a
      temp folder with the app's own install engine: pick the
      asset, download, extract, list what landed. No game data. Results in the job summary.
 10. **README**: replace it with exactly the text in "README" below; move Development and Releases
@@ -113,7 +113,7 @@ the log lines to the PR:
 
 | tile | source | why |
 |---|---|---|
-| Project Midas | GitHub | a `.7z` release (needs 7-Zip); releaseAssetFilter `windows` skips the Linux and Steam Deck builds |
+| GoldenEye 007 (Project Midas) | GitHub | a `.7z` release (needs 7-Zip); releaseAssetFilter `windows` skips the Linux and Steam Deck builds |
 | Perfect Dark | GitHub | the common case; the release zip holds one folder |
 | Star Fox 64: Recompiled | GitLab | item 5 |
 
@@ -128,7 +128,7 @@ An easy way to download games from the Internet Archive. It also downloads and i
 release builds from GitHub and GitLab.
 
 It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
-ports are good or bad. The shelf has a few personal picks (Project Midas, Perfect Dark,
+ports are good or bad. The shelf has a few personal picks (GoldenEye 007 via Project Midas, Perfect Dark,
 Star Fox 64: Recompiled), and everything else is yours to add: any archive.org uploader
 or upload, any GitHub or GitLab repo.
 
