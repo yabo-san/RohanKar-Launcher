@@ -11,7 +11,7 @@ const path   = require('path');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const { getFollow, getText } = require('./net');
-const { installableFiles } = require('./archive');
+const { installableFiles, ARCHIVE_FILE } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const { checkPin } = require('./user-sources');
@@ -108,7 +108,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   }
 
   // Unpacks an archive into destDir: 7-Zip when installed (zip/7z/rar),
-  // extract-zip for .zip otherwise. Resolves { ok } or { ok: false, error }.
+  // extract-zip for .zip otherwise; any other file is copied in as it is.
+  // Resolves { ok } or { ok: false, error }.
   async function extractTo(filePath, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
     const lower = filePath.toLowerCase();
@@ -127,7 +128,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
         return { ok: false, error: e.message };
       }
     }
-    return { ok: false, error: 'Unsupported archive format' };
+    // Not an archive: kept as it is, the launcher is just its download client
+    try {
+      fs.copyFileSync(filePath, path.join(destDir, path.basename(filePath)));
+      return { ok: true };
+    } catch (e) {
+      return { ok: false, error: e.message };
+    }
   }
 
   // ─── Jobs (POST /installs) ────────────────────────────────────────────────
@@ -194,12 +201,12 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const list = await archive.fileList(itemId);
     if (!list.ok) return { ok: false, error: 'file_list_failed', detail: list.error };
     const installable = installableFiles(list.files);
-    if (!installable.length) return { ok: false, error: 'no_installable_file', detail: 'No downloadable file found for this item.' };
+    if (!installable.length) return { ok: false, error: 'no_installable_file', detail: 'This item has no files of its own to download.' };
 
     let chosen;
     if (files == null) {
       if (installable.length > 1) {
-        return { ok: false, error: 'choose_files', detail: 'This item has several archives; pass files.', choices: installable };
+        return { ok: false, error: 'choose_files', detail: 'This item has several files; pass files.', choices: installable };
       }
       chosen = installable;
     } else {
@@ -220,8 +227,9 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       };
       jobs.set(job.id, job);
       emit('install', view(job));
-      // A collection (several archives) extracts each game into its own folder
-      const subFolder = installable.length > 1 ? f.name.replace(/\.[^.]+$/, '') : null;
+      // A collection (several archives) extracts each game into its own folder;
+      // plain files all land in the item's folder
+      const subFolder = installable.length > 1 && ARCHIVE_FILE.test(f.name) ? f.name.replace(/\.[^.]+$/, '') : null;
       job.done = runJob(job, subFolder).catch(e => update(job, { status: 'error', error: e.message }));
       started.push(view(job));
     }
@@ -248,6 +256,14 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { ok: true, jobs: [view(job)] };
   }
 
+  // Settings > GitHub token, when set, lifts GitHub's 60 requests an hour.
+  // Only sent to the GitHub API, never logged (netLog keeps response headers).
+  function githubHeaders() {
+    const token = String(settings.load().githubToken || '').trim();
+    return { Accept: 'application/vnd.github+json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+  }
+  const rateLimited = (r) => r.status === 429 || (r.status === 403 && String(r.headers?.['x-ratelimit-remaining']) === '0');
+
   // The newest published release, from GitHub or GitLab (repositorySource "gitlab")
   async function latestRelease(item) {
     const gitlab = item.repositorySource === 'gitlab' || item.entry?.repositorySource === 'gitlab';
@@ -255,8 +271,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const r = gitlab
       ? await getText(ports.gitlabReleasesUrl(gitlabApi, repository), { kind: 'gitlab', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/json' } })
       : await getText(`${githubApi}/repos/${repository}/releases?per_page=30`, {
-        kind: 'github', log: netLog, timeoutMs: 15000, headers: { Accept: 'application/vnd.github+json' },
+        kind: 'github', log: netLog, timeoutMs: 15000, headers: githubHeaders(),
       });
+    if (!gitlab && rateLimited(r)) {
+      throw new Error(settings.load().githubToken
+        ? "GitHub's hourly limit for your token is used up. Try again in an hour."
+        : "GitHub allows 60 release checks an hour without a token, and they're used up. Add a GitHub token in Settings, or try again in an hour.");
+    }
     if (r.status !== 200) throw new Error(`Couldn't read the releases of ${repository} (${r.error || `HTTP ${r.status}`})`);
     const list = JSON.parse(r.body);
     const release = ports.pickRelease(gitlab ? ports.releasesFromGitlab(list) : list);

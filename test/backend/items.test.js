@@ -84,7 +84,7 @@ test('items: filters by source, shelf, search, installed, inLibrary', async (t) 
 
 test('items: a disabled source is never queried; one failing source is reported, all failing throws', async (t) => {
   const { backend, fake } = await testBackend(t);
-  backend.settings.save({ allowAdditionalSources: true, sources: [
+  backend.settings.save({ sources: [
     { uploader: 'rohanjackson071@gmail.com', label: 'rj' },
     { uploader: 'frankiemiqueli1@gmail.com', label: 'ps', enabled: false },
     { uploader: 'nobody@example.invalid', label: 'nobody' },
@@ -114,7 +114,7 @@ test('items: catalog entries sit on their shelf next to the wall', async (t) => 
   const { backend } = await testBackend(t, { state, curated: true });
   await backend.catalogs.warm();
   const catalog = backend.catalogs.get('curated');
-  const shelf = (await backend.items.list({ shelf: 'curated' })).items;
+  const shelf = (await backend.items.list({ shelf: 'built-in' })).items;
   assert.equal(shelf.length, 1);
   assert.deepEqual(shelf[0].versions, []);
   assert.equal(shelf[0].installed, false);

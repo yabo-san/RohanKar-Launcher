@@ -72,7 +72,7 @@ item. Library state is joined in on every read.
 }
 ```
 
-- `shelf` is `wall` for archive.org items and the shelf name (Curated, Your ports)
+- `shelf` is `wall` for archive.org items and the shelf name (Built-in, Your ports)
   for catalog items.
 - `override` is the item's `overrides.json` entry; its `title` already replaced `title`.
   An upload whose entry has `"hidden": true` is left out of every list unless it's installed.
@@ -154,7 +154,9 @@ curl http://127.0.0.1:7777/v1/items/rk-e2e-zoo-tycoon-pstriple
 
 ### `GET /items/:id/files`
 
-The archive.org file list, its folders, and the files an install can use (zip/7z/rar, or a lone .exe).
+The archive.org file list, its folders, and the files an install can use: zip/7z/rar, else a lone
+.exe, else the uploader's own files (`source: "original"`, not archive.org's metadata or
+derivatives), which download as they are.
 
 ```sh
 curl http://127.0.0.1:7777/v1/items/rk-e2e-halo-ce/files
@@ -193,7 +195,7 @@ There is no subscribing: the shelf is fixed.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs
-# {"catalogs":[{"id":"curated","url":"https://raw.githubusercontent.com/…/curated-ports.json","name":"Curated","shelf":"Curated","curated":true,"entries":44,"fetchedAt":1790000000000,"error":null}]}
+# {"catalogs":[{"id":"curated","url":"https://raw.githubusercontent.com/…/curated-ports.json","name":"Built-in","shelf":"Built-in","curated":true,"entries":44,"fetchedAt":1790000000000,"error":null}]}
 ```
 
 ### `GET /catalogs/:id`
@@ -217,7 +219,7 @@ state joined in), without waiting for archive.org.
 
 ```sh
 curl http://127.0.0.1:7777/v1/catalogs/curated/items
-# {"items":[{"id":"quiver:curated:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Curated","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
+# {"items":[{"id":"quiver:curated:banjorecomp/banjorecomp","title":"Banjo-Kazooie","shelf":"Built-in","repository":"BanjoRecomp/BanjoRecomp","data":{"iaIdentifier":"banjo-kazooie-recompiled.-7z",…},"library":null,…}]}
 ```
 
 ### `GET /catalogs/:id/review`
@@ -240,7 +242,7 @@ curl -X POST http://127.0.0.1:7777/v1/catalogs/curated/seen
 ### Your repos
 
 GitHub repos the user adds on their own. A repo the curated shelf doesn't list shows on the "Your
-ports" shelf (catalog id `local`) while additional sources are allowed. `:repo` is `owner/repo`
+ports" shelf (catalog id `local`). `:repo` is `owner/repo`
 URL-encoded (`owner%2Frepo`).
 
 | route | does |
@@ -369,7 +371,8 @@ curl -X PUT http://127.0.0.1:7777/v1/collections/1/items/rk-e2e-halo-ce
 
 Start installing an archive.org item: `{ id, files? }`. One job per file. An item with several
 archives needs `files` (`409 choose_files` lists `choices`); each then extracts into its own
-`_GAME_<name>` folder, as the desktop app's collection picker does. Returns `202` at once; follow
+`_GAME_<name>` folder, as the desktop app's collection picker does. Files that aren't archives are
+copied into the item's folder as they are, so any upload can be downloaded. Returns `202` at once; follow
 progress on `/events` or poll `/installs/:id`.
 
 A catalog port (`quiver:` id) is one job, `step: "binary"`: it takes the latest non-draft,
@@ -430,8 +433,10 @@ es.addEventListener('install', (e) => console.log(JSON.parse(e.data)));
 
 The archive.org uploaders the wall loads. `defaults` come from `catalog/uploaders.json` (the copy
 on main at launch, the bundled one as fallback): on only where `launcher` is true, `track` isn't
-false and there's an `uploaderEmail`. `sources` is the saved list from settings when there is
-one, else the defaults.
+false and there's an `uploaderEmail`. A default also carries `handles` (every @handle the account
+goes by, when it has an email) and the catalog's `titleInclude`/`titleExclude`. `sources` is the
+saved list from settings when there is one, else the defaults. A source's `uploader` is what the
+user typed: an email, an @handle, a profile URL or an item URL ([USER-SOURCES.md](USER-SOURCES.md)).
 
 ```sh
 curl http://127.0.0.1:7777/v1/sources
@@ -441,8 +446,10 @@ curl http://127.0.0.1:7777/v1/sources
 ### `GET /settings`, `PUT /settings`
 
 `settings.json`. `PUT` merges, so keys it doesn't send survive; returns the merged settings.
-`allowAdditionalSources` and `morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
-(`null` or empty clears it; a URL is `400`).
+`morePorts` (curated entries marked `"more"` join the shelf) must be `true` or `false`; `userSourcesFile` must be a full local path
+(`null` or empty clears it; a URL is `400`). `excludeItems`, uploads to leave off the wall, must be a
+list of archive.org identifiers or item URLs; they are stored as identifiers, and anything else is
+`400` naming it.
 
 ```sh
 curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://127.0.0.1:7777/v1/settings
@@ -451,14 +458,14 @@ curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://12
 
 ### `GET /user-sources`
 
-Additional sources ([USER-SOURCES.md](USER-SOURCES.md)): whether they're allowed, and user.json as
-read. `file` and `error` (a file that can't be used at all), `invalid` (each bad entry: `section`,
-`index`, `key`, `errors`), `entries` (valid entries per section) and, while allowed, `conflicts`:
-user entries ignored because the curated list has them (`from`, `key`, `reason`).
+The user's own sources ([USER-SOURCES.md](USER-SOURCES.md)): user.json as read. `file` and
+`error` (a file that can't be used at all), `invalid` (each bad entry: `section`, `index`, `key`,
+`errors`), `entries` (valid entries per section) and `conflicts`: user entries ignored because the
+built-in list has them (`from`, `key`, `reason`).
 
 ```sh
 curl http://127.0.0.1:7777/v1/user-sources
-# {"enabled":true,"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a curated uploader has it"}]}
+# {"file":"C:\\me\\user.json","error":null,"invalid":[],"entries":{"archive":2,"github":1,"exclude":0},"conflicts":[{"from":"user.json archive","key":"rk-e2e-halo-ce","reason":"a built-in uploader has it"}]}
 ```
 
 ### `POST /export/playnite`

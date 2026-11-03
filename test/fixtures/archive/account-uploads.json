@@ -1,0 +1,59 @@
+{
+  "_comment": "One page of https://archive.org/services/search/beta/page_production/?page_type=account_details&page_target=@pstriple&page_elements=[\"uploads\"], the shape archive.org's profile page reads. Made up for tests: four hits, one of them a video (not software), one with array values and publicdate in place of addeddate, one with no identifier.",
+  "version": "1.0",
+  "response": {
+    "header": { "succeeded": true, "query_time": 12 },
+    "body": {
+      "page_elements": {
+        "uploads": {
+          "hits": {
+            "total": 4,
+            "returned": 4,
+            "hits": [
+              {
+                "index": "public",
+                "fields": {
+                  "identifier": "rk-fx-uncharted-2-rpcs3",
+                  "title": "Uncharted 2 (RPCS3 bundle) [Windows]",
+                  "description": "Preconfigured RPCS3 with the game.",
+                  "mediatype": "software",
+                  "date": "2026-06-14T00:00:00Z",
+                  "addeddate": "2026-06-14T10:11:12Z",
+                  "downloads": 1234,
+                  "subject": ["ps3", "rpcs3"],
+                  "creator": ["PSTRIPLE"],
+                  "collection": ["opensource_media"]
+                }
+              },
+              {
+                "index": "public",
+                "fields": {
+                  "identifier": ["rk-fx-skate-3-recomp"],
+                  "title": ["Skate 3 Recompiled [DVD]"],
+                  "mediatype": ["software"],
+                  "publicdate": ["2026-07-01T08:00:00Z"],
+                  "downloads": [56],
+                  "subject": "recomp"
+                }
+              },
+              {
+                "index": "public",
+                "fields": {
+                  "identifier": "rk-fx-showcase-video",
+                  "title": "Bundle showcase",
+                  "mediatype": "movies",
+                  "addeddate": "2026-06-20T00:00:00Z",
+                  "downloads": 9
+                }
+              },
+              {
+                "index": "public",
+                "fields": { "title": "No identifier, dropped" }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

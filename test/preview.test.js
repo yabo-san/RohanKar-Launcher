@@ -24,20 +24,17 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
     assert.ok(responses[k], k);
     assert.ok(fs.existsSync(path.join(out, 'preview-data', responses[k].file)), k);
   }
-  // The curated shelf, and nothing else
+  // The built-in shelf, and the fixture user.json's repos
   const shelvesOf = (k) => JSON.parse(fs.readFileSync(path.join(out, 'preview-data', responses[k].file), 'utf8')).catalogs.map(c => c.shelf);
-  assert.deepEqual(shelvesOf('GET /catalogs'), ['Curated']);
+  assert.deepEqual(shelvesOf('GET /catalogs'), ['Built-in', 'Your ports']);
   assert.equal(Object.keys(responses).some(k => k.startsWith('QUIVER ')), false);
   assert.ok(Object.keys(responses).some(k => /^GET \/items\/[^/]+\/cover$/.test(k)));
 
-  // Saved again with Allow additional sources on: user.json's entries, badged
+  // user.json's entries load with everything else
   const read = (k) => JSON.parse(fs.readFileSync(path.join(out, 'preview-data', responses[k].file), 'utf8'));
-  assert.equal(read('GET /user-sources').enabled, false);
-  assert.equal(read('ON GET /user-sources').enabled, true);
-  assert.equal(read('GET /items?shelf=wall').items.some(i => i.userSource), false);
-  assert.equal(read('ON GET /items?shelf=wall').items.find(i => i.id === 'rk-e2e-user-demo').userSource, true);
-  assert.ok(read('ON GET /catalogs').catalogs.some(c => c.id === 'local'));
-  assert.ok(responses['GET /items/rk-e2e-user-demo/cover'], 'covers for what only shows with it on');
+  assert.equal(read('GET /items?shelf=wall').items.find(i => i.id === 'rk-e2e-user-demo').userSource, true);
+  assert.ok(read('GET /catalogs').catalogs.some(c => c.id === 'local'));
+  assert.ok(responses['GET /items/rk-e2e-user-demo/cover']);
 
   assert.match(fs.readFileSync(path.join(out, 'new', 'index.html'), 'utf8'), /<script src="\.\.\/preview\.js"><\/script>\s*<script src="\.\.\/api\.js">/);
   assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /<script src="preview\.js"><\/script>\s*<script src="api\.js">/);
