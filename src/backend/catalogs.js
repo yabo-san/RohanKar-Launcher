@@ -2,7 +2,7 @@
 /**
  * The port shelves, in Quiver's catalog format ({ apps: [...] } or a bare
  * array):
- *   - Curated: catalog/curated-ports.json on main (curatedUrl), fetched at
+ *   - Built-in: catalog/curated-ports.json on main (curatedUrl), fetched at
  *     each launch and on demand, cached under catalogs/, and diffed against the copy the user
  *     last reviewed. The copy bundled with the app (curatedFile) stands in
  *     until a fetch succeeds. Entries marked "more": true show only while
@@ -18,13 +18,13 @@
 const fs     = require('fs');
 const path   = require('path');
 const { getText } = require('./net');
-const { additionalAllowed } = require('./user-sources');
 const { portTraits } = require('./ports');
 
 const LOCAL = Object.freeze({ id: 'local', url: null, name: 'Your ports', shelf: 'Your ports', local: true });
 const CURATED_ID = 'curated';
 const CURATED_PORTS_URL = 'https://raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/catalog/curated-ports.json';
 const REPO = /^[\w.-]+\/[\w.-]+$/;
+const GITLAB_REPO = /^[\w.-]+(?:\/[\w.-]+)+$/;
 
 const repoKey   = (repo) => (typeof repo === 'string' && repo.trim() ? repo.trim().toLowerCase() : null);
 
@@ -70,7 +70,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // repos.local.json. A repos list from before collisions were parked
   // (collisions.local.json) carries over once, keeping only the repo fields.
   const reposFile = path.join(dir, 'repos.local.json');
-  const REPO_FIELDS = ['repository', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
+  const REPO_FIELDS = ['repository', 'repositorySource', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern', 'appIconUrl', 'tags', 'filesToAdd'];
   const pickRepo = (c) => Object.fromEntries(REPO_FIELDS.filter(k => c[k] != null).map(k => [k, c[k]]));
   function localList() {
     if (!fs.existsSync(reposFile)) {
@@ -88,10 +88,14 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   // Adds one (replacing any for the same repository). { ok, entry } or { ok: false, errors }
   function addRepo(entry) {
     const errors = [];
-    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !REPO.test(entry.repository.trim())) errors.push('repository must be owner/repo');
+    const gitlab = entry?.repositorySource === 'gitlab';
+    if (entry?.repositorySource != null && !['github', 'gitlab'].includes(entry.repositorySource)) errors.push('repositorySource must be github or gitlab');
+    // GitLab projects can sit in subgroups: group/subgroup/project
+    const shape = gitlab ? GITLAB_REPO : REPO;
+    if (!entry || typeof entry !== 'object' || typeof entry.repository !== 'string' || !shape.test(entry.repository.trim())) errors.push(gitlab ? 'repository must be group/project' : 'repository must be owner/repo');
     for (const k of ['name', 'folderName', 'releaseAssetFilter']) if (entry?.[k] != null && typeof entry[k] !== 'string') errors.push(`${k} must be a string`);
     if (errors.length) return { ok: false, errors };
-    const clean = pickRepo({ ...entry, repository: entry.repository.trim() });
+    const clean = pickRepo({ ...entry, repository: entry.repository.trim(), repositorySource: gitlab ? 'gitlab' : null });
     const key = repoKey(clean.repository);
     writeJson(reposFile, [...localList().filter(c => repoKey(c.repository) !== key), clean]);
     return { ok: true, entry: clean };
@@ -105,14 +109,11 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
     return true;
   }
 
-  // ─── Additional sources: everything that isn't curated ────────────────────
-  // user.json's github entries, then the user's own repos on top, and only
-  // while Settings allows additional sources. A repository a port shelf
-  // already lists is left out and reported as a conflict.
-  const additional = () => additionalAllowed(settings);
+  // ─── The user's own repos ─────────────────────────────────────────────────
+  // user.json's github entries, then the repos added in the app on top. A
+  // repository a port shelf already lists is left out and reported as a conflict.
   function userLayers() {
     const out = { map: new Map(), conflicts: [] };
-    if (!additional()) return out;
     const listed = listedRepos();
     const githubEntry = (g) => ({ ...g, name: g.name || g.repository.split('/')[1] });
     const layers = [
@@ -136,7 +137,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   const userConflicts = () => userLayers().conflicts;
 
   // ─── The curated shelf, and what's left of old subscriptions ──────────────
-  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Curated', shelf: 'Curated', curated: true }) : null;
+  const CURATED = curatedUrl ? Object.freeze({ id: CURATED_ID, url: curatedUrl, name: 'Built-in', shelf: 'Built-in', curated: true }) : null;
 
   let bundled;
   function bundledCurated() {
@@ -164,19 +165,20 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   const curatedRepos = () => new Set(CURATED ? entries(CURATED_ID).map(e => repoKey(e.repository)).filter(Boolean) : []);
 
   // The user's repos no port shelf lists, as catalog entries: the "Your
-  // ports" shelf. Empty while additional sources are off.
+  // ports" shelf.
   function localEntries() {
     return [...userLayers().map.values()].map(c => ({
       name: c.name || c.repository, repository: c.repository, folderName: c.folderName || '',
       ...(c.appIconUrl ? { appIconUrl: c.appIconUrl } : {}),
       ...(Array.isArray(c.tags) ? { tags: c.tags } : {}), ...(c.releaseAssetFilter ? { releaseAssetFilter: c.releaseAssetFilter } : {}),
       ...(c.assetPattern ? { assetPattern: c.assetPattern } : {}),
+      ...(c.repositorySource === 'gitlab' ? { repositorySource: 'gitlab' } : {}),
       ...(Array.isArray(c.filesToAdd) ? { filesToAdd: c.filesToAdd } : {}),
       ...(c.sha1 ? { sha1: String(c.sha1).toLowerCase() } : {}),
     }));
   }
 
-  // Curated, old subscriptions while they hold a port of the user's, and "Your ports" while it has anything on it
+  // Built-in, old subscriptions while they hold a port of the user's, and "Your ports" while it has anything on it
   const shelves = () => [...(CURATED ? [CURATED] : []), ...legacy(), ...(localEntries().length ? [LOCAL] : [])];
   const find = (id) => shelves().find(c => c.id === id) || null;
 
@@ -283,7 +285,7 @@ function createCatalogs({ dir, settings, userSources = NO_USER, curatedUrl = nul
   }
 
   return { list, get, refresh, warm, entries, review, markSeen, items,
-    localRepos: localList, addRepo, removeRepo, userConflicts, additionalAllowed: additional, morePorts };
+    localRepos: localList, addRepo, removeRepo, userConflicts, morePorts };
 }
 
 module.exports = { createCatalogs, parseCatalog, diffEntries, entryKey, CURATED_ID, CURATED_PORTS_URL };

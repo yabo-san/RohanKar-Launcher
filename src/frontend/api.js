@@ -182,6 +182,7 @@ const api = (() => {
     },
 
     // Your repos: GitHub repos the user adds on their own ("Your ports")
+    resolveLink: async (link) => { const r = await call('POST', '/add/resolve', { link }); return r.ok ? { ok: true, ...r.body } : failure(r); },
     getRepos: async () => (await call('GET', '/repos')).body?.repos || [],
     saveRepo: async (repo, entry) => { const r = await call('PUT', `/repos/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
     removeRepo: (repo) => call('DELETE', `/repos/${enc(repo)}`),

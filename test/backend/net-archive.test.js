@@ -126,6 +126,17 @@ test('installableFiles: archives, or a bare exe only when there is no archive', 
   assert.deepEqual(installableFiles([{ name: 'b.exe' }, { name: 'c.txt' }]).map(f => f.name), ['b.exe']);
 });
 
+test('installableFiles: with no archive or exe, the uploader\'s own files download as they are', () => {
+  const files = [
+    { name: 'Game (USA).iso', source: 'original' }, { name: 'update.pkg', source: 'original' },
+    { name: 'Game (USA).iso.png', source: 'derivative' }, { name: 'item_meta.xml', source: 'original' },
+    { name: 'item_files.xml', source: 'original' }, { name: '__ia_thumb.jpg', source: 'original' },
+    { name: 'item_archive.torrent', source: 'metadata' }, { name: 'notes.txt' },
+  ];
+  assert.deepEqual(installableFiles(files).map(f => f.name), ['Game (USA).iso', 'update.pkg']);
+  assert.deepEqual(installableFiles([{ name: 'item_meta.xml', source: 'original' }]), []);
+});
+
 test('default sleep really waits', async () => {
   const srv = http.createServer((req, res) => {
     res.writeHead(429, { 'retry-after': '0' });

@@ -1,10 +1,9 @@
 # Build your own copy
 
-The curated lists are part of the app: they are the archive.org uploaders and ports this repo
-ships with. You can add your own from the app (Settings, with additional sources allowed, or a
-`user.json`, see [USER-SOURCES.md](USER-SOURCES.md)), and everything you add is marked
-"Your source". If you want different picks built in for everyone who installs your copy, fork
-the repo, change the lists and build your own installer.
+The built-in lists are part of the app: they are the archive.org uploaders and ports this repo
+ships with. You can add your own from the app (paste a link into Add, or use a `user.json`, see
+[USER-SOURCES.md](USER-SOURCES.md)). If you want different picks built in for everyone who
+installs your copy, fork the repo, change the lists and build your own installer.
 
 ## 1. Fork
 
