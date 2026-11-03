@@ -49,3 +49,19 @@ test('no repository or folder is listed twice', () => {
   assert.deepEqual(repos.filter((r, i) => repos.indexOf(r) !== i), []);
   assert.deepEqual(folders.filter((f, i) => folders.indexOf(f) !== i), []);
 });
+
+test('the shelf is the personal picks: GoldenEye 007 (Project Midas), Perfect Dark, Star Fox 64', () => {
+  assert.deepEqual(catalog.apps.map((a) => a.name), ['GoldenEye 007', 'Perfect Dark', 'Star Fox 64']);
+  assert.deepEqual(catalog.apps.map((a) => a.repository),
+    ['murkantor/Project-Midas', 'perfect-dark-pc-port/perfect_dark', 'sonicdcer/Starfox64Recomp']);
+  assert.ok(catalog.apps.every((a) => !a.more), 'no entry hides behind More ports');
+});
+
+test('Project Midas picks its Windows .7z over the Linux and Steam Deck builds', () => {
+  const { pickAsset } = require('../src/backend/ports');
+  const midas = catalog.apps.find((a) => a.repository === 'murkantor/Project-Midas');
+  // the v1.0 release's files
+  const assets = ['ProjectMidas-v1-linux.7z', 'ProjectMidas-v1-steamdeck.7z', 'ProjectMidas-v1-windows.7z']
+    .map((name) => ({ name, browser_download_url: `https://example.invalid/${name}` }));
+  assert.equal(pickAsset(assets, { filter: midas.releaseAssetFilter }).asset.name, 'ProjectMidas-v1-windows.7z');
+});

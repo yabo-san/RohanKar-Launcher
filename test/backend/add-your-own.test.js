@@ -77,15 +77,22 @@ test('titleAllowed and joinTerms: pipe-separated substrings, case-insensitive', 
   assert.equal(joinTerms(), '');
 });
 
-test('sourcesFromCatalog: the bundled catalog carries titleInclude/titleExclude and every handle', () => {
-  const list = sourcesFromCatalog(require('../../catalog/uploaders.json'));
+test('sourcesFromCatalog: a catalog entry carries titleInclude/titleExclude and every handle', () => {
+  const list = sourcesFromCatalog({ uploaders: [
+    { handle: 'thiago86', uploaderEmail: 'lawlessb991@gmail.com', launcher: true, titleExclude: 'discography' },
+    { handle: 'eldritchpenumbra', titleInclude: 'Windows|Linux', titleExclude: 'DVD|PS3' },
+    { handle: 'hailstormttv', handles: ['hailstormttv', 'tirednonfire'], uploaderEmail: 'frankiemiqueli1@gmail.com', launcher: true },
+    { handle: 'rohanjackson071', uploaderEmail: 'rohanjackson071@gmail.com', launcher: true },
+  ] });
   const by = (label) => list.find(s => s.label === label);
   assert.equal(by('thiago86').titleExclude, 'discography');
-  assert.deepEqual([by('eldritchpenumbra').titleInclude, by('eldritchpenumbra').titleExclude], ['Windows|Linux|Wine|Batocera', 'DVD|MiSTer|WUP|GOD|XBLA|PS2|PS3|PSX']);
-  assert.equal(by('spuntik80').titleInclude, 'USA|Europe');
+  assert.deepEqual([by('eldritchpenumbra').titleInclude, by('eldritchpenumbra').titleExclude], ['Windows|Linux', 'DVD|PS3']);
   assert.deepEqual(by('hailstormttv').handles, ['hailstormttv', 'tirednonfire']);
   assert.equal(by('rohanjackson071').titleExclude, undefined);
   assert.equal(by('eldritchpenumbra').handles, undefined, 'no email: the handle is the uploader itself');
+  // The shipped list: the three built-in uploaders, all on
+  const shipped = sourcesFromCatalog(require('../../catalog/uploaders.json'));
+  assert.deepEqual(shipped.filter(s => s.enabled).map(s => s.label), ['rohanjackson071', 'r4zel1ght', 'hailstormttv']);
 });
 
 test('accountUploads: the page_production fixture as advancedsearch docs', () => {
@@ -146,7 +153,12 @@ test('fetchSource: an unknown handle, a failing endpoint, an item URL, and junk'
 });
 
 test('items: a handle typed for a curated uploader is curated; title filters from the catalog and the line apply', async (t) => {
-  const { backend, fake } = await testBackend(t);
+  // A built-in list with a title filter of its own (the shipped one has none)
+  const shipped = require('../../catalog/uploaders.json');
+  const uploaders = { ...shipped, uploaders: [...shipped.uploaders,
+    { handle: 'thiago86', uploaderEmail: 'lawlessb991@gmail.com', launcher: true, titleExclude: 'discography' }] };
+  const state = { routes: { '/uploaders.json': (req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify(uploaders)); } } };
+  const { backend, fake } = await testBackend(t, { state });
   // hailstormttv is curated with email frankiemiqueli1@gmail.com; typed by its second handle it stays curated
   fake.uploads.tirednonfire = [hit('rk-tired-a', 'Demon\'s Souls [RPCS3]'), hit('rk-tired-b', 'Godzilla [shadPS4]')];
   fake.uploads.someone = [hit('rk-some-a', 'Keep Me [Windows]'), hit('rk-some-b', 'Drop Me [DVD]'), hit('rk-some-c', 'Other [Linux]')];
