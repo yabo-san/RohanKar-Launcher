@@ -14,7 +14,6 @@ const fs   = require('fs');
 const os   = require('os');
 const path = require('path');
 const { sourcesFromCatalog } = require('../src/backend/sources.js');
-const { formatSources }      = require('../src/frontend/sources.js');
 
 // What a fresh install defaults to: the bundled catalog (the stub 404s the fetched copy)
 const DEFAULT_SOURCES = sourcesFromCatalog(require('../catalog/uploaders.json'));
@@ -125,7 +124,10 @@ test('packaged app: opens the new UI, shows default sources, downloads a stub it
     await expect(page.locator('#body .game-card').first()).toBeVisible({ timeout: 30_000 });
 
     await page.locator('#btn-settings').click();
-    await expect(page.locator('#setting-sources')).toHaveValue(formatSources(DEFAULT_SOURCES));
+    // Settings lists the shipped uploaders that are on, each removable
+    const shipped = DEFAULT_SOURCES.filter(src => src.enabled !== false);
+    await expect(page.locator('#sources-list [data-action="source-remove"]')).toHaveCount(shipped.length);
+    for (const src of shipped) await expect(page.locator('#sources-list')).toContainText(src.label);
 
     await page.locator('[data-view="wall"]').click();
     await page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' }).click();

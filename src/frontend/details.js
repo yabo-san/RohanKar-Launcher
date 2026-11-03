@@ -130,6 +130,20 @@ function createHistory() {
   };
 }
 
+// "Report an issue": a new GitHub issue on the launcher's repo, filled in with
+// the app version and, from a game's or port's page, which one it is.
+// item: { kind: 'game' | 'port', title, id, source } or null (from Settings)
+const ISSUES_URL = 'https://github.com/yabo-san/RohanKar-Launcher/issues/new';
+function issueUrl({ version = '', item = null } = {}) {
+  const about = !item ? []
+    : item.kind === 'port' ? [`Port: ${item.title} (${item.source || item.id})`]
+    : [`Game: ${item.title} (archive.org item ${item.id}${item.source ? `, uploader ${item.source}` : ''})`];
+  const body = ['**What happened?**', '', '', '**What did you expect?**', '', '', '---',
+    `App: y4bo ${version || 'unknown version'}`, ...about].join('\n');
+  const q = new URLSearchParams({ title: item ? `${item.title}: ` : '', body });
+  return `${ISSUES_URL}?${q}`;
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory };
+  module.exports = { platformOf, yearOf, sizeLabel, installBytes, gameMeta, portMeta, versionRows, moreFrom, morePorts, createHistory, issueUrl };
 }
