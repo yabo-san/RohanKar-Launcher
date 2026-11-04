@@ -10,7 +10,7 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 
 const state = {
-  view: { name: 'home' },
+  view: { name: 'wall' },
   query: '',
   settings: {},
   sources: [],
@@ -22,7 +22,6 @@ const state = {
   portsError: null,
   portLibrary: [],
   manualForm: null,     // { name, folder } while adding a manual app from the Library
-  featured: [],         // hand-picked { identifier } | { repository } from catalog/featured.json
   appVersion: '',       // GET /health version, for the Report an issue links
   libSearch: '',        // the search box in a library header (Cider's library pages)
   libPage: 1,           // the page, when a library header is set to paged
@@ -467,32 +466,19 @@ function syncRowNav(row) {
   }
   const nav = row.closest('.section')?.querySelector('.row-nav');
   if (!nav) return;
-  // The carousel keeps its pager, as in Cider; other rows show arrows only when they overflow
-  nav.hidden = max <= 1 && !(row.classList.contains('feature') && row.children.length > 1);
+  // Arrows only when the row overflows
+  nav.hidden = max <= 1;
   nav.querySelector('.prev').disabled = row.scrollLeft <= 1;
   nav.querySelector('.next').disabled = row.scrollLeft >= max - 1;
 }
-const syncRows = () => {
-  document.querySelectorAll('#body .row.list').forEach(layoutList);
-  document.querySelectorAll('#body .row').forEach(syncRowNav);
-};
+const syncRows = () => document.querySelectorAll('#body .row').forEach(syncRowNav);
 
-// A list row runs in columns four items deep, then pages sideways like the
-// other rows; the columns keep their width and the last one peeks (Cider's
-// song lists on New)
-const LIST_DEPTH = 4;
-function layoutList(row) {
-  row.style.gridTemplateRows = `repeat(${Math.max(1, Math.min(LIST_DEPTH, row.children.length))}, auto)`;
-}
-
-// One press moves a row by most of its width, in whole cards (whole columns
-// in a list, one card in the feature carousel)
+// One press moves a row by most of its width, in whole cards
 function scrollRow(btn) {
   const row = btn.closest('.section').querySelector('.row');
   const first = row.children[0];
   const pitch = first ? first.offsetWidth + (parseFloat(getComputedStyle(row).columnGap) || 0) : 0;
   const by = !pitch ? row.clientWidth * 0.85
-    : row.classList.contains('feature') ? pitch
     : Math.max(1, Math.floor(row.clientWidth / pitch)) * pitch;
   row.scrollBy({ left: Number(btn.dataset.rowNav) * by, behavior: motionOk() ? 'smooth' : 'auto' });
 }
@@ -908,95 +894,6 @@ function viewLibrary() {
   return html;
 }
 
-// Home, laid out like Cider's New page: a wide carousel of the hand-picked
-// games and ports (catalog/featured.json), then a compact list of what landed
-// most recently, this week's uploads and the ports new in the catalogs, then
-// a row of each shelf's ports.
-const newestVersion = (g) => (g._versions || [g]).slice().sort(byNewest)[0];
-const blurbOf = (text) => {
-  const b = stripHtml(Array.isArray(text) ? text.join('\n') : text).replace(/\s+/g, ' ').trim();
-  return b.length > 110 ? `${b.slice(0, 107)}…` : b;
-};
-
-// Picks in order, each resolved to a wall game or a catalog port; picks not
-// on the wall (a disabled uploader, a catalog not subscribed) are skipped
-function resolvePicks() {
-  return state.featured.flatMap((pick) => {
-    if (pick.identifier) {
-      const g = state.games.find(x => (x._versions || [x]).some(v => v.identifier === pick.identifier));
-      return g ? [{ kind: 'game', g, v: (g._versions || [g]).find(v => v.identifier === pick.identifier), pick }] : [];
-    }
-    const p = state.ports?.items.find(x => String(x.repository).toLowerCase() === pick.repository);
-    return p ? [{ kind: 'port', p, pick }] : [];
-  });
-}
-
-// The banner is the pick's SteamGridDB hero (catalog/featured.json or
-// catalog/art.json, via the backend); never a port's square icon or a
-// portrait cover. With no hero yet, a plain colour banner with the title.
-function featureCard({ kind, g, v, p, pick }) {
-  const port = kind === 'port';
-  const title = port ? p.name : getTitle(g);
-  const sub = port ? (p.project || p.repository) : [v._sourceLabel, v.addeddate ? new Date(v.addeddate).getFullYear() : ''].filter(Boolean).join(' · ');
-  const blurb = pick.blurb || blurbOf(port ? p.description : v.description);
-  const art = pick.banner
-    ? `<div class="art banner" style="background:${tint(title)}"><img loading="lazy" src="${esc(pick.banner)}" alt="">`
-    : `<div class="art banner plain" style="background:${tint(title)}"><span class="banner-title" aria-hidden="true">${esc(title)}</span>`;
-  return `<button class="card feature-card" data-open="${port ? 'port' : 'game'}" data-id="${esc(port ? p.id : g.identifier)}">
-    <div class="eyebrow">${port ? 'y4bo pick · port' : 'y4bo pick'}</div>
-    <div class="title">${esc(title)}</div>
-    <div class="sub">${esc(sub)}</div>
-    ${art}${blurb ? `<p>${esc(blurb)}</p>` : ''}</div>
-  </button>`;
-}
-
-// A hero that won't load falls back to the plain banner
-document.addEventListener('error', (e) => {
-  const img = e.target;
-  if (!(img instanceof HTMLImageElement) || !img.matches('.feature-card .art.banner img')) return;
-  const art = img.parentElement;
-  art.classList.add('plain');
-  img.outerHTML = `<span class="banner-title" aria-hidden="true">${esc(art.closest('.feature-card').querySelector('.title').textContent)}</span>`;
-}, true);
-
-function listItem(g) {
-  const v = newestVersion(g);
-  return `<button class="card list-item" data-open="game" data-id="${esc(g.identifier)}">
-    <div class="art" data-thumb="${esc(v.identifier)}" style="background:${tint(getTitle(g))}"></div>
-    <div class="grow"><div class="title">${esc(getTitle(g))}</div>
-    <div class="sub">${esc([v._sourceLabel, fmtDate(v.addeddate)].filter(Boolean).join(' · '))}</div></div>
-    <span class="dots" aria-hidden="true"></span>
-  </button>`;
-}
-
-function viewHome() {
-  let html = wallNotice();
-  const newest = state.games.slice().sort((a, b) => byNewest(newestVersion(a), newestVersion(b)));
-  if (!newest.length) html += state.wall.loading ? section('', skeletons(6), { cls: 'row' }) : '<p class="empty">Nothing on the wall yet.</p>';
-
-  const picks = newest.length ? resolvePicks() : [];
-  if (picks.length) html += `<section class="section has-row feature-sec"><div class="row feature">${picks.map(featureCard).join('')}</div>${rowNav}</section>`;
-
-  const rest = newest.slice(0, 40);
-  if (rest.length) html += section('Recently Added', rest.map(listItem).join(''), { cls: 'row list', seeAll: ['wall'] });
-
-  const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
-  const week = newest.filter(g => String(newestVersion(g).addeddate || '') >= weekAgo);
-  if (week.length) html += section('New This Week', week.slice(0, 24).map(gameCard).join(''), { cls: 'row squares' });
-
-
-  // Then each shelf's ports
-  const ports = state.ports;
-  for (const shelf of ports?.shelves || []) {
-    const items = ports.items.filter(i => i.shelf === shelf.id);
-    if (!items.length) continue;
-    html += section(`${shelf.name} ports`, items.slice(0, 20).map(portCard).join(''),
-      { cls: 'row squares ports', seeAll: ['shelf', shelf.id] });
-  }
-  if (!ports && !state.portsError) html += section('Ports', skeletons(8), { cls: 'row ports' });
-  return html;
-}
-
 function viewSettings() {
   const s = state.settings;
   return `<div class="form">
@@ -1041,8 +938,8 @@ function viewSearch(q) {
 }
 
 // The round reload button at the right of the page title (Cider's reload-btn)
-const RELOADS = { home: 'reload-all', wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports' };
-const HEADINGS = { home: 'Home', wall: 'Game wall', library: 'Library', settings: 'Settings' };
+const RELOADS = { wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports' };
+const HEADINGS = { wall: 'Game wall', library: 'Library', settings: 'Settings' };
 
 function render() {
   const v = state.view;
@@ -1057,12 +954,12 @@ function render() {
   else if (v.name === 'library') html = viewLibrary();
   else if (v.name === 'settings') html = viewSettings();
   else if (DETAIL_VIEWS.has(v.name)) html = viewDetail(v);
-  else html = viewHome();
+  else html = viewWall(null);
 
   const heading = state.query ? 'Search'
     : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
-    : HEADINGS[v.name] || 'Home';
+    : HEADINGS[v.name] || 'Game wall';
 
   // Keep the settings form as typed while the wall is still streaming in;
   // only the sources list redraws
@@ -1141,7 +1038,7 @@ function openDetail(kind, id) {
 
 function closeDetail() {
   if (!DETAIL_VIEWS.has(state.view.name)) return;
-  if (navHistory.canBack) goHistory(-1); else go('home');
+  if (navHistory.canBack) goHistory(-1); else go('wall');
 }
 
 function renderDetail() {
@@ -2262,7 +2159,6 @@ applyFolded();
   state.settings = await api.getSettings().catch(() => ({}));
   api.getAppVersion().then(ver => { state.appVersion = ver; }).catch(() => {});
   ({ sources: state.sources } = await api.getSources());
-  state.featured = await api.getFeatured().catch(() => []);
   await reloadLibrary();
   render();
   showAnnouncement();

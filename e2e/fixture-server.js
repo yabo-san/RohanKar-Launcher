@@ -5,7 +5,7 @@
  *     src/frontend under /app/, the way any static host would
  *   - the standalone backend (src/backend/main.js) on a fresh data dir,
  *     pointed at that server for archive.org, overrides.json, uploaders.json,
- *     featured.json, curated-ports.json and GitHub's releases
+ *     curated-ports.json and GitHub's releases
  * No Electron: the frontend is opened in a plain Chromium page.
  */
 const fs   = require('fs');
@@ -54,7 +54,6 @@ async function startStack(settings, { page = 'index.html' } = {}) {
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
     '--gitlab-api', fixtures.base,
-    '--featured-url', `${fixtures.base}/featured.json`,
     '--announcement-url', `${fixtures.base}/announcement.json`,
     '--curated-ports-url', `${fixtures.base}/curated-ports.json`,
   ], {}, () => {});

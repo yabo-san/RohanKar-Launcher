@@ -63,7 +63,6 @@ async function startBackend({ fixtures }, dataDir) {
     '--overrides-url', `${f.base}/overrides.json`,
     '--uploaders-url', `${f.base}/uploaders.json`,
     '--github-api', f.base,
-    '--featured-url', `${f.base}/featured.json`,
     // Not in the fixtures, so the curated shelf is the bundled copy, as on an offline first run
     '--curated-ports-url', `${f.base}/catalog/curated-ports.json`,
   ], {}, () => {});
@@ -130,7 +129,6 @@ async function build(opts) {
     const health = await save('/health');
     await save('/settings');
     await save('/sources');
-    await save('/featured');
     await save('/announcement');
     await save('/os/updater');
     await save('/os/open-item');
@@ -176,8 +174,8 @@ async function build(opts) {
       items: wall?.items?.length || 0,
       ports: catalogs.reduce((s, c) => s + (c.entries || 0), 0),
       sourceErrors: wall?.errors?.length || 0,
-      // preview.js reads the JSON feeds the app fetches at launch (featured,
-      // overrides, announcement) from here when the page is viewed, so edits on
+      // preview.js reads the JSON feeds the app fetches at launch
+      // (overrides, announcement) from here when the page is viewed, so edits on
       // main show without a rebuild. Fixtures builds stay offline.
       feed: process.env.PREVIEW_FEED || (opts.fixtures ? null : FEED),
     };

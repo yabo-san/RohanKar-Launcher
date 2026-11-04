@@ -20,7 +20,6 @@ const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
-const { loadFeatured, FEATURED_URL } = require('./featured');
 const { currentAnnouncement, isDismissed, ANNOUNCEMENT_URL } = require('./announcement');
 const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
@@ -71,7 +70,6 @@ function createBackend({
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
   gitlabApi = GITLAB_API,
-  featuredUrl = FEATURED_URL,
   curatedPortsUrl = CURATED_PORTS_URL,
   announcementUrl = ANNOUNCEMENT_URL,
   playniteExportDelayMs = 250,
@@ -105,16 +103,6 @@ function createBackend({
     fetchText: (url) => getText(url, { kind: 'overrides', timeoutMs: 5000, log: netlog.log })
       .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
     readBundled: () => fs.readFileSync(path.join(appDir, 'overrides.json'), 'utf8'),
-    log,
-  }));
-
-  let featuredPromise = null;
-  const getFeatured = () => (featuredPromise ??= loadFeatured({
-    url: featuredUrl,
-    fetchText: (url) => getText(url, { kind: 'featured', timeoutMs: 5000, log: netlog.log })
-      .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
-    readBundled: () => fs.readFileSync(path.join(appDir, 'catalog', 'featured.json'), 'utf8'),
-    readBundledArt: () => fs.readFileSync(path.join(appDir, 'catalog', 'art.json'), 'utf8'),
     log,
   }));
 
@@ -327,7 +315,7 @@ function createBackend({
     dataDir, appDir, appVersion, events, emit, os,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
-    settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources, getFeatured,
+    settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources,
     getAnnouncement, dismissAnnouncement, installRoot,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };

@@ -20,7 +20,7 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
   assert.ok(info.items > 0);
 
   const { responses } = JSON.parse(fs.readFileSync(path.join(out, 'preview-data', 'manifest.json'), 'utf8'));
-  for (const k of ['GET /settings', 'GET /sources', 'GET /featured', 'GET /library', 'GET /items?shelf=wall', 'GET /catalogs']) {
+  for (const k of ['GET /settings', 'GET /sources', 'GET /library', 'GET /items?shelf=wall', 'GET /catalogs']) {
     assert.ok(responses[k], k);
     assert.ok(fs.existsSync(path.join(out, 'preview-data', responses[k].file)), k);
   }

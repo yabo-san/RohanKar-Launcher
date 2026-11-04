@@ -55,14 +55,10 @@
   mask-image: linear-gradient(to right, transparent 0, #000 var(--fl), #000 calc(100% - var(--fr)), transparent 100%);
 }
 /* The compact list and the picks carousel keep their own mandatory snap; no snap mid-drag */
-.row-wrap > .row.list, .row-wrap > .row.feature { scroll-snap-type: x mandatory; }
 .row-wrap > .row.dragging, .row-wrap > .row.settling { scroll-snap-type: none; }
 .row-wrap.more-left > .row { --fl: 44px; }
 .row-wrap.more-right > .row { --fr: 44px; }
 .row-wrap > .row > .card { scroll-snap-align: start; }
-.row-wrap > .row.list { padding: 0; }
-.row-wrap:has(> .row.list) { margin: 0; }
-.section-head:has(+ .row-wrap > .row.list) { margin-bottom: 2px; }
 
 .row-edge {
   position: absolute; z-index: 3; top: calc(50% - 38px); width: 40px; height: 40px; padding: 0; border: 0; border-radius: 50%;
@@ -72,7 +68,6 @@
   opacity: 0; transform: scale(.88); pointer-events: none;
   transition: opacity .2s var(--ease), transform .2s var(--ease-out), background .15s var(--ease);
 }
-.row-wrap:has(> .row.list) .row-edge { top: calc(50% - 20px); }
 .row-edge.prev { left: 10px; }
 .row-edge.next { right: 10px; }
 .row-edge::before {
@@ -92,12 +87,6 @@
 .card .art { transition: box-shadow .24s var(--ease-out), filter .2s var(--ease); }
 .card:hover .art { box-shadow: 0 16px 32px rgb(0 0 0 / 50%); filter: brightness(.94); }
 .card.skel, .card.skel:hover, .card.skel:active { transform: none; }
-.feature-card:hover { transform: none; }
-.feature-card:active { transform: scale(.985); }
-.feature-card:hover .art { box-shadow: 0 16px 36px rgb(0 0 0 / 45%); }
-.list-item:hover { transform: none; }
-.list-item:active { transform: scale(.985); background: var(--press); }
-.list-item .art, .list-item:hover .art { box-shadow: none; filter: none; }
 .list-row:active, .track:active { background: var(--press); }
 
 .btn, .md-btn { transition: background .15s var(--ease), transform .12s var(--ease), filter .15s var(--ease); }
@@ -229,9 +218,9 @@ button.track:hover { background: var(--hover); }
     animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
     transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important;
   }
-  .card:hover, .card:active, .feature-card:active, .list-item:active, .btn:active, .md-btn:active, .tb:active, .reload-btn:active,
+  .card:hover, .card:active, .btn:active, .md-btn:active, .tb:active, .reload-btn:active,
   .row-nav button:active, .album-more:active, .seg button:active, .chip:active, .md-select:active, .navitem:active,
   .art .play-btn:active, .art .menu-btn:active, .row-edge, .row-wrap > .row-edge:active, .h2link:hover .ico,
-  .feature-card:hover .art img, .reload-btn:active::before { transform: none !important; }
+  .reload-btn:active::before { transform: none !important; }
   .body.page-enter > *, img.fade-in, .album-wash { animation: none !important; }
 }
