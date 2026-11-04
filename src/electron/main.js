@@ -148,6 +148,7 @@ async function createWindow({ url, token }) {
     width:  1280,
     height: 800,
     frame:  false,
+    icon:   path.join(__dirname, '../../assets/icons', process.platform === 'win32' ? 'y4bo.ico' : 'y4bo.png'),
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,

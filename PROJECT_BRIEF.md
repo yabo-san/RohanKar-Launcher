@@ -44,7 +44,7 @@ src/
     renderer.js       — UI logic
 assets/
   icons/
-    rk-logo.jpg       — RK brand logo
+    y4bo.png / .ico   — y4bo app icon (scripts/make-icon.py)
 PROJECT_BRIEF.md      — This file
 
 ## GitHub Repo
