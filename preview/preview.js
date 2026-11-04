@@ -10,8 +10,8 @@
  *     against a real backend
  *   - while Allow additional sources is on, a response saved with it on
  *     ("ON " keys, fixtures builds) answers instead of the default one
- *   - the JSON feeds the app fetches from main at launch (featured.json with
- *     art.json, overrides.json, announcement.json) are fetched live from manifest
+ *   - the JSON feeds the app fetches from main at launch (overrides.json,
+ *     announcement.json) are fetched live from manifest
  *     info.feed when the page is viewed; the saved copy answers if that fails
  * A pill in the corner says it's a preview and what data it shows.
  */
@@ -59,24 +59,6 @@
   }).catch(() => null));
 
   const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-  // As src/backend/featured.js parses it: a banner is a SteamGridDB CDN image,
-  // pinned on the pick or else the banner on its catalog/art.json entry
-  function heroUrl(v) {
-    try { const u = new URL(str(v)); return u.protocol === 'https:' && /^cdn\d*\.steamgriddb\.com$/.test(u.hostname) ? u.href : null; } catch { return null; }
-  }
-  function featuredPicks(data, art) {
-    if (!Array.isArray(data?.picks)) return null;
-    const bannerFor = (key) => {
-      const e = art && typeof art === 'object' && !Array.isArray(art) && art[Object.keys(art).find(k => !k.startsWith('_') && k.toLowerCase() === key.toLowerCase())];
-      return heroUrl(e?.banner?.url);
-    };
-    return data.picks.flatMap((p) => {
-      const identifier = str(p?.identifier);
-      const repository = str(p?.repository)?.toLowerCase() || null;
-      if (!identifier && !repository) return [];
-      return [{ ...(identifier ? { identifier } : { repository }), blurb: str(p.blurb), banner: heroUrl(p.banner) || bannerFor(identifier || repository) || null }];
-    });
-  }
   // As src/backend/announcement.js parses it
   function announcement(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
@@ -138,11 +120,6 @@
       if (p === '/library') return json(200, { library: await library() });
       if (/^\/library\/[^/]+\/exes$/.test(p)) return json(200, { exes: [] });
       if (/^\/installs\//.test(p)) return json(404, { error: 'not_found' });
-      if (p === '/featured') {
-        const [data, art] = await Promise.all([feed('catalog/featured.json'), feed('catalog/art.json')]);
-        const picks = featuredPicks(data, art);
-        if (picks) return json(200, { picks });
-      }
       if (p === '/announcement') {
         const data = await feed('announcement.json');
         if (data) {
