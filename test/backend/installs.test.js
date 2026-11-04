@@ -204,6 +204,14 @@ test('scan: adopts matching folders, skips ones already installed', async (t) =>
   assert.equal(library.get('rk-zoo').install_dir, path.join(scanDir, 'Zoo Tycoon'));
 });
 
+test('scan: several folders in one pass, each install adopted once', async (t) => {
+  const { installs, library, dir } = await setup(t);
+  for (const d of ['a/Zoo Tycoon', 'b/Zoo Tycoon', 'b/rk-halo']) fs.mkdirSync(path.join(dir, d), { recursive: true });
+  const r = installs.scan({ scanDirs: [path.join(dir, 'a'), path.join(dir, 'b'), path.join(dir, 'a'), null], knownIdentifiers: ['rk-halo'], titleMap: { 'Zoo Tycoon': 'rk-zoo' } });
+  assert.deepEqual(r.found.map(f => f.identifier), ['rk-zoo', 'rk-halo']);
+  assert.equal(library.get('rk-zoo').install_dir, path.join(dir, 'a', 'Zoo Tycoon'));
+});
+
 test('scan: nothing without a library', async (t) => {
   const { installs } = await setup(t);
   const noDb = createInstalls({ settings: createSettings('/nope'), library: { available: false }, archive: {}, gamesDir: '/x' });

@@ -111,12 +111,17 @@ function looseKey(name) {
 // unless it's the only title starting that way.
 const MIN_PREFIX = 4;
 
+const SHELL_FILES = new Set(['desktop.ini', 'thumbs.db', '.ds_store']);
+const onlyFolders = (dir) => (readdir(dir) || []).every(e => e.isDirectory() || SHELL_FILES.has(e.name.toLowerCase()));
+
 // Folders in scanDir that match a known item. In order: identifier, sanitized
 // identifier, title (case-insensitive), then loose title or identifier (case,
 // spaces and punctuation ignored), then a folder that is the loose prefix of
-// exactly one item. titleMap is { title: identifier }.
+// exactly one item. titleMap is { title: identifier }. A folder that matches
+// nothing and holds only folders (D:\games\rohan inside D:\games) is looked
+// into too, `nested` levels deep; a game's own folder always has files.
 // Returns [{ identifier, folderPath, matchedBy }] in directory order.
-function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
+function matchInstallFolders(scanDir, knownIdentifiers, titleMap, { nested = 1 } = {}) {
   const entries = scanDir && fs.existsSync(scanDir) ? readdir(scanDir) : null;
   if (!entries) return [];
 
@@ -160,7 +165,11 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap) {
       else if (loose.has(lkey)) { identifier = loose.get(lkey); matchedBy = 'loose'; }
       else if ((identifier = byPrefix(lkey))) matchedBy = 'prefix';
     }
-    if (identifier) out.push({ identifier, folderPath: path.join(scanDir, name), matchedBy });
+    const folderPath = path.join(scanDir, name);
+    if (identifier) out.push({ identifier, folderPath, matchedBy });
+    else if (nested > 0 && onlyFolders(folderPath)) {
+      out.push(...matchInstallFolders(folderPath, knownIdentifiers, titleMap, { nested: nested - 1 }));
+    }
   }
   return out;
 }
