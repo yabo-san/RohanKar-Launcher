@@ -13,8 +13,8 @@
  *   page); Back, or Escape, returns to the page it came from, scrolled where
  *   it was, and a search comes back with its results.
  * - There is no Home page: the app opens on the Game wall.
- * - The announcement from announcement.json shows until dismissed.
- * - Your own app: a folder the library makes, fills and launches.
+ * - A game's page: Rohan's feature badges, archive.org reviews, the readme.
+ * - A new y4bo release shows a bar with its notes.
  * - Cards lift on hover and pages rise in, and prefers-reduced-motion turns
  *   both off.
  * - Your sources: no switch and no warnings; user.json's entries load as soon
@@ -22,7 +22,7 @@
  *   install asks before installing.
  * - Report an issue: Settings and each game's and port's page link to a
  *   prefilled GitHub issue.
- * - The Settings toggle switches to the classic UI and back, and is saved.
+ * - Settings has About with the credit links, and no classic UI switch.
  *
  * archive.org, GitHub and the curated list are served by fixture-server.js.
  */
@@ -206,7 +206,7 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   expect(Object.values(lib).some(l => l.install_dir)).toBe(true);
   // Installed: ⋯ (the row menu) has Add to Steam and Delete, the drawer's other buttons
   await page.locator('#detail [data-detail-menu]').click();
-  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Play', 'Open Folder', 'Add to Steam…', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Delete']);
+  await expect(page.locator('#ctxmenu .mi')).toHaveText(['Play', 'Open Folder', 'Readme', 'Add to Steam…', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Delete']);
   await page.keyboard.press('Escape');
   // Back to the search, with its results
   await page.keyboard.press('Escape');
@@ -251,7 +251,7 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
   // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
-  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Launch Options',
+  await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Readme', 'Launch Options',
     'Remove from Library', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Copy Link', 'Delete']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
   await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
@@ -612,58 +612,44 @@ test('Add a repo link: it lands on Your ports, tries to install, and Settings re
   await expect(row).toHaveCount(0);
 });
 
-test('the announcement shows once and stays dismissed', async () => {
-  const banner = page.locator('#announce');
-  await expect(banner).toContainText('Welcome to the e2e launcher.');
-  await banner.locator('[data-action="announce-dismiss"]').click();
-  await expect(banner).toBeHidden();
-  await expect.poll(() => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).dismissedAnnouncements).toEqual(['e2e-hello']);
-});
-
-test('Library: add your own app, drop files in its folder, play; rename; remove', async () => {
-  await page.locator('[data-view="library"]').click();
-  await page.locator('[data-action="manual-open"]').click();
-  await page.locator('#manual-name').fill('My Homebrew');
-  await page.locator('#btn-manual-create').click();
+test("A game page shows Rohan's feature badges and the archive.org reviews; Readme opens the one in its folder", async () => {
+  await page.locator('#q').fill('Halo');
+  await page.locator('.game-card', { hasText: 'Halo: Combat Evolved' }).first().click();
   const detail = page.locator('#detail');
-  await expect(detail.locator('.album-title')).toHaveText('My Homebrew');
-  await expect(detail.locator('.manual-note')).toContainText("Put the app's files in its folder");
-  const folder = await page.evaluate(async () => (await api.getLibrary())['manual:My Homebrew'].install_dir);
-  expect(fs.readdirSync(folder)).toEqual(['Place app files here.txt']);
-
-  fs.writeFileSync(path.join(folder, 'homebrew.exe'), 'MZ');
-  // Play finds the one exe now in the folder and asks the backend to launch it
-  const launched = page.waitForRequest(r => r.url().includes('/launch') && r.method() === 'POST');
-  await detail.locator('#btn-play').click();
-  expect((await launched).postDataJSON().exePath).toBe(path.join(folder, 'homebrew.exe'));
-
-  await page.evaluate(() => { globalThis.prompt = () => 'Homebrew Deluxe'; });
-  await detail.locator('[data-detail-menu]').click();
-  await page.locator('#ctxmenu [data-menu="manual-rename"]').click();
-  await expect(detail.locator('.album-title')).toHaveText('Homebrew Deluxe');
-  await page.locator('#nav-back').click();
-  const card = page.locator('.game-card', { hasText: 'Homebrew Deluxe' });
-  await expect(card).toContainText('Your folder');
-
-  await card.click();
-  await detail.locator('[data-detail-menu]').click();
-  await page.locator('#ctxmenu [data-menu="manual-remove"]').click();
-  await expect(detail).toHaveCount(0);
-  await expect(page.locator('#heading')).toHaveText('Library');
-  await expect(page.locator('.game-card', { hasText: 'Homebrew Deluxe' })).toHaveCount(0);
-  expect(fs.existsSync(path.join(folder, 'homebrew.exe'))).toBe(true);
+  await expect(detail.locator('#reviews')).toContainText('Reviews on archive.org');
+  await expect(detail.locator('.review')).toContainText('chief');
+  await expect(detail.locator('.review')).toContainText('★★★★☆');
+  // archive.org review bodies are HTML; the page shows the text only
+  await expect(detail.locator('.review p')).toHaveText('Played start to finish.');
+  await expect(detail.locator('[data-badge="controller"]')).toHaveText('Controller');
+  // Installed by the Install test above: tiny.zip holds readme.txt
+  await detail.locator('[data-action="readme"]').click();
+  await expect(page.locator('#modal-title')).toHaveText('readme.txt');
+  await expect(page.locator('#modal pre.readme')).not.toBeEmpty();
+  await page.locator('#modal [data-modal="1"]').click();
+  await expect(page.locator('#modal')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
 });
 
-test('Settings switches to the classic UI and back, and remembers the choice', async () => {
-  const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).ui;
+test('A new y4bo release shows a bar with its notes and a link to get it', async () => {
+  const opened = page.waitForRequest(r => r.url().includes('/os/updater-install') && r.method() === 'POST');
+  await page.evaluate(() => globalThis.showUpdate({ status: 'available', version: '9.9.9', releaseNotes: '## Fixes\n- faster' }));
+  const bar = page.locator('#announce');
+  await expect(bar).toContainText('y4bo 9.9.9 is out.');
+  await bar.locator('[data-action="update-notes"]').click();
+  await expect(page.locator('#modal pre.readme')).toContainText('faster');
+  await page.locator('#modal [data-modal="1"]').click();
+  await opened;
+  await bar.locator('[data-action="update-dismiss"]').click();
+  await expect(bar).toBeHidden();
+});
 
+test('Settings has About, with the credit links', async () => {
   await page.locator('#btn-settings').click();
-  await page.locator('#btn-classic-ui').click();
-  await expect(page.locator('#library-grid .game-card').first()).toBeVisible({ timeout: 30_000 });
-  expect(saved()).toBe('legacy');
-
-  await page.locator('#btn-settings').click();
-  await page.locator('#btn-new-ui').click();
-  await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
-  expect(saved()).toBe('new');
+  const about = page.locator('#about');
+  await expect(about.locator('button')).toHaveText(['GitHub', 'Rohan Kar on X', 'Support Rohan Kar on Ko-fi', 'Donate to the Internet Archive']);
+  await expect(about.locator('[data-href="https://ko-fi.com/rohankarmoon"]')).toHaveCount(1);
+  // The classic interface is gone, and so is its switch
+  await expect(page.locator('#btn-classic-ui')).toHaveCount(0);
 });

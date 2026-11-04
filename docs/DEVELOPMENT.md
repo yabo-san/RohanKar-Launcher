@@ -32,14 +32,13 @@ To work on the app without Electron:
 
 | Task | Runs |
 |---|---|
-| `mise run dev` | The backend and the frontend together, and prints the page URLs |
+| `mise run dev` | The backend and the frontend together, and prints the page URL |
 | `mise run backend` | Only the backend, on `127.0.0.1:5170` |
 | `mise run frontend` | Only `src/frontend`, on `127.0.0.1:5173`, pointed at the backend task |
 | `mise run ui` | The UI alone on `0.0.0.0:5180`, from the real data saved as JSON, no backend and no installs (below) |
 | `mise run sandbox` | The backend and the UI with real installs, everything kept under `./sandbox/` (below) |
 
-Open the printed URL in a browser: `new/index.html` is the new interface and
-`index.html` the classic one. The backend keeps its data in `.launcher-data/`
+Open the printed URL in a browser. The backend keeps its data in `.launcher-data/`
 and uses the token `dev`, so the URLs stay the same across restarts
 (`LAUNCHER_PORT`, `FRONTEND_PORT`, `LAUNCHER_TOKEN` and `LAUNCHER_DATA_DIR`
 change that). Folder pickers, the Recycle Bin, Add to Steam and the updater
@@ -47,17 +46,16 @@ need the desktop app and answer 501 here. The API is in [docs/API.md](API.md).
 
 ### Web preview
 
-Both interfaces run in a browser on GitHub Pages, no install needed:
+The interface runs in a browser on GitHub Pages, no install needed:
 [main](https://yabo-san.github.io/RohanKar-Launcher/preview/new/), and each PR
 that touches the app gets its own under `preview/pr-<number>/new/`, linked in a
 PR comment and removed when the PR closes. `.github/workflows/preview.yml`
 builds it with `scripts/preview/build.js`: the backend loads the live sources
-once, every response the UIs ask for at start is saved as a file, and
+once, every response the UI asks for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
 favorites, Add/Remove and settings work (kept for the tab); installs and
-launching answer 501. The JSON feeds the app reads from main at launch
-(`overrides.json`,
-`announcement.json`) are fetched
+launching answer 501. The JSON feed the app reads from main at launch
+(`overrides.json`) is fetched
 live when the page is opened, so an edit on main shows on the next reload
 (raw.githubusercontent.com caches for up to 5 minutes); the saved copy answers
 if that fails. The archive.org wall and the Quiver lists are the build's

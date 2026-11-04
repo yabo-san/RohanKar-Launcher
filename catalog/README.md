@@ -6,9 +6,8 @@ fallback. Every file changes by pull request.
 | file | what | entries |
 | --- | --- | --- |
 | `uploaders.json` | the built-in archive.org uploaders (Rohan, r4ze, pstriple): handle, email (what `uploader:` matches), aliases, `track`, notes | 3 |
-| `favorite-artists.json` | curated SteamGridDB artists in priority order (`steam64`, `name`); the only sources `scripts/box-art` pins covers from | 43 |
 | `curated-ports.json` | the port shelf: three personal picks, edited by hand (see Port shelf below) | 3 |
-| `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Some entries also carry a `banner` (a hero URL), which the covers service serves as the item's hero. Written by `scripts/box-art` in CI; picks and lookups read it instead of the API; pinned banners are never overwritten | per item |
+| `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Some entries also carry a `banner` (a hero URL), which the covers service serves as the item's hero. Edited by hand now that the pstriple art is done; pinned banners are never overwritten | per item |
 
 Rules: uploader emails are what archive.org's `uploader:` field matches; handles are labels.
 

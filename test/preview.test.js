@@ -37,6 +37,6 @@ test('a fixtures build saves what the UIs load and wires preview.js into both pa
   assert.ok(responses['GET /items/rk-e2e-user-demo/cover']);
 
   assert.match(fs.readFileSync(path.join(out, 'new', 'index.html'), 'utf8'), /<script src="\.\.\/preview\.js"><\/script>\s*<script src="\.\.\/api\.js">/);
-  assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /<script src="preview\.js"><\/script>\s*<script src="api\.js">/);
+  assert.match(fs.readFileSync(path.join(out, 'index.html'), 'utf8'), /url=new\//);
   assert.ok(fs.existsSync(path.join(out, 'preview.js')));
 });

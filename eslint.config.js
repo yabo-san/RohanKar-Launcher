@@ -21,21 +21,6 @@ module.exports = [
   {
     files: ['src/frontend/**/*.js'],
     languageOptions: { sourceType: 'module', globals: globals.browser },
-    rules: {
-      'no-useless-escape': 'off',         // baseline: redundant \- escapes in renderer.js regexes
-      'no-unused-vars': 'off',            // baseline: unused changelogHeading and truncate in renderer.js
-      'no-useless-assignment': 'off',     // baseline: dead initial value for hints in renderer.js
-    },
-  },
-  {
-    // Defined in api.js and sources.js, which index.html loads before renderer.js
-    files: ['src/frontend/renderer.js'],
-    languageOptions: {
-      globals: {
-        api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', parseExcludes: 'readonly', formatSources: 'readonly',
-        preferredVersion: 'readonly', versionLabel: 'readonly',
-      },
-    },
   },
   {
     // Defined in ../api.js, ../sources.js, ../list-view.js and ../details.js, which new/index.html loads before app.js
@@ -43,6 +28,7 @@ module.exports = [
     languageOptions: {
       globals: {
         api: 'readonly', getTitle: 'readonly', parseSources: 'readonly', parseExcludes: 'readonly', formatSources: 'readonly',
+        featureBadges: 'readonly', formatPlaytime: 'readonly',
         // ../list-view.js
         ListView: 'readonly',
         // ../details.js

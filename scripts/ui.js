@@ -84,7 +84,7 @@ async function start(opts, print = (l) => process.stdout.write(l), { buildSite =
   }
   const s = await serve(opts.out, opts);
   print(`ui  ${s.url}/new/  (${info.data} data: ${info.items} wall items, ${info.ports} ports)\n`);
-  print(`    classic UI ${s.url}/index.html · no installs in this mode · Ctrl+C stops\n`);
+  print('    no installs in this mode · Ctrl+C stops\n');
   return s;
 }
 
