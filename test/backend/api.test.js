@@ -186,13 +186,22 @@ test('library: failing trash is a 500; chooseFolder from the host', async (t) =>
 
 test('POST /library/scan adopts folders named after items', async (t) => {
   const { call, backend } = await testApi(t);
-  assert.equal((await call('POST', '/library/scan', {})).status, 400);
+  // No folders set: the app's own games folder, empty here
+  assert.deepEqual((await call('POST', '/library/scan', {})).body, { found: [] });
   const dir = path.join(backend.dataDir, 'scan');
   fs.mkdirSync(path.join(dir, 'Halo_ Combat Evolved'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'rk-e2e-the-sims'), { recursive: true });
   backend.settings.save({ installPath: dir });
   const r = await call('POST', '/library/scan', {});
   assert.deepEqual(r.body.found.map(f => [f.identifier, f.matchedBy]).sort(), [['rk-e2e-halo-ce', 'title'], ['rk-e2e-the-sims', 'identifier']]);
+});
+
+test('startup: the first item load adopts installs in the games folder, nested ones too', async (t) => {
+  const { backend } = await testApi(t);
+  fs.mkdirSync(path.join(backend.dataDir, 'games', 'rohan', '(12)Halo - Combat Evolved'), { recursive: true });
+  await backend.items.load();
+  await new Promise(r => setTimeout(r, 50));
+  assert.equal(backend.library.get('rk-e2e-halo-ce')?.install_dir, path.join(backend.dataDir, 'games', 'rohan', '(12)Halo - Combat Evolved'));
 });
 
 test('collections: create, rename, colour, add and remove items, delete', async (t) => {
