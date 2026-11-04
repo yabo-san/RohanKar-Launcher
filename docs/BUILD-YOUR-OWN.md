@@ -22,8 +22,7 @@ clone your fork.
 ## 3. Point the app at your fork
 
 The app fetches some lists from this repo's `main` at launch (`overrides.json`,
-`catalog/uploaders.json`, `catalog/curated-ports.json`, `catalog/featured.json`,
-`catalog/art.json`) and falls back to the copies it ships with. Change the
+`catalog/uploaders.json`, `catalog/curated-ports.json`) and falls back to the copies it ships with. Change the
 `raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/...` URLs in `src/backend/` to your
 fork, or your edits only show while those fetches fail.
 

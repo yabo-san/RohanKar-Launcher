@@ -112,7 +112,6 @@ const api = (() => {
     getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
     // Additional sources: user.json's state, invalid entries and conflicts
     getUserSources: async () => (await call('GET', '/user-sources')).body || null,
-    getFeatured:  async () => (await call('GET', '/featured')).body?.picks || [],
     getAnnouncement:     async () => (await call('GET', '/announcement')).body?.announcement || null,
     dismissAnnouncement: (id) => call('POST', '/announcement/dismiss', { id }),
 

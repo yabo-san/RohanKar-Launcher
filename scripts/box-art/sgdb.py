@@ -1,6 +1,5 @@
 """SteamGridDB and archive.org helpers shared by the box-art scripts
-(pstriple-art.py for covers, banners.py for the Home banners, grid-lookup.py
-for pasted page links).
+(pstriple-art.py for covers, grid-lookup.py for pasted page links).
 
 - Every JSON response is cached to scripts/box-art/cache, so a re-run does not
   re-fetch; archive.org is paced at one request per second and Retry-After is

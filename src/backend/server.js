@@ -112,13 +112,11 @@ function createApi(backend) {
     return item;
   };
 
-  // The hand-picked games and ports that lead the Home page, in order
   route('GET', '/announcement', async () => ({ body: { announcement: await backend.getAnnouncement() } }));
   route('POST', '/announcement/dismiss', ({ body }) => {
     backend.dismissAnnouncement(requireString(requireObject(body).id, 'id'));
     return { status: 204 };
   });
-  route('GET', '/featured', async () => ({ body: { picks: await backend.getFeatured() } }));
   route('GET', '/items/:id', async ({ params }) => ({ body: withNewer(await findItem(params.id)) }));
 
   route('GET', '/items/:id/files', async ({ params }) => {

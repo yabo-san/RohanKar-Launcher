@@ -17,8 +17,8 @@ const MIN_IMAGE_BYTES = 1024;  // smaller than this is an error page, not a cove
 // An identifier becomes a file name in the cache: no separators, no dot-only names
 const safeName = (s) => typeof s === 'string' && s !== '' && !/[\\/]/.test(s) && !/^\.+$/.test(s);
 
-// catalog/art.json's pick for an item. For the hero, the banner picked for it
-// (the one the Home page shows) wins. Otherwise its first curated grid (or
+// catalog/art.json's pick for an item. For the hero, its `banner`, when set,
+// wins. Otherwise its first curated grid (or
 // hero), else its first.
 function catalogArtUrl(art, identifier, kind) {
   const entry = art?.[identifier];
