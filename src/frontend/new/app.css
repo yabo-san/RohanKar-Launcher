@@ -537,6 +537,9 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 26px 14px; }
 .grid.ports { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .row.ports { grid-auto-columns: clamp(140px, calc((100% - 8 * 14px) / 8.42), 240px); grid-template-columns: none; }
+.row.uploaders { grid-auto-columns: 132px; grid-template-columns: none; }
+.uploader-card { text-align: center; }
+.uploader-card .art { display: grid; place-items: center; aspect-ratio: 1; border-radius: 50%; font: 700 40px/1 var(--font-display); color: rgb(255 255 255 / 88%); }
 
 /* cards: square art with a hairline, no lift; round play and menu fade in */
 .card { transition: none; }

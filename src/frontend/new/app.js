@@ -10,7 +10,7 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 
 const state = {
-  view: { name: 'wall' },
+  view: { name: 'library' },
   query: '',
   settings: {},
   sources: [],
@@ -311,7 +311,6 @@ function renderNav() {
   $('#nav-shelves').innerHTML = (state.ports?.shelves || []).map(s =>
     `<button class="navitem" data-view="shelf" data-arg="${esc(s.id)}">${avatar(s.name)}${esc(s.name)}<span class="n">${s.count || (s.error ? '!' : '')}</span></button>`
   ).join('') || '<div class="navitem" style="cursor:default;color:var(--text3)"><i class="ico" data-ico="wall"></i>Loading…</div>';
-  $('#n-wall').textContent = state.games.length || '';
   const libCount = Object.values(state.library).filter(l => l.install_dir || l.identifier.startsWith('quiver:')).length;
   $('#n-library').textContent = libCount || '';
   renderBadges();
@@ -880,8 +879,8 @@ function viewLibrary() {
   let ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
   const manual = manualFormHtml();
   if (!uniq.length && !ports.length) {
-    return manual + `<p class="empty"><b>Your library is empty.</b><br>Install something from the game wall, open a Ports shelf and add a port,
-      or add an app of your own. The library is what's yours, not everything that exists.</p>`;
+    return manual + `<p class="empty"><b>Nothing installed yet.</b><br>Open an uploader or a port below and install something,
+      or add an app of your own.</p>` + browseSections();
   }
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
@@ -890,7 +889,32 @@ function viewLibrary() {
   ports = ListView.sortRows(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), p, [sorts, PORT_SORTS], 'name', listCtx('port'), nameOf);
   let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
   if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, kind: 'game' }), { count: uniq.length, cls: 'plain' });
-  if (ports.length) html += section('Ports', libraryBody('library', ports, { card: portCard, kind: 'port', cls: 'grid ports' }), { count: ports.length, cls: 'plain', sub: 'From a catalog, or yours.' });
+  if (ports.length) html += section('Installed ports', libraryBody('library', ports, { card: portCard, kind: 'port', cls: 'grid ports' }), { count: ports.length, cls: 'plain' });
+  return html + browseSections();
+}
+
+// Under what's installed: each shelf's ports, then the uploaders to browse
+// (each opens its page; the heading opens every upload at once)
+function uploaderCard(s) {
+  const n = state.versions.filter(v => v._uploader === s.uploader).length;
+  return `<button class="card uploader-card" data-view="uploader" data-arg="${esc(s.uploader)}">
+    <div class="art" style="background:${tint(sourceName(s))}"><span aria-hidden="true">${esc(sourceName(s).charAt(0).toUpperCase())}</span></div>
+    <div class="title">${esc(sourceName(s))}</div><div class="sub">${n ? `${fmtNum(n)} uploads` : state.wall.loading ? 'Loading…' : ''}</div></button>`;
+}
+
+// "Built-in" reads "Built-in ports"; "Your ports" stays as it is
+const shelfTitle = (name) => (/\bports$/i.test(name) ? name : `${name} ports`);
+
+function browseSections() {
+  let html = '';
+  const ports = state.ports;
+  for (const shelf of ports?.shelves || []) {
+    const items = ports.items.filter(i => i.shelf === shelf.id);
+    if (items.length) html += section(shelfTitle(shelf.name), items.map(portCard).join(''), { cls: 'row ports', seeAll: ['shelf', shelf.id] });
+  }
+  if (!ports && !state.portsError) html += section('Ports', skeletons(6), { cls: 'row ports' });
+  const enabled = state.sources.filter(s => s.enabled !== false);
+  if (enabled.length) html += section('Uploaders', enabled.map(uploaderCard).join(''), { cls: 'row uploaders', seeAll: ['wall'] });
   return html;
 }
 
@@ -898,7 +922,7 @@ function viewSettings() {
   const s = state.settings;
   return `<div class="form">
     <div class="field" id="your-sources"><label>Your sources</label>
-      <div class="hint">The game wall and Ports come from these. Paste any archive.org, GitHub or GitLab link into Add.</div>
+      <div class="hint">Your uploaders and Ports come from these. Paste any archive.org, GitHub or GitLab link into Add.</div>
       <div id="sources-list">${sourcesListHtml()}</div>
       <div class="field actions"><button class="btn primary" id="btn-add" data-action="add-open">Add…</button></div></div>
     <div class="field"><label for="setting-install">Install folder</label>
@@ -939,7 +963,7 @@ function viewSearch(q) {
 
 // The round reload button at the right of the page title (Cider's reload-btn)
 const RELOADS = { wall: 'reload-wall', uploader: 'reload-wall', shelf: 'refresh-ports' };
-const HEADINGS = { wall: 'Game wall', library: 'Library', settings: 'Settings' };
+const HEADINGS = { wall: 'All uploads', library: 'Library', settings: 'Settings' };
 
 function render() {
   const v = state.view;
@@ -954,12 +978,12 @@ function render() {
   else if (v.name === 'library') html = viewLibrary();
   else if (v.name === 'settings') html = viewSettings();
   else if (DETAIL_VIEWS.has(v.name)) html = viewDetail(v);
-  else html = viewWall(null);
+  else html = viewLibrary();
 
   const heading = state.query ? 'Search'
-    : v.name === 'shelf' ? `${state.ports?.shelves.find(s => s.id === v.arg)?.name || ''} ports`
+    : v.name === 'shelf' ? shelfTitle(state.ports?.shelves.find(s => s.id === v.arg)?.name || '')
     : v.name === 'uploader' ? sourceName(state.sources.find(s => s.uploader === v.arg) || { uploader: v.arg })
-    : HEADINGS[v.name] || 'Game wall';
+    : HEADINGS[v.name] || 'Library';
 
   // Keep the settings form as typed while the wall is still streaming in;
   // only the sources list redraws
@@ -1038,7 +1062,7 @@ function openDetail(kind, id) {
 
 function closeDetail() {
   if (!DETAIL_VIEWS.has(state.view.name)) return;
-  if (navHistory.canBack) goHistory(-1); else go('wall');
+  if (navHistory.canBack) goHistory(-1); else go('library');
 }
 
 function renderDetail() {
@@ -1467,7 +1491,7 @@ async function addSource({ uploader, label }) {
   const r = await api.saveSettings({ sources });
   if (r && r.ok === false) return toast(r.body?.detail || "Couldn't add it.", 6000);
   state.sources = sources;
-  toast(`Added ${label || sourceLabel(uploader)}. Its uploads are loading onto the game wall.`);
+  toast(`Added ${label || sourceLabel(uploader)}. Its uploads are loading.`);
   render();
   loadWall({ refresh: true });
 }
