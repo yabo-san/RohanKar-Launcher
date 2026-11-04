@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0-fork.22](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.21...v1.6.0-fork.22) (2026-11-04)
+
+
+### Features
+
+* **catalog:** strip curation to three personal picks; say what the launcher is ([#156](https://github.com/yabo-san/RohanKar-Launcher/issues/156)) ([38d6355](https://github.com/yabo-san/RohanKar-Launcher/commit/38d635506dff4616e82a5b1174505efc2844c53e))
+* one Add box for archive.org and repo links; strip Settings down ([#158](https://github.com/yabo-san/RohanKar-Launcher/issues/158)) ([5eb8252](https://github.com/yabo-san/RohanKar-Launcher/commit/5eb8252ed4f9b115b2c18fa47999454cc18ed2f1))
+
+
+### Bug Fixes
+
+* adopt existing installs whose folder names differ from the title ([#155](https://github.com/yabo-san/RohanKar-Launcher/issues/155)) ([a3ff095](https://github.com/yabo-san/RohanKar-Launcher/commit/a3ff0957f0799bf316a4601afa0988196f8fe31d))
+* **home:** drop the per-uploader Most Played rows ([#149](https://github.com/yabo-san/RohanKar-Launcher/issues/149)) ([b0caf3d](https://github.com/yabo-san/RohanKar-Launcher/commit/b0caf3d5d76eaa6d26463c44cf3b9302a018db71))
+* **ui:** sidebar search box takes clicks in the installed app ([#153](https://github.com/yabo-san/RohanKar-Launcher/issues/153)) ([d6d5be1](https://github.com/yabo-san/RohanKar-Launcher/commit/d6d5be1c692bdee81e82891845095523ae3eba50))
+
 ## [1.6.0-fork.21](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.20...v1.6.0-fork.21) (2026-10-07)
 
 
