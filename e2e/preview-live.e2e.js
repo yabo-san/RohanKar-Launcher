@@ -1,7 +1,7 @@
 'use strict';
 /**
  * The web preview reads the JSON feeds live: a fixtures build pointed at a
- * local "main" (PREVIEW_FEED) shows today's overrides and announcement
+ * local "main" (PREVIEW_FEED) shows today's overrides
  * instead of the ones saved at build time, and falls back to the saved ones
  * when a feed can't be fetched.
  */
@@ -44,10 +44,8 @@ test.afterAll(async () => {
 
 test('the preview shows the feeds on main, not the build-time copies', async ({ page }) => {
   feed['overrides.json'] = { 'rk-e2e-halo-ce': { title: 'Halo, renamed on main' } };
-  feed['announcement.json'] = { id: 'live-1', message: 'Posted after the build' };
 
   await page.goto(`${base}/new/index.html`);
-  await expect(page.locator('#announce')).toContainText('Posted after the build');
   await page.locator('[data-view="wall"]').first().click();
   await expect(page.locator('#body')).toContainText('Halo, renamed on main');
   await expect(page.locator('body')).toContainText('feeds live');

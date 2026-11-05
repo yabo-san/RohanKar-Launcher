@@ -123,8 +123,9 @@ test('library: add, get, patch, exes, readme, launch, reveal, delete', async (t)
   assert.equal((await call('GET', '/library/nope')).status, 404);
 
   assert.equal((await call('PATCH', '/library/nope', { category: 'x' })).status, 404);
-  const fav = await call('PATCH', '/library/fresh', { favorite: true, notes: 'hi' });
-  assert.deepEqual([fav.body.is_favorite, fav.body.notes], [1, 'hi']);
+  const fav = await call('PATCH', '/library/fresh', { favorite: true });
+  assert.equal(fav.body.is_favorite, 1);
+  assert.equal((await call('PATCH', '/library/fresh', { notes: 'hi' })).body.detail, 'Unknown fields: notes');
   assert.equal((await call('PATCH', '/library/fresh', { category: 'rpg', exePath: '/x.exe' })).body.category, 'rpg');
   assert.equal((await call('PATCH', '/library/fresh', { color: 'x' })).body.detail, 'Unknown fields: color');
 
@@ -193,24 +194,6 @@ test('POST /library/scan adopts folders named after items', async (t) => {
   backend.settings.save({ installPath: dir });
   const r = await call('POST', '/library/scan', {});
   assert.deepEqual(r.body.found.map(f => [f.identifier, f.matchedBy]).sort(), [['rk-e2e-halo-ce', 'title'], ['rk-e2e-the-sims', 'identifier']]);
-});
-
-test('collections: create, rename, colour, add and remove items, delete', async (t) => {
-  const { call } = await testApi(t);
-  const c = await call('POST', '/collections', { name: 'Faves' });
-  assert.equal(c.status, 201);
-  assert.equal((await call('POST', '/collections', { name: 'Faves' })).status, 409);
-  assert.equal((await call('POST', '/collections', {})).status, 400);
-  const other = (await call('POST', '/collections', { name: 'Other' })).body;
-  assert.equal((await call('PATCH', `/collections/${other.id}`, { name: 'Faves' })).status, 409);
-  const p = await call('PATCH', `/collections/${c.body.id}`, { name: 'Best', color: '#0f0' });
-  assert.deepEqual([p.body.name, p.body.color], ['Best', '#0f0']);
-  assert.equal((await call('PUT', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
-  assert.deepEqual((await call('GET', '/collections')).body.collections.find(x => x.id === c.body.id).games, ['rk-e2e-halo-ce']);
-  assert.equal((await call('DELETE', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
-  assert.equal((await call('DELETE', `/collections/${c.body.id}`)).status, 204);
-  assert.equal((await call('PATCH', `/collections/${c.body.id}`, {})).status, 404);
-  assert.equal((await call('DELETE', '/collections/abc')).status, 404);
 });
 
 test('installs: start, progress over SSE, get, list, cancel, errors', async (t) => {
@@ -350,7 +333,7 @@ test('library.db unavailable is a 503', async (t) => {
   const { call, backend } = await testApi(t);
   backend.library.close();
   assert.equal((await call('POST', '/library', { id: 'x' })).status, 503);
-  assert.equal((await call('POST', '/collections', { name: 'x' })).status, 503);
+  assert.equal((await call('PATCH', '/library/x', { favorite: true })).status, 503);
 });
 
 test('standalone: prints port and token, serves the API, stops cleanly', async (t) => {

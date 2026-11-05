@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseSources, parseExcludes, formatSources, preferredVersion, versionLabel } = require('../src/frontend/sources.js');
+const { parseSources, parseExcludes, formatSources, preferredVersion, versionLabel, featureBadges, formatPlaytime } = require('../src/frontend/sources.js');
 const { sourcesFromCatalog, titleKey } = require('../src/backend/sources.js');
 
 test('parseSources: uploader with label', () => {
@@ -196,4 +196,21 @@ test('sourcesFromCatalog: missing or malformed catalog', () => {
 test('sourcesFromCatalog: the bundled catalog turns on exactly the three launcher uploaders', () => {
   const on = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
   assert.deepEqual(on.map(s => s.label).sort(), ['hailstormttv', 'r4zel1ght', 'rohanjackson071']);
+});
+
+test("featureBadges: reads Rohan's description and subject lines", () => {
+  const item = { description: ['Controller Support - Yes<br>Deck Compatibility: Verified'], subject: 'Widescreen Fix; FOV' };
+  assert.deepEqual(featureBadges(item).map(b => b.id), ['controller', 'deck', 'widescreen', 'fov']);
+});
+
+test('featureBadges: none for plain descriptions or "Controller Support: No"', () => {
+  assert.deepEqual(featureBadges({ description: 'Controller Support: No. Forever.' }), []);
+  assert.deepEqual(featureBadges({}), []);
+  assert.deepEqual(featureBadges(null), []);
+});
+
+test('formatPlaytime: hours and minutes, empty for none', () => {
+  assert.equal(formatPlaytime(5400), '1h 30m');
+  assert.equal(formatPlaytime(120), '2m');
+  assert.equal(formatPlaytime(0), '');
 });
