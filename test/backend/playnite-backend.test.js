@@ -61,6 +61,38 @@ test('buildExport: updateAvailable when a newer upload of the installed title ex
   assert.deepEqual(games.map(g => g.updateAvailable), [true, false, false, false]);
 });
 
+test('buildExport: one record per export id, the installed row wins over a stale one', () => {
+  const stale = { identifier: 'quiver:local:murkantor/project-midas', install_dir: null, source: 'https://old/local.json' };
+  const live  = { identifier: 'quiver:curated:murkantor/project-midas', install_dir: 'D:\\games\\rohan\\ProjectMidas', exe_path: 'D:\\games\\rohan\\ProjectMidas\\ge.exe' };
+  for (const rows of [{ a: { identifier: 'a' }, [stale.identifier]: stale, [live.identifier]: live },
+                      { a: { identifier: 'a' }, [live.identifier]: live, [stale.identifier]: stale }]) {
+    const games = buildExport({ rows }).games;
+    assert.deepEqual(games.map(g => g.id), ['a', 'quiver:murkantor/project-midas'], 'one record, in library order');
+    assert.equal(games[1].installed, true);
+    assert.equal(games[1].installDir, live.install_dir);
+  }
+});
+
+test('buildExport: duplicates that are both installed or both not keep the most recently played, then the first', () => {
+  const row = (cat, extra) => ({ identifier: `quiver:${cat}:x/sm64`, ...extra });
+  const pick = (...rs) => buildExport({ rows: Object.fromEntries(rs.map(r => [r.identifier, r])) }).games;
+  let games = pick(row('c1', { install_dir: '/a', last_played_at: 1 }), row('c2', { install_dir: '/b', last_played_at: 5 }));
+  assert.equal(games.length, 1);
+  assert.equal(games[0].installDir, '/b');
+  games = pick(row('c1', { last_played_at: 9 }), row('c2', {}));
+  assert.equal(games[0].lastPlayed, new Date(9).toISOString());
+  games = pick(row('c1', { install_dir: '/a' }), row('c2', { install_dir: '/b' }));
+  assert.equal(games[0].installDir, '/a', 'a tie keeps the first');
+});
+
+test('findRow: a quiver id held by several rows names the installed one', () => {
+  const rows = {
+    'quiver:local:m/pm':   { identifier: 'quiver:local:m/pm', install_dir: null, last_played_at: 50 },
+    'quiver:curated:m/pm': { identifier: 'quiver:curated:m/pm', install_dir: '/g/pm' },
+  };
+  assert.equal(findRow(rows, 'quiver:m/pm').identifier, 'quiver:curated:m/pm');
+});
+
 test('platformOf: catalog shelves onto the five platforms', () => {
   const cases = { Nintendo: 'Nintendo', 'Switch ports': 'Nintendo', 'N64': 'Nintendo', PlayStation: 'PlayStation', PS2: 'PlayStation',
     'Xbox 360': 'Xbox', PC: 'PC', 'Windows': 'PC', Sega: 'Other', '': 'Other', undefined: 'Other' };
