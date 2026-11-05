@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0-fork.23](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.22...v1.6.0-fork.23) (2026-11-05)
+
+
+### Features
+
+* remove the Home page; the new UI opens on the Game wall ([#161](https://github.com/yabo-san/RohanKar-Launcher/issues/161)) ([23b10bc](https://github.com/yabo-san/RohanKar-Launcher/commit/23b10bc30d9130144014dd9b9eb2ccc5fb93e958))
+
+
+### Bug Fixes
+
+* use the y4bo icon for the exe, installer and window ([#162](https://github.com/yabo-san/RohanKar-Launcher/issues/162)) ([73fcc9b](https://github.com/yabo-san/RohanKar-Launcher/commit/73fcc9b10e930cf0c035b7afc56a3d1a937c2193))
+
 ## [1.6.0-fork.22](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.21...v1.6.0-fork.22) (2026-11-04)
 
 
