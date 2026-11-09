@@ -40,6 +40,7 @@ async function startFrontend({ frontendPort }) {
   const server = http.createServer((req, res) => {
     let rel;
     try { rel = decodeURIComponent(new URL(req.url, 'http://x').pathname); } catch { rel = null; }
+    if (rel === '/') { res.writeHead(302, { location: '/new/' }); return res.end(); }
     if (rel?.endsWith('/')) rel += 'index.html';
     const file = rel && path.join(FRONTEND, path.normalize(rel));
     if (!file || !file.startsWith(FRONTEND + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
@@ -61,7 +62,7 @@ async function startFrontend({ frontendPort }) {
 // The pages, pointed at a backend
 function pageUrls(frontendUrl, apiUrl, token) {
   const q = new URLSearchParams({ api: apiUrl, token });
-  return { new: `${frontendUrl}/new/index.html?${q}`, classic: `${frontendUrl}/index.html?${q}` };
+  return { new: `${frontendUrl}/new/index.html?${q}` };
 }
 
 async function start(mode = 'dev', env = process.env, { extraArgs = [], print = (l) => process.stdout.write(l) } = {}) {
@@ -78,7 +79,7 @@ async function start(mode = 'dev', env = process.env, { extraArgs = [], print = 
       const f = await startFrontend(s);
       stops.push(f.close);
       const pages = pageUrls(f.url, apiUrl, s.token);
-      print(`frontend  ${f.url}\n  new UI      ${pages.new}\n  classic UI  ${pages.classic}\n`);
+      print(`frontend  ${f.url}\n  UI  ${pages.new}\n`);
       if (mode === 'frontend') print(`  (expects the backend at ${apiUrl}: mise run backend)\n`);
     }
   } catch (e) {

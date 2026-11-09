@@ -123,8 +123,9 @@ test('library: add, get, patch, exes, readme, launch, reveal, delete', async (t)
   assert.equal((await call('GET', '/library/nope')).status, 404);
 
   assert.equal((await call('PATCH', '/library/nope', { category: 'x' })).status, 404);
-  const fav = await call('PATCH', '/library/fresh', { favorite: true, notes: 'hi' });
-  assert.deepEqual([fav.body.is_favorite, fav.body.notes], [1, 'hi']);
+  const fav = await call('PATCH', '/library/fresh', { favorite: true });
+  assert.equal(fav.body.is_favorite, 1);
+  assert.equal((await call('PATCH', '/library/fresh', { notes: 'hi' })).body.detail, 'Unknown fields: notes');
   assert.equal((await call('PATCH', '/library/fresh', { category: 'rpg', exePath: '/x.exe' })).body.category, 'rpg');
   assert.equal((await call('PATCH', '/library/fresh', { color: 'x' })).body.detail, 'Unknown fields: color');
 
@@ -202,24 +203,6 @@ test('startup: the first item load adopts installs in the games folder, nested o
   await backend.items.load();
   await new Promise(r => setTimeout(r, 50));
   assert.equal(backend.library.get('rk-e2e-halo-ce')?.install_dir, path.join(backend.dataDir, 'games', 'rohan', '(12)Halo - Combat Evolved'));
-});
-
-test('collections: create, rename, colour, add and remove items, delete', async (t) => {
-  const { call } = await testApi(t);
-  const c = await call('POST', '/collections', { name: 'Faves' });
-  assert.equal(c.status, 201);
-  assert.equal((await call('POST', '/collections', { name: 'Faves' })).status, 409);
-  assert.equal((await call('POST', '/collections', {})).status, 400);
-  const other = (await call('POST', '/collections', { name: 'Other' })).body;
-  assert.equal((await call('PATCH', `/collections/${other.id}`, { name: 'Faves' })).status, 409);
-  const p = await call('PATCH', `/collections/${c.body.id}`, { name: 'Best', color: '#0f0' });
-  assert.deepEqual([p.body.name, p.body.color], ['Best', '#0f0']);
-  assert.equal((await call('PUT', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
-  assert.deepEqual((await call('GET', '/collections')).body.collections.find(x => x.id === c.body.id).games, ['rk-e2e-halo-ce']);
-  assert.equal((await call('DELETE', `/collections/${c.body.id}/items/rk-e2e-halo-ce`)).status, 204);
-  assert.equal((await call('DELETE', `/collections/${c.body.id}`)).status, 204);
-  assert.equal((await call('PATCH', `/collections/${c.body.id}`, {})).status, 404);
-  assert.equal((await call('DELETE', '/collections/abc')).status, 404);
 });
 
 test('installs: start, progress over SSE, get, list, cancel, errors', async (t) => {
@@ -359,7 +342,7 @@ test('library.db unavailable is a 503', async (t) => {
   const { call, backend } = await testApi(t);
   backend.library.close();
   assert.equal((await call('POST', '/library', { id: 'x' })).status, 503);
-  assert.equal((await call('POST', '/collections', { name: 'x' })).status, 503);
+  assert.equal((await call('PATCH', '/library/x', { favorite: true })).status, 503);
 });
 
 test('standalone: prints port and token, serves the API, stops cleanly', async (t) => {
@@ -395,20 +378,6 @@ test('GET /sources: catalog defaults, fetched from main or bundled; a saved list
   const none = createBackend({ dataDir: backend.dataDir + '-3', appDir: backend.dataDir, archiveBase: fake.base, uploadersUrl: `${fake.base}/uploaders.json`, log: () => {} });
   t.after(() => { none.close(); fs.rmSync(backend.dataDir + '-3', { recursive: true, force: true }); });
   assert.deepEqual(await none.getDefaultSources(), [], 'empty fetch and no bundled copy: no defaults');
-});
-
-test('GET /featured: the picks from main, else the bundled copy', async (t) => {
-  const { call, backend, fake } = await testApi(t);
-  const bundled = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'catalog', 'featured.json'), 'utf8')).picks;
-  const { body } = await call('GET', '/featured');
-  assert.equal(body.picks.length, bundled.length);
-  assert.ok(body.picks.every(p => p.identifier || p.repository));
-
-  fake.routes['/featured.json'] = (req, res) => { res.writeHead(200); res.end('{"picks":[{"identifier":"a","blurb":"Hi"},{"repository":"Owner/Repo"},{"nope":1}]}'); };
-  const { createBackend } = require('../../src/backend');
-  const other = createBackend({ dataDir: backend.dataDir + '-f', archiveBase: fake.base, featuredUrl: `${fake.base}/featured.json`, log: () => {} });
-  t.after(() => { other.close(); fs.rmSync(backend.dataDir + '-f', { recursive: true, force: true }); });
-  assert.deepEqual(await other.getFeatured(), [{ identifier: 'a', blurb: 'Hi', banner: null }, { repository: 'owner/repo', blurb: null, banner: null }]);
 });
 
 test('os: window, open-external, add-to-steam, updater go to the host; 501 standalone', async (t) => {

@@ -13,7 +13,6 @@ const path   = require('path');
 const crypto = require('crypto');
 const { installableFiles } = require('./archive');
 const disk = require('./disk');
-const { createManualApp } = require('./manual');
 const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
 const { classifyLink } = require('./links');
@@ -112,13 +111,6 @@ function createApi(backend) {
     return item;
   };
 
-  // The hand-picked games and ports that lead the Home page, in order
-  route('GET', '/announcement', async () => ({ body: { announcement: await backend.getAnnouncement() } }));
-  route('POST', '/announcement/dismiss', ({ body }) => {
-    backend.dismissAnnouncement(requireString(requireObject(body).id, 'id'));
-    return { status: 204 };
-  });
-  route('GET', '/featured', async () => ({ body: { picks: await backend.getFeatured() } }));
   route('GET', '/items/:id', async ({ params }) => ({ body: withNewer(await findItem(params.id)) }));
 
   route('GET', '/items/:id/files', async ({ params }) => {
@@ -206,7 +198,6 @@ function createApi(backend) {
   const PATCHABLE = {
     category: (id, v) => library.setCategory(id, v),
     favorite: (id, v) => library.setFavorite(id, !!v),
-    notes:    (id, v) => library.setNotes(id, v),
     exePath:  (id, v) => library.setExePath(id, v),
     title:    (id, v) => { requireString(v, 'title'); return library.setDetails(id, { title: v.trim() }); },
     // Locate an existing install: point the row at a folder already on disk
@@ -221,8 +212,8 @@ function createApi(backend) {
     const fields = requireObject(body);
     const unknown = Object.keys(fields).filter(k => !PATCHABLE[k]);
     if (unknown.length) throw new HttpError(400, 'bad_request', `Unknown fields: ${unknown.join(', ')}`);
-    // favorite, notes and installDir create the row; category and exePath need one
-    if (!('favorite' in fields || 'notes' in fields || 'installDir' in fields)) libraryRow(params.id);
+    // favorite and installDir create the row; category and exePath need one
+    if (!('favorite' in fields || 'installDir' in fields)) libraryRow(params.id);
     for (const [k, v] of Object.entries(fields)) needDb(PATCHABLE[k](params.id, v));
     return { body: library.get(params.id) };
   });
@@ -266,55 +257,6 @@ function createApi(backend) {
   route('POST', '/library/scan', async ({ body }) => {
     const { dir } = requireObject(body);
     try { return { body: await backend.scanInstalls(dir) }; } catch (e) { throw new HttpError(502, 'sources_failed', e.message); }
-  });
-
-  // A manually managed app: a named folder the user fills; folder is an
-  // existing one to use instead of making one in the install folder
-  route('POST', '/library/manual', ({ body }) => {
-    const { name, folder } = requireObject(body);
-    requireString(name, 'name');
-    if (folder !== undefined && folder !== null) requireString(folder, 'folder');
-    const r = createManualApp({ name, folder, root: backend.installRoot(), library, findExes: disk.findExes });
-    if (!r.ok) {
-      const status = { bad_request: 400, no_folder: 422, exists: 409, library_unavailable: 503 }[r.code];
-      throw new HttpError(status, r.code, r.error);
-    }
-    return { status: 201, body: library.get(r.id) };
-  });
-
-  // ─── Collections ──────────────────────────────────────────────────────────
-
-  const collectionId = (raw) => {
-    const id = Number(raw);
-    if (!Number.isInteger(id) || !library.collections().some(c => c.id === id)) throw new HttpError(404, 'not_found', `No collection ${raw}`);
-    return id;
-  };
-  const conflictOr = (r) => {
-    if (r.ok) return r;
-    if (/UNIQUE/i.test(r.error || '')) throw new HttpError(409, 'name_taken', r.error);
-    return needDb(r);
-  };
-
-  route('GET', '/collections', () => ({ body: { collections: library.collections() } }));
-  route('POST', '/collections', ({ body }) => {
-    const r = conflictOr(library.createCollection(requireString(requireObject(body).name, 'name')));
-    return { status: 201, body: library.collections().find(c => c.id === r.id) };
-  });
-  route('PATCH', '/collections/:id', ({ params, body }) => {
-    const id = collectionId(params.id);
-    const { name, color } = requireObject(body);
-    if (name !== undefined) conflictOr(library.renameCollection(id, requireString(name, 'name')));
-    if (color !== undefined) needDb(library.setCollectionColor(id, color));
-    return { body: library.collections().find(c => c.id === id) };
-  });
-  route('DELETE', '/collections/:id', ({ params }) => { needDb(library.deleteCollection(collectionId(params.id))); return { status: 204 }; });
-  route('PUT', '/collections/:id/items/:itemId', ({ params }) => {
-    needDb(library.addToCollection(collectionId(params.id), params.itemId));
-    return { status: 204 };
-  });
-  route('DELETE', '/collections/:id/items/:itemId', ({ params }) => {
-    needDb(library.removeFromCollection(collectionId(params.id), params.itemId));
-    return { status: 204 };
   });
 
   // ─── Installs ─────────────────────────────────────────────────────────────

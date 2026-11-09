@@ -18,15 +18,15 @@ test('settings default to fixed ports and the dev token', () => {
 test('the frontend server serves src/frontend and nothing outside it', async (t) => {
   const f = await startFrontend({ frontendPort: 0 });
   t.after(f.close);
-  const get = (p) => fetch(f.url + p);
+  const get = (p, o) => fetch(f.url + p, o);
 
   let res = await get('/new/index.html');
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'text/html');
   assert.match(await res.text(), /y4/);
 
-  res = await get('/');
-  assert.equal(res.status, 200);
+  res = await get('/', { redirect: 'manual' });
+  assert.deepEqual([res.status, res.headers.get('location')], [302, '/new/']);
   assert.equal((await get('/api.js')).headers.get('content-type'), 'text/javascript');
 
   assert.equal((await get('/missing.js')).status, 404);
@@ -35,10 +35,9 @@ test('the frontend server serves src/frontend and nothing outside it', async (t)
   assert.equal((await get('/%E0%A4%A')).status, 404);
 });
 
-test('page URLs point both UIs at the backend', () => {
+test('the page URL points the UI at the backend', () => {
   const p = pageUrls('http://127.0.0.1:5173', 'http://127.0.0.1:5170/v1', 'dev');
   assert.equal(p.new, 'http://127.0.0.1:5173/new/index.html?api=http%3A%2F%2F127.0.0.1%3A5170%2Fv1&token=dev');
-  assert.equal(p.classic, 'http://127.0.0.1:5173/index.html?api=http%3A%2F%2F127.0.0.1%3A5170%2Fv1&token=dev');
 });
 
 test('dev starts the backend and the frontend together', async (t) => {
@@ -56,7 +55,7 @@ test('dev starts the backend and the frontend together', async (t) => {
   const res = await fetch(`${api}/health`, { headers: { authorization: 'Bearer tok' } });
   assert.equal(res.status, 200);
   assert.equal((await res.json()).ok, true);
-  const page = /new UI\s+(\S+)/.exec(text)[1];
+  const page = /UI\s+(\S+)/.exec(text)[1];
   assert.equal((await fetch(page)).status, 200);
 });
 

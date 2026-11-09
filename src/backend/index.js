@@ -20,8 +20,6 @@ const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
 const { loadOverrides, OVERRIDES_URL } = require('./overrides');
-const { loadFeatured, FEATURED_URL } = require('./featured');
-const { currentAnnouncement, isDismissed, ANNOUNCEMENT_URL } = require('./announcement');
 const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
@@ -71,9 +69,7 @@ function createBackend({
   uploadersUrl = UPLOADERS_URL,
   githubApi = GITHUB_API,
   gitlabApi = GITLAB_API,
-  featuredUrl = FEATURED_URL,
   curatedPortsUrl = CURATED_PORTS_URL,
-  announcementUrl = ANNOUNCEMENT_URL,
   playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
@@ -108,30 +104,7 @@ function createBackend({
     log,
   }));
 
-  let featuredPromise = null;
-  const getFeatured = () => (featuredPromise ??= loadFeatured({
-    url: featuredUrl,
-    fetchText: (url) => getText(url, { kind: 'featured', timeoutMs: 5000, log: netlog.log })
-      .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
-    readBundled: () => fs.readFileSync(path.join(appDir, 'catalog', 'featured.json'), 'utf8'),
-    readBundledArt: () => fs.readFileSync(path.join(appDir, 'catalog', 'art.json'), 'utf8'),
-    log,
-  }));
-
-  // The message on main's announcement.json, unless dismissed; fetched each
-  // time the window asks, so a new one shows without a restart
-  const getAnnouncement = () => currentAnnouncement({
-    url: announcementUrl,
-    fetchText: (url) => getText(url, { kind: 'announcement', timeoutMs: 5000, log: netlog.log })
-      .then(r => (r.status === 200 ? r.body : Promise.reject(new Error(r.error || `HTTP ${r.status}`)))),
-    dismissed: settings.load().dismissedAnnouncements,
-  });
-  function dismissAnnouncement(id) {
-    const dismissed = Array.isArray(settings.load().dismissedAnnouncements) ? settings.load().dismissedAnnouncements : [];
-    if (!isDismissed(id, dismissed)) settings.save({ dismissedAnnouncements: [...dismissed, id] });
-  }
-
-  // Where new installs and manual apps' folders go
+  // Where new installs go
   const installRoot = () => settings.load().installPath || gamesDir;
 
   // Default sources: catalog/uploaders.json on main at launch, the bundled copy as fallback
@@ -355,8 +328,8 @@ function createBackend({
     dataDir, appDir, appVersion, events, emit, os,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
-    settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources, getFeatured,
-    getAnnouncement, dismissAnnouncement, installRoot, scanInstalls,
+    settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources,
+    installRoot, scanInstalls,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }

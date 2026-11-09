@@ -136,18 +136,12 @@ async function loadSettings() {
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 
-// The new UI is the default; "ui": "legacy" in settings.json (the toggle in
-// either UI's Settings) or RK_UI=legacy opens the classic one
-async function useClassicUi() {
-  return process.env.RK_UI === 'legacy' || (await loadSettings()).ui === 'legacy';
-}
-
 async function createWindow({ url, token }) {
-  const classic = await useClassicUi();
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 800,
     frame:  false,
+    icon:   path.join(__dirname, '../../assets/icons', process.platform === 'win32' ? 'y4bo.ico' : 'y4bo.png'),
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -157,7 +151,7 @@ async function createWindow({ url, token }) {
     },
   });
   mainWindow.once('ready-to-show', () => { windowShown = true; });
-  mainWindow.loadFile(path.join(__dirname, classic ? '../frontend/index.html' : '../frontend/new/index.html'));
+  mainWindow.loadFile(path.join(__dirname, '../frontend/new/index.html'));
 }
 
 // Playnite asking the running launcher to show an item: the argv of the second start

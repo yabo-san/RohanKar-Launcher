@@ -1,6 +1,6 @@
 # Agent brief
 
-This file is the work order. Read it before every PR. It replaces the earlier brief (collisions,
+This file is the brief. Read it before every PR. It replaces the earlier brief (collisions,
 Quiver parity); that plan is retired.
 
 ## The user loop
@@ -34,7 +34,7 @@ list it was once scraped from (URL, document ID or author) anywhere. It vouches 
 built-in sources apart from what users add. The art and title work in `overrides.json` and
 `catalog/art.json` stays, because it makes the starting set look right.
 
-The work order further down is history. Where it disagrees with this loop, the loop wins.
+The finished work orders are in git history. Where anything disagrees with this loop, the loop wins.
 
 ## User data
 
@@ -52,59 +52,12 @@ The work order further down is history. Where it disagrees with this loop, the l
   The Thunderstore mod manager (r2modman) is just another tile in `curated-ports.json`.
 - Search UIs for /idgames, Quaddicted or similar. Doom and Quake are separate tiles.
 - Announcements, manual apps, Android.
+- A second interface. The classic UI is gone; there is one UI, `src/frontend/new/`. Gamepad
+  navigation, collections editing and notes went with it (collections still export as Playnite
+  tags, from what library.db holds).
 - Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import. Remove both,
   including `src/backend/quiver-import.js` and the four Quiver catalog URLs in the frontend.
   The shelf file keeps Quiver's catalog shape only because installed copies of the app read it.
-
-## Work order, one PR each
-
-`git fetch` and `gh pr list` before each; do not duplicate open work.
-
-1. **Park collisions.** Branch `parked/collisions` from main (merge #99, #100, #101 into it), push.
-   Then remove from main: `catalog/collisions.json`, `catalog/ia-matches.json`, the collisions
-   fetch, data-file staging, sha1-of-staged-data verification, `.bps` handling, collision card
-   text, and `user.json` collisions, with their tests. Report net lines removed.
-2. **Lock down** as above, and write `docs/BUILD-YOUR-OWN.md`: fork the repo, edit
-   `catalog/uploaders.json` and `catalog/curated-ports.json`, then build: push to your fork and let `release.yml` build the installer, or run
-   `npm run build` on Windows.
-3. **The port shelf = curated only.** Load `catalog/curated-ports.json` (raw URL from main,
-   cached, bundled copy as fallback) plus the user's `user.json` repos. Remove the Quiver catalog
-   URLs, the full-Quiver option and Quiver library import, with their tests.
-4. **Card states from tags:** "source only" shows "Source only, no download" plus a repository
-   link instead of Install; "work in progress" gets a badge; "engine"/"launcher" tiles show their
-   description (what the user brings).
-5. **GitLab releases:** `repositorySource: "gitlab"` installs from
-   `https://gitlab.com/api/v4/projects/<url-encoded owner/repo>/releases` with
-   `releaseAssetFilter`. Fixture of GitLab's response; no network in tests.
-6. **Art:** drop the `hero.png` special case. Cover and banner order: `overrides.json` artUrl,
-   else the archive.org item's own image, else `catalog/art.json`.
-7. **Optional API tokens.** Settings fields "GitHub token" and "GitLab token" (optional, empty by
-   default), stored in the user's settings, never logged. When set, send them on GitHub/GitLab API
-   requests; when empty, keep working unauthenticated. Explain in Settings why: GitHub allows 60
-   API requests an hour without one, and a big shelf or an update check can hit that. Show a clear
-   message when the limit is hit, suggesting the token.
-8. **"Newer release" badge in the launcher.** The logic exists (`src/backend/playnite.js`
-   `updateAvailable`, `installs.js`); move it into core and show a badge on installed cards whose
-   source has a newer release, with an Update button that reinstalls into the same folder. No
-   automatic updates.
-9. **Live ports job, binaries only.** A non-blocking workflow (`.github/workflows/live-ports.yml`,
-   `scripts/live-port.js`) against the real GitHub, GitLab and archive.org; failures never block PRs.
-   - **Nightly check** (also on PRs that touch the catalogs or download code, and by hand): for
-     every entry in `catalog/curated-ports.json` except "source only", resolve the release asset
-     the app would pick and download only its first 4 KB; do the same for one item per curated
-     archive.org uploader (the ones the app turns on). Report a table in the job summary: entry,
-     asset picked, and OK / renamed / no match / HTTP error. It catches a port renaming its
-     repository or release files, or breaking its filter, without downloading a game.
-   - **Full installs** (workflow_dispatch only, run by hand before a release, not nightly):
-     install the three Acceptance ports below (GoldenEye 007 via Project Midas, Perfect Dark, Star Fox 64) into a
-     temp folder with the app's own install engine: pick the
-     asset, download, extract, list what landed. No game data. Results in the job summary.
-10. **README**: replace it with exactly the text in "README" below; move Development and Releases
-   into `docs/DEVELOPMENT.md`; remove the upstream screenshot.
-11. **Builds:** add macOS (`.dmg`) and Linux (`.AppImage`) jobs to `release.yml`, labelled
-   community-supported; add `CONTRIBUTING.md`: "I only test Windows. Mac and Linux builds are
-   community-supported. PRs that add sources, catalog entries or asset filters for other
-   platforms are welcome."
 
 ## Acceptance: installs must work
 
@@ -115,54 +68,7 @@ the log lines to the PR:
 |---|---|---|
 | GoldenEye 007 (Project Midas) | GitHub | a `.7z` release (needs 7-Zip); releaseAssetFilter `windows` skips the Linux and Steam Deck builds |
 | Perfect Dark | GitHub | the common case; the release zip holds one folder |
-| Star Fox 64: Recompiled | GitLab | item 5 |
-
-## README
-
-Use this text exactly:
-
-```markdown
-# y4bo
-
-An easy way to download games from the Internet Archive. It also downloads and installs
-release builds from GitHub and GitLab.
-
-It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
-ports are good or bad. The shelf has a few personal picks (GoldenEye 007 via Project Midas, Perfect Dark,
-Star Fox 64: Recompiled), and everything else is yours to add: any archive.org uploader
-or upload, any GitHub or GitLab repo.
-
-I made this to test a CI/CD pipeline (see the commit history), not to show what a
-proper frontend looks like. **The frontend is vibecoded.**
-
-## What it does
-
-- **archive.org:** a few uploaders are built in (Rohan's uploads, pstriple, r4ze, with box art
-  and titles cleaned up by hand); add any other uploader or single upload. One-click download
-  and extract (zip, 7z, rar).
-- **GitHub and GitLab:** install a repo's latest release build. A few personal picks are built in;
-  add any other repo yourself.
-- **Add your own:** archive.org uploaders in Settings, single archive.org items or repos in a `user.json`.
-  Want your own built-in list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
-- **Launch:** picks the right exe, or lets you choose when there are several.
-- **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).
-- **Playtime:** tracks how long you've played each game.
-- **Uninstall:** moves the game's folder to the Recycle Bin, so it can be undone.
-- **Open folder:** opens the install folder, for adding data files, mods or saves by hand.
-- **Updates:** the launcher updates itself; installed ports show when a newer release is out.
-- **Playnite:** the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library in Playnite.
-
-## Install
-
-Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest).
-SmartScreen will warn (unsigned): **More info, then Run anyway**.
-Verify a download: `gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher`
-
-## Credits
-
-Fork of the RohanKar Launcher by Kilted-Kraken. Not affiliated with the Internet Archive.
-Games belong to their owners and are hosted publicly on archive.org.
-```
+| Star Fox 64: Recompiled | GitLab | installs from GitLab's releases API |
 
 ## Rules
 

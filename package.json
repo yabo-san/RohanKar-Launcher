@@ -35,23 +35,22 @@
       "assets/**/*",
       "overrides.json",
       "catalog/uploaders.json",
-      "catalog/featured.json",
       "catalog/art.json",
       "catalog/curated-ports.json"
     ],
     "win": {
       "target": "nsis",
-      "icon": "assets/icons/rk-logo.ico"
+      "icon": "assets/icons/y4bo.ico"
     },
     "nsis": {
       "guid": "2bb8c09d-2711-598b-90f1-e9685ecdb3dc",
       "artifactName": "y4bo-Setup-${version}.${ext}"
     },
     "mac": {
-      "icon": "assets/icons/rk-logo.icns"
+      "icon": "assets/icons/y4bo.png"
     },
     "linux": {
-      "icon": "assets/icons/rk-logo.png"
+      "icon": "assets/icons/y4bo.png"
     },
     "detectUpdateChannel": false,
     "publish": {

@@ -108,7 +108,7 @@ jobs:
           message: |
             **UI preview** for ${{ github.event.pull_request.head.sha }}: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.DEST }}/new/
 
-            The new UI on live data saved at build time (classic UI: [`${{ env.DEST }}/`](https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/${{ env.DEST }}/)). Browsing, favorites and Add/Remove work; installs and launching need the desktop app. Pages can take a minute to update after this comment.
+            The UI on live data saved at build time. Browsing, favorites and Add/Remove work; installs and launching need the desktop app. Pages can take a minute to update after this comment.
 
   remove:
     if: >-
