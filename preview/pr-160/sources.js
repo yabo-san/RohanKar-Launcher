@@ -3,7 +3,7 @@
  * y4bo — sources.js
  * Pure display helpers for titles, versions and the Settings sources text.
  * Default sources and grouping by title come from the backend (/v1/sources,
- * /v1/items). Loaded as a plain <script> before renderer.js, and required as
+ * /v1/items). Loaded as a plain <script> before new/app.js, and required as
  * CommonJS by the node:test suite.
  */
 
@@ -71,6 +71,28 @@ function versionLabel(v) {
   return [v._sourceLabel, date].filter(Boolean).join(' — ');
 }
 
+// Badges Rohan writes into his archive.org descriptions ("Controller Support:
+// Yes", "Deck Compatibility: Verified", "Widescreen Fix", "FOV"). Only uploads
+// that spell them that way get any.
+const FEATURE_BADGES = [
+  { id: 'controller', label: 'Controller', re: /controller\s+support\s*[:-]\s*yes/i },
+  { id: 'deck', label: 'Steam Deck verified', re: /deck\s+compatibility\s*[:-]\s*verified/i },
+  { id: 'widescreen', label: 'Widescreen fix', re: /widescreen\s*fix/i },
+  { id: 'fov', label: 'FOV fix', re: /\bfov\b/i },
+];
+function featureBadges(item) {
+  const text = ['description', 'subject']
+    .map(k => (Array.isArray(item?.[k]) ? item[k].join(' ') : item?.[k] || '')).join(' ');
+  return FEATURE_BADGES.filter(b => b.re.test(text)).map(({ id, label }) => ({ id, label }));
+}
+
+// 5400 -> "1h 30m", 120 -> "2m", 0 -> ""
+function formatPlaytime(secs) {
+  if (!secs) return '';
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+
 if (typeof module !== 'undefined') {
-  module.exports = { getTitle, parseSources, parseExcludes, formatSources, preferredVersion, versionLabel };
+  module.exports = { getTitle, parseSources, parseExcludes, formatSources, preferredVersion, versionLabel, featureBadges, formatPlaytime };
 }

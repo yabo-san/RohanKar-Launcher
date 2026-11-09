@@ -4,14 +4,14 @@
  * api.js: it points api.js at a made-up base and answers its fetches from
  * preview-data/, saved from a real backend at build time.
  *   - GETs come from preview-data/manifest.json; anything not saved is a 404
- *   - favorites, notes, Add/Remove and settings change in memory, kept for the
- *     tab (sessionStorage) so switching UIs keeps them
+ *   - favorites, Add/Remove and settings change in memory, kept for the
+ *     tab (sessionStorage)
  *   - installs, launching and OS actions answer 501, as a browser tab does
  *     against a real backend
  *   - while Allow additional sources is on, a response saved with it on
  *     ("ON " keys, fixtures builds) answers instead of the default one
- *   - the JSON feeds the app fetches from main at launch (featured.json with
- *     art.json, overrides.json, announcement.json) are fetched live from manifest
+ *   - the JSON feed the app fetches from main at launch (overrides.json)
+ *     is fetched live from manifest
  *     info.feed when the page is viewed; the saved copy answers if that fails
  * A pill in the corner says it's a preview and what data it shows.
  */
@@ -33,7 +33,6 @@
   try { state = JSON.parse(sessionStorage.getItem(STORE)) || {}; } catch { state = {}; }
   state.settings ??= {};
   state.library ??= {};         // identifier → row, or null when removed
-  state.dismissed ??= [];       // announcement ids
   const persist = () => { try { sessionStorage.setItem(STORE, JSON.stringify(state)); } catch { /* private window */ } };
 
   function keyOf(u) {
@@ -58,33 +57,6 @@
     return realFetch(info.feed + file, { cache: 'no-cache' }).then(r => (r.ok ? r.json() : null));
   }).catch(() => null));
 
-  const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : null);
-  // As src/backend/featured.js parses it: a banner is a SteamGridDB CDN image,
-  // pinned on the pick or else the banner on its catalog/art.json entry
-  function heroUrl(v) {
-    try { const u = new URL(str(v)); return u.protocol === 'https:' && /^cdn\d*\.steamgriddb\.com$/.test(u.hostname) ? u.href : null; } catch { return null; }
-  }
-  function featuredPicks(data, art) {
-    if (!Array.isArray(data?.picks)) return null;
-    const bannerFor = (key) => {
-      const e = art && typeof art === 'object' && !Array.isArray(art) && art[Object.keys(art).find(k => !k.startsWith('_') && k.toLowerCase() === key.toLowerCase())];
-      return heroUrl(e?.banner?.url);
-    };
-    return data.picks.flatMap((p) => {
-      const identifier = str(p?.identifier);
-      const repository = str(p?.repository)?.toLowerCase() || null;
-      if (!identifier && !repository) return [];
-      return [{ ...(identifier ? { identifier } : { repository }), blurb: str(p.blurb), banner: heroUrl(p.banner) || bannerFor(identifier || repository) || null }];
-    });
-  }
-  // As src/backend/announcement.js parses it
-  function announcement(data) {
-    if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
-    const get = (key) => data[Object.keys(data).find(k => k.toLowerCase() === key)];
-    const id = str(get('id')), message = str(get('message')), link = str(get('link'));
-    if (get('enabled') === false || !id || !message) return null;
-    return { id, message, ...(link && /^https:\/\//.test(link) ? { link } : {}) };
-  }
   const overridesFeed = () => feed('overrides.json').then(o => (o && typeof o === 'object' && !Array.isArray(o) ? o : null));
 
   // A wall list with today's overrides in place of the ones saved at build.
@@ -138,18 +110,6 @@
       if (p === '/library') return json(200, { library: await library() });
       if (/^\/library\/[^/]+\/exes$/.test(p)) return json(200, { exes: [] });
       if (/^\/installs\//.test(p)) return json(404, { error: 'not_found' });
-      if (p === '/featured') {
-        const [data, art] = await Promise.all([feed('catalog/featured.json'), feed('catalog/art.json')]);
-        const picks = featuredPicks(data, art);
-        if (picks) return json(200, { picks });
-      }
-      if (p === '/announcement') {
-        const data = await feed('announcement.json');
-        if (data) {
-          const a = announcement(data);
-          return json(200, { announcement: a && !state.dismissed.includes(a.id.toLowerCase()) ? a : null });
-        }
-      }
       if (p === '/items') {
         const [res, ov, lib] = await Promise.all([saved(keyOf(u)), overridesFeed(), library()]);
         if (res?.ok && ov) return json(200, withOverrides(await res.json(), ov, lib));
@@ -176,7 +136,6 @@
       const id = decodeURIComponent(lib[1]);
       const row = { ...((await library())[id] || { identifier: id }) };
       if ('favorite' in body) row.is_favorite = body.favorite ? 1 : 0;
-      if ('notes' in body) row.notes = body.notes;
       if ('exePath' in body || 'installDir' in body) return notHere();
       state.library[id] = row;
       persist();
@@ -193,11 +152,6 @@
       const id = decodeURIComponent(p.split('/')[2]);
       const { catalogs = [] } = await savedJson('GET /catalogs', {});
       return json(200, catalogs.find(c => c.id === id) || null);
-    }
-    if (p === '/announcement/dismiss' && body?.id) {
-      state.dismissed.push(String(body.id).toLowerCase());
-      persist();
-      return json(200, { ok: true });
     }
     if (/^\/catalogs\/[^/]+\/seen$/.test(p) || p === '/os/open-item') return json(200, { ok: true });
     if (p === '/os/open-external' && body?.url) { window.open(body.url, '_blank', 'noopener'); return json(200, { ok: true }); }
