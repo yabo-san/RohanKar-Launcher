@@ -85,8 +85,6 @@ function seedLibrary(backend, wallItems) {
     seen.add(it.source.catalog);
     library.add(it.id, it.source.url);
   }
-  const c = library.createCollection('Weekend');
-  if (c.ok && wallItems[0]) library.addToCollection(c.id, wallItems[0].versions?.[0]?.id || wallItems[0].id);
 }
 
 async function build(opts) {
@@ -129,7 +127,6 @@ async function build(opts) {
     const health = await save('/health');
     await save('/settings');
     await save('/sources');
-    await save('/announcement');
     await save('/os/updater');
     await save('/os/open-item');
     const wall = await save('/items', { shelf: 'wall' });
@@ -139,7 +136,6 @@ async function build(opts) {
     step(`${wall.items.length} wall items`);
     if (opts.fixtures) seedLibrary(backend.backend, wall.items);
     await save('/library');
-    await save('/collections');
     await save('/user-sources');
     const shelves = async (prefix) => {
       const list = (await save('/catalogs', {}, { prefix }))?.catalogs || [];
@@ -175,15 +171,16 @@ async function build(opts) {
       ports: catalogs.reduce((s, c) => s + (c.entries || 0), 0),
       sourceErrors: wall?.errors?.length || 0,
       // preview.js reads the JSON feeds the app fetches at launch
-      // (overrides, announcement) from here when the page is viewed, so edits on
+      // (overrides) from here when the page is viewed, so edits on
       // main show without a rebuild. Fixtures builds stay offline.
       feed: process.env.PREVIEW_FEED || (opts.fixtures ? null : FEED),
     };
     fs.writeFileSync(path.join(dataOut, 'manifest.json'), JSON.stringify({ info, responses: manifest }));
 
-    // preview.js before api.js in both pages
+    // preview.js before api.js in the page; the site root sends people to it
     fs.copyFileSync(path.join(__dirname, 'preview.js'), path.join(opts.out, 'preview.js'));
-    for (const [page, src] of [['index.html', 'preview.js'], ['new/index.html', '../preview.js']]) {
+    fs.writeFileSync(path.join(opts.out, 'index.html'), '<!DOCTYPE html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=new/"><a href="new/">y4bo</a>\n');
+    for (const [page, src] of [['new/index.html', '../preview.js']]) {
       const file = path.join(opts.out, page);
       const html = fs.readFileSync(file, 'utf8');
       const tag = /^(\s*)<script src="(\.\.\/)?api\.js"><\/script>/m;

@@ -1,7 +1,7 @@
 {
   "rohanjackson071@gmail.com": [
     { "identifier": "rk-e2e-zoo-tycoon", "title": "Zoo Tycoon (Complete Collection)", "addeddate": "2024-03-01T10:00:00Z", "downloads": 1200, "subject": ["pc", "tycoon"] },
-    { "identifier": "rk-e2e-halo-ce", "title": "Halo: Combat Evolved", "addeddate": "2024-04-12T10:00:00Z", "downloads": 3400, "subject": ["pc", "shooter"] },
+    { "identifier": "rk-e2e-halo-ce", "title": "Halo: Combat Evolved", "addeddate": "2024-04-12T10:00:00Z", "downloads": 3400, "subject": ["pc", "shooter"], "description": "Controller Support: Yes" },
     { "identifier": "rk-e2e-age-of-empires-2", "title": "Age of Empires II", "addeddate": "2024-05-20T10:00:00Z", "downloads": 2100, "subject": ["pc", "strategy"] }
   ],
   "frankiemiqueli1@gmail.com": [

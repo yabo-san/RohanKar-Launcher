@@ -32,6 +32,14 @@ const quiverExportId = (identifier) => `quiver:${identifier.split(':').slice(2).
 
 const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
 
+// Several library rows can share one export id: the same port held from two
+// catalogs (an old local catalog and the built-in shelf). The one to keep is
+// the installed row, then the most recently played; on a tie, the first.
+const outranks = (a, b) => {
+  if (!!a.install_dir !== !!b.install_dir) return !!a.install_dir;
+  return (a.last_played_at || 0) > (b.last_played_at || 0);
+};
+
 // rows: library.all(); items: loaded items keyed by any version id or catalog id;
 // tagsFor(identifier): collection names; art(identifier, row): { cover, hero } paths on disk;
 // exportIdFor(identifier): the stored UUID of a manual entry; previous: the last export,
@@ -41,7 +49,7 @@ function buildExport({
   previous = null, launcherVersion = null, now = Date.now(),
 }) {
   const before = new Map((previous?.games || []).map(g => [g.id, g]));
-  const games = [];
+  const byId = new Map(); // export id -> { row, game }
   for (const r of Object.values(rows)) {
     const item = items[r.identifier] || null;
     const src = item?.source;
@@ -61,8 +69,11 @@ function buildExport({
       source = src?.uploader ? `archive.org:${src.uploader}` : before.get(id)?.source || 'archive.org:';
       platform = 'PC';
     }
+    const kept = byId.get(id);
+    if (kept && !outranks(r, kept.row)) continue;
     const { cover = null, hero = null } = art(r.identifier, r) || {};
-    games.push({
+    // Map.set on an existing key keeps its place, so the export order stays the library's
+    byId.set(id, { row: r, game: {
       id,
       name:            item?.title || before.get(id)?.name || r.identifier,
       source,
@@ -80,8 +91,9 @@ function buildExport({
       lastPlayed:      iso(r.last_played_at),
       playtimeSeconds: r.playtime_secs || 0,
       favorite:        !!r.is_favorite,
-    });
+    } });
   }
+  const games = [...byId.values()].map(e => e.game);
   return { schemaVersion: SCHEMA_VERSION, generatedAt: new Date(now).toISOString(), launcherVersion, games };
 }
 
@@ -90,7 +102,10 @@ function findRow(rows, exportId) {
   if (typeof exportId !== 'string' || !exportId) return null;
   const all = Object.values(rows);
   if (rows[exportId] && !isQuiverId(exportId)) return rows[exportId];
-  if (isQuiverId(exportId)) return all.find(r => isQuiverId(r.identifier) && quiverExportId(r.identifier) === exportId) || null;
+  if (isQuiverId(exportId)) {
+    return all.filter(r => isQuiverId(r.identifier) && quiverExportId(r.identifier) === exportId)
+      .reduce((best, r) => (!best || outranks(r, best) ? r : best), null);
+  }
   return all.find(r => r.source === 'manual' && r.export_id === exportId) || null;
 }
 

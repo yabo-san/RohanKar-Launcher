@@ -26,11 +26,9 @@ How the frontend finds it:
   `window.launcher = { apiBase, token }`. The backend asks the app for OS actions (dialogs,
   the Recycle Bin, the window, the browser, Steam, the updater) over that process's message
   port; see `src/backend/parent.js`. Quitting the app stops the backend.
-- The desktop app opens `src/frontend/new/index.html` (the new UI) unless settings say
-  `"ui": "legacy"`, then `src/frontend/index.html` (the classic one). Both take the same
-  connection details.
+- The desktop app opens `src/frontend/new/index.html`.
 - In a plain browser, pass both in the page URL:
-  `src/frontend/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
+  `src/frontend/new/index.html?api=http://127.0.0.1:7777/v1&token=<token>`, served by any static
   server (the e2e tests use `e2e/fixture-server.js`).
 
 Standalone:
@@ -92,18 +90,6 @@ A **library row** is what `library.db` holds: `identifier`, `install_dir`, `exe_
 ```sh
 curl http://127.0.0.1:7777/v1/health
 # {"ok":true,"api":"v1","version":"1.6.0"}
-```
-
-### `GET /announcement`, `POST /announcement/dismiss`
-
-The message in `announcement.json` on main (`{ id, enabled, message, link? }`, Quiver's shape),
-or `null` when it is disabled, can't be fetched, or its `id` was dismissed. Publish one by editing
-that file and pushing; change `id` to show it again. `POST /announcement/dismiss` with `{ "id" }`
-remembers the id in settings (`dismissedAnnouncements`) and answers `204`.
-
-```sh
-curl http://127.0.0.1:7777/v1/announcement
-# {"announcement":{"id":"2026-09-30-quiver","message":"Coming from Quiver? …","link":"https://…"}}
 ```
 
 ### `GET /items`
@@ -259,15 +245,15 @@ curl -X POST -d '{"id":"quiver:curated:harbourmasters/shipwright","source":"http
 
 ### `GET /library/:id`, `PATCH /library/:id`
 
-Read or change a row. Patchable: `category`, `favorite` (bool), `notes`, `exePath`, `installDir`,
-`title` (the name of an entry no item describes, such as a manual app).
+Read or change a row. Patchable: `category`, `favorite` (bool), `exePath`, `installDir`,
+`title` (the name of an entry no item describes).
 `installDir` adopts a folder already on disk (Locate Existing Install) and picks its executable when
-there's only one. `favorite`, `notes` and `installDir` create the row if needed; the others need it
+there's only one. `favorite` and `installDir` create the row if needed; the others need it
 to exist.
 
 ```sh
-curl -X PATCH -d '{"favorite":true,"notes":"needs dgVoodoo"}' http://127.0.0.1:7777/v1/library/rk-e2e-halo-ce
-# {"identifier":"rk-e2e-halo-ce","is_favorite":1,"notes":"needs dgVoodoo",…}
+curl -X PATCH -d '{"favorite":true}' http://127.0.0.1:7777/v1/library/rk-e2e-halo-ce
+# {"identifier":"rk-e2e-halo-ce","is_favorite":1,…}
 ```
 
 ### `DELETE /library/:id`
@@ -324,37 +310,11 @@ curl -X POST -d '{"dir":"D:\\Games"}' http://127.0.0.1:7777/v1/library/scan
 # {"found":[{"identifier":"rk-e2e-halo-ce","installDir":"D:\\Games\\Halo_ Combat Evolved","exePath":null,"matchedBy":"title"}]}
 ```
 
-### `POST /library/manual`
-
-Adds a manually managed app: one with no GitHub release and no archive.org item, that the user
-fills and keeps up to date. `{ "name", "folder"? }`: without `folder`, a folder named after the app
-is made in the install folder with a "Place app files here.txt" note; with one, that existing
-folder is used as is. The row is `manual:<folder name>`, source `manual`, `title` the name, and
-its executable is picked when the folder holds exactly one. `201` with the row; `409 exists`,
-`422 no_folder`.
-
-```sh
-curl -X POST -d '{"name":"My Homebrew"}' http://127.0.0.1:7777/v1/library/manual
-# {"identifier":"manual:My Homebrew","install_dir":"C:\\Games\\My Homebrew","source":"manual","title":"My Homebrew",…}
-```
-
-### Collections
-
-`GET /collections`, `POST /collections` (`{ name }`, `409 name_taken` on a duplicate),
-`PATCH /collections/:id` (`{ name?, color? }`), `DELETE /collections/:id`,
-`PUT /collections/:id/items/:itemId`, `DELETE /collections/:id/items/:itemId`.
-
-```sh
-curl -X POST -d '{"name":"Shooters"}' http://127.0.0.1:7777/v1/collections
-# {"id":1,"name":"Shooters","created_at":1790000000000,"color":null,"games":[]}
-curl -X PUT http://127.0.0.1:7777/v1/collections/1/items/rk-e2e-halo-ce
-```
-
 ### `POST /installs`
 
 Start installing an archive.org item: `{ id, files? }`. One job per file. An item with several
 archives needs `files` (`409 choose_files` lists `choices`); each then extracts into its own
-`_GAME_<name>` folder, as the desktop app's collection picker does. Files that aren't archives are
+`_GAME_<name>` folder. Files that aren't archives are
 copied into the item's folder as they are, so any upload can be downloaded. Returns `202` at once; follow
 progress on `/events` or poll `/installs/:id`.
 

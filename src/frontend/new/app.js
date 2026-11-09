@@ -1,11 +1,10 @@
 'use strict';
 /**
- * y4bo launcher, new UI (docs/PRODUCT.md, docs/USER-LOOP.md).
+ * y4bo launcher UI (docs/AGENT-BRIEF.md has the user loop it serves).
  * Draws what the backend's /v1 API serves (through ../api.js): the
  * archive.org game wall from the curated uploaders, the curated port shelf,
  * the library, and the review of what
  * changed. ../sources.js supplies getTitle and the Settings text helpers.
- * The classic UI (../index.html) is one click away in Settings.
  */
 const $ = (sel, root = document) => root.querySelector(sel);
 
@@ -21,7 +20,6 @@ const state = {
   ports: null,          // { shelves, items } built from the subscribed catalogs
   portsError: null,
   portLibrary: [],
-  manualForm: null,     // { name, folder } while adding a manual app from the Library
   appVersion: '',       // GET /health version, for the Report an issue links
   libSearch: '',        // the search box in a library header (Cider's library pages)
   libPage: 1,           // the page, when a library header is set to paged
@@ -35,7 +33,6 @@ const state = {
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fmtNum = (n) => Number(n || 0).toLocaleString();
-const fmtBytes = (n) => { n = Number(n) || 0; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0; while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; } return `${n.toFixed(i && n < 10 ? 1 : 0)} ${u[i]}`; };
 const fmtDate = (d) => d ? new Date(d).toISOString().slice(0, 10) : '';
 const sourceName = (s) => s.label || s.uploader.split('@')[0];
 
@@ -58,20 +55,20 @@ function toast(msg, ms = 4000) {
 // A Cider-style modal: centered window over a dimmed backdrop, a clear title,
 // one primary and one secondary button. Resolves true for the primary button;
 // Escape, the backdrop and the secondary button resolve false.
-function modal({ title, body, primary, secondary = 'Cancel' }) {
+function modal({ title, body, html = false, primary, secondary = 'Cancel' }) {
   document.getElementById('modal')?.remove();
   const el = document.createElement('div');
   el.id = 'modal';
   el.className = 'modal-fullscreen';
   el.innerHTML = `<div class="modal-window" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-body">
     <div class="modal-header"><div class="modal-title" id="modal-title">${esc(title)}</div></div>
-    <div class="modal-content" id="modal-body">${esc(body)}</div>
-    <div class="modal-footer"><button class="md-btn" data-modal="0">${esc(secondary)}</button><button class="md-btn md-btn-primary" data-modal="1">${esc(primary)}</button></div>
+    <div class="modal-content" id="modal-body">${html ? body : esc(body)}</div>
+    <div class="modal-footer">${secondary ? `<button class="md-btn" data-modal="0">${esc(secondary)}</button>` : ''}<button class="md-btn md-btn-primary" data-modal="1">${esc(primary)}</button></div>
   </div>`;
   const back = document.activeElement;
   document.body.appendChild(el);
   // The safe answer has focus, so Enter never accepts a warning by accident
-  el.querySelector('[data-modal="0"]').focus();
+  (el.querySelector('[data-modal="0"]') || el.querySelector('[data-modal="1"]')).focus();
   return new Promise(resolve => {
     const done = (ok) => { el.remove(); document.removeEventListener('keydown', key, true); back?.focus?.(); resolve(ok); };
     const key = (e) => {
@@ -558,8 +555,6 @@ const pageObserver = new IntersectionObserver((entries) => {
 
 // ─── views ───────────────────────────────────────────────────────────────────
 
-const byNewest = (a, b) => String(b.addeddate || '').localeCompare(String(a.addeddate || ''));
-const byTitle = (a, b) => getTitle(a).localeCompare(getTitle(b));
 
 function wallNotice(uploader = null) {
   const f = state.wall.failed.filter(x => !uploader || x.src.uploader === uploader);
@@ -835,59 +830,29 @@ function viewShelf(id) {
   return html + (list.length ? libraryBody('shelf', list, { card: portCard, kind: 'port', cls: 'grid ports' }) : '<p class="empty">No ports match.</p>');
 }
 
-// A library row no loaded item describes (a manual app, an upload no longer
+// A library row no loaded item describes (an upload no longer
 // on the wall), as a game the cards and detail can show
 const rowGame = (l) => ({
   identifier: l.identifier, title: l.title || l.identifier,
-  _sourceLabel: l.source === 'manual' ? 'Your folder' : 'archive.org', _manual: l.source === 'manual',
+  _sourceLabel: 'archive.org',
 });
 
-// Add your own app: a name, then a new folder in the install folder or one
-// that already holds it. Quiver's "manually managed" apps.
-function manualFormHtml() {
-  const f = state.manualForm;
-  if (!f) return `<div class="lib-tools"><button class="btn" data-action="manual-open">Add your own app…</button></div>`;
-  return `<div class="manual-form" id="manual-form">
-    <div class="field"><label for="manual-name">Name</label>
-      <input type="text" id="manual-name" value="${esc(f.name)}" placeholder="What it's called in your library"></div>
-    <div class="field"><label>Folder</label>
-      <div class="hint">${f.folder ? esc(f.folder) : "A new folder in your install folder. Put the app's files in it and the library launches it."}</div>
-      <div class="inline"><button class="btn" data-action="manual-folder">Use a folder I already have…</button>
-      ${f.folder ? '<button class="btn" data-action="manual-folder-clear">Make a new one instead</button>' : ''}</div></div>
-    <div class="field inline"><button class="btn primary" id="btn-manual-create" data-action="manual-create">Add to library</button>
-      <button class="btn" data-action="manual-cancel">Cancel</button></div>
-  </div>`;
-}
-
-async function createManual() {
-  const name = $('#manual-name')?.value.trim();
-  if (!name) return toast('Give it a name first.');
-  const r = await api.createManualApp({ name, folder: state.manualForm.folder });
-  if (!r.ok) return toast(`Couldn't add it: ${r.error}`);
-  state.manualForm = null;
-  await reloadLibrary();
-  render();
-  openDetail('game', r.row.identifier);
-  if (!r.row.exe_path) api.openGameLocation({ identifier: r.row.identifier });
-}
-
 function viewLibrary() {
-  // Installed ports are on the Ports shelf below
-  const installed = Object.values(state.library).filter(l => (l.install_dir || l.source === 'manual') && !l.identifier.startsWith('quiver:'));
+  // Installed ports are on the Ports shelf below. Manual apps (a removed
+  // feature) stay in library.db for the Playnite export but aren't shown.
+  const installed = Object.values(state.library).filter(l => l.install_dir && l.source !== 'manual' && !l.identifier.startsWith('quiver:'));
   const games = installed.map(l => state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || rowGame(l));
   let uniq = [...new Map(games.map(g => [g.identifier, g])).values()];
   let ports = state.portLibrary.map(r => state.ports?.items.find(i => i.id === r.id)).filter(Boolean);
-  const manual = manualFormHtml();
   if (!uniq.length && !ports.length) {
-    return manual + `<p class="empty"><b>Nothing installed yet.</b><br>Open an uploader or a port below and install something,
-      or add an app of your own.</p>` + browseSections();
+    return `<p class="empty"><b>Nothing installed yet.</b><br>Open an uploader or a port below and install something.</p>` + browseSections();
   }
   const p = libPrefs.library;
   const sorts = { name: ['Title', x => x.name || getTitle(x)], dateAdded: ['Date added', x => state.library[x.identifier || x.id]?.added_at] };
   const nameOf = sorts.name[1];
   uniq = ListView.sortRows(ciderSearch(uniq, state.libSearch, g => [getTitle(g), g._sourceLabel]), p, [sorts, GAME_SORTS], 'name', listCtx('game'), nameOf);
   ports = ListView.sortRows(ciderSearch(ports, state.libSearch, i => [i.name, i.repository]), p, [sorts, PORT_SORTS], 'name', listCtx('port'), nameOf);
-  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length }) + manual;
+  let html = libraryHeader('library', sorts, { total: uniq.length + ports.length });
   if (uniq.length) html += section('Installed games', libraryBody('library', uniq, { card: gameCard, kind: 'game' }), { count: uniq.length, cls: 'plain' });
   if (ports.length) html += section('Installed ports', libraryBody('library', ports, { card: portCard, kind: 'port', cls: 'grid ports' }), { count: ports.length, cls: 'plain' });
   return html + browseSections();
@@ -918,6 +883,13 @@ function browseSections() {
   return html;
 }
 
+const ABOUT_LINKS = [
+  ['GitHub', 'https://github.com/yabo-san/RohanKar-Launcher'],
+  ['Rohan Kar on X', 'https://x.com/RohanKarMooN'],
+  ['Support Rohan Kar on Ko-fi', 'https://ko-fi.com/rohankarmoon'],
+  ['Donate to the Internet Archive', 'https://archive.org/donate'],
+];
+
 function viewSettings() {
   const s = state.settings;
   return `<div class="form">
@@ -940,13 +912,13 @@ function viewSettings() {
     <div class="field" id="additional"><label>user.json</label>
       <div class="hint">For power users: a file listing uploads and repos, read at every start.</div>
       <div id="additional-body">${additionalHtml()}</div></div>
-    <div class="field"><label>Interface</label>
-      <div class="hint">The classic interface is still there while this one catches up on installs for ports.</div>
-      <button class="btn" id="btn-classic-ui" data-action="legacy-ui">Switch to the classic interface</button></div>
     <div class="field"><label>Something wrong?</label>
       <div class="hint">Tell us on GitHub. The report opens with your app version filled in; a game's or port's page has the same link for that one.</div>
       <button class="btn" id="btn-report-issue" data-href="${esc(issueUrl({ version: state.appVersion }))}">Report an issue</button></div>
-    <div class="field"><div class="hint" id="app-version">${state.appVersion ? `y4bo ${esc(state.appVersion)}` : ''}</div></div>
+    <div class="field" id="about"><label>About</label>
+      <div class="hint" id="app-version">y4bo ${esc(state.appVersion || '')}. Downloads games from the Internet Archive and installs releases from GitHub and GitLab.
+        Built on Rohan Kar's launcher.</div>
+      <div class="inline">${ABOUT_LINKS.map(([label, url]) => `<button class="btn" data-href="${esc(url)}">${esc(label)}</button>`).join('')}</div></div>
   </div>`;
 }
 
@@ -1090,7 +1062,8 @@ function paintDetail() {
     });
   }
   const v = d.version;
-  if (d.kind === 'game' && !v._manual && !fileSizes.has(v.identifier)) {
+  if (d.kind === 'game') paintReviews(d);
+  if (d.kind === 'game' && !fileSizes.has(v.identifier)) {
     fileSizes.set(v.identifier, null);
     api.fetchFileList({ identifier: v.identifier }).then(r => {
       fileSizes.set(v.identifier, r.ok ? installBytes(r.installable || r.files) : 0);
@@ -1106,7 +1079,6 @@ function paintDetail() {
   }
 }
 
-const PILL_ICON = { play: 'play', install: 'download' };
 const pill = (label, attrs, { primary = false, icon = '' } = {}) =>
   `<button class="btn album-pill${primary ? ' primary' : ''}" ${attrs}>${icon ? `<i class="ico" data-ico="${icon}"></i>` : ''}${esc(label)}</button>`;
 const moreBtn = (attrs) => `<button class="album-more" ${attrs} aria-label="More" title="More"><i class="ico" data-ico="more"></i></button>`;
@@ -1139,32 +1111,6 @@ function exePicker(d) {
     <div class="versions">${d.exes.list.map(p => `<button class="version" data-exe="${esc(p)}"><span class="who">${esc(p.split(/[\\/]/).pop())}</span><span class="meta">${esc(p)}</span></button>`).join('')}</div>`;
 }
 
-// A manually managed app: its folder is the whole story
-function manualDetail(d) {
-  const v = d.version;
-  const title = getTitle(v);
-  const lib = state.library[v.identifier] || {};
-  const actions = lib.install_dir
-    ? `${pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' })}${pill('Open folder', 'data-action="open-folder"')}${moreBtn('data-detail-menu')}`
-    : `${pill('Locate folder…', 'data-action="manual-locate"', { primary: true })}${pill('Remove from library', 'data-action="manual-remove"')}`;
-  const note = !lib.install_dir ? 'Its folder is gone. Point it at the folder the app is in now.'
-    : !lib.exe_path ? "Put the app's files in its folder, then Play finds the executable." : '';
-  return albumHead({
-    kind: 'Your app', title,
-    cover: `<div class="album-cover" data-cover="${esc(v.identifier)}" style="background:${tint(title)}"></div>`,
-    wash: `background:${tint(title)}`,
-    sub: '<div class="album-sub by">Your folder</div>',
-    meta: [lib.version ? `Version ${lib.version}` : '', ...(lib.tags || [])].filter(Boolean),
-    actions,
-    extra: `${note ? `<p class="hint manual-note">${esc(note)}</p>` : ''}${exePicker(d)}`,
-  }) + albumFoot([
-    lib.install_dir ? `<dt>Folder</dt><dd>${esc(lib.install_dir)}</dd>` : '',
-    lib.exe_path ? `<dt>Launches</dt><dd>${esc(lib.exe_path)}</dd>` : '',
-    lib.version ? `<dt>Version</dt><dd>${esc(lib.version)}</dd>` : '',
-    lib.tags?.length ? `<dt>Tags</dt><dd>${esc(lib.tags.join(', '))}</dd>` : '',
-  ]);
-}
-
 // The versions of a title as a track list
 function versionsTable(d) {
   const rows = versionRows(d.game._versions || [d.game], { selected: d.version.identifier, library: state.library });
@@ -1181,7 +1127,6 @@ function versionsTable(d) {
 }
 
 function gameDetail(d) {
-  if (d.version._manual) return manualDetail(d);
   const g = d.game, v = d.version;
   const title = getTitle(v);
   const lib = state.library[v.identifier];
@@ -1193,7 +1138,8 @@ function gameDetail(d) {
     actions = pill(dl.status === 'extracting' ? 'Extracting…' : `Downloading… ${dl.percent || 0}%`, 'disabled', { primary: true })
       + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
   } else if (lib?.install_dir) {
-    actions = pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"');
+    actions = pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"')
+      + pill('Readme', 'data-action="readme"');
   } else {
     actions = pill('Install', 'id="btn-download" data-action="install"', { primary: true, icon: 'download' })
       + pill('archive.org', `data-href="https://archive.org/details/${esc(v.identifier)}"`);
@@ -1201,6 +1147,7 @@ function gameDetail(d) {
   actions += moreBtn('data-detail-menu');
   const desc = stripHtml(Array.isArray(v.description) ? v.description.join('\n') : v.description);
   const more = moreFrom(state.games, v._uploader, { except: g });
+  const badges = featureBadges(v).map(b => `<span class="state-badge feature" data-badge="${b.id}">${esc(b.label)}</span>`).join('');
   return albumHead({
     kind: versions.length > 1 ? `Game · ${versions.length} versions` : 'Game',
     title,
@@ -1211,19 +1158,49 @@ function gameDetail(d) {
       : `<div class="album-sub by">archive.org</div>`,
     meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
     actions,
-    extra: `${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
+    extra: `${badges ? `<div class="badges">${badges}</div>` : ''}${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
       ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
     desc,
-  }) + versionsTable(d) + albumFoot([
+  }) + versionsTable(d) + '<section class="section album-reviews" id="reviews" hidden></section>' + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
     `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
     `<dt>Problem?</dt><dd><a data-href="${esc(issueUrl({ version: state.appVersion, item: { kind: 'game', title: getTitle(v), id: v.identifier, source: v._uploader } }))}">Report an issue</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
     lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : '',
+    ...playRows(lib),
   ]) + (more.length ? section(`More from ${v._sourceLabel || v._uploader}`, more.map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', v._uploader] }) : '');
+}
+
+// Playtime and last played, from the library row (the Playnite export sends them too)
+const playRows = (lib) => [
+  lib?.playtime_secs ? `<dt>Played</dt><dd>${esc(formatPlaytime(lib.playtime_secs))}</dd>` : '',
+  lib?.last_played_at ? `<dt>Last played</dt><dd>${esc(fmtDate(lib.last_played_at))}</dd>` : '',
+];
+
+// archive.org reviews of the version showing, under its track list
+const reviewsCache = new Map();
+async function paintReviews(d) {
+  const id = d.version.identifier;
+  if (!reviewsCache.has(id)) reviewsCache.set(id, api.fetchReviews({ identifier: id }).catch(() => []));
+  const reviews = await reviewsCache.get(id);
+  const el = state.detail === d && $('#reviews');
+  if (!el || !reviews?.length) return;
+  const stars = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+  el.innerHTML = `<div class="h3">Reviews on archive.org</div>${reviews.map(r => `<div class="review">
+    <div class="review-head"><b>${esc(r.reviewer || 'Anonymous')}</b><span class="stars">${stars(Math.max(0, Math.min(5, Number(r.stars) || 0)))}</span>
+    <span class="hint">${esc(fmtDate(r.reviewdate))}</span></div>
+    ${r.reviewtitle ? `<div class="review-title">${esc(r.reviewtitle)}</div>` : ''}<p>${esc(stripHtml(r.reviewbody || ''))}</p></div>`).join('')}`;
+  el.hidden = false;
+}
+
+// The README in the install folder, if the game or port shipped one
+async function showReadme(identifier, name) {
+  const r = await api.readReadme({ identifier }).catch(() => null);
+  if (!r?.text) return toast(`${name} has no readme in its install folder.`);
+  return modal({ title: r.fileName || 'Readme', body: `<pre class="readme">${esc(r.text)}</pre>`, html: true, primary: 'Close', secondary: null });
 }
 
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
@@ -1284,6 +1261,7 @@ function portDetail(d) {
     p.filesToAdd.length ? `<dt>Files to add</dt><dd>${esc(p.filesToAdd.join(', '))}</dd>` : '',
     p.tags.length ? `<dt>Tags</dt><dd>${esc(p.tags.join(', '))}</dd>` : '',
     `<dt>Catalog</dt><dd>${esc(p.catalogUrl || 'Your repos')}</dd>`,
+    ...playRows(state.library[portTarget(p).identifier]),
   ]) + (more.length ? section(`More ${p.shelfName} ports`, more.map(portCard).join(''), { cls: 'row ports', seeAll: ['shelf', p.shelf] }) : '');
 }
 
@@ -1324,8 +1302,7 @@ async function installGame(v, { acceptHashChange = false } = {}) {
   const installable = list.installable || [];
   if (!installable.length) return toast('This upload has no files of its own to download.');
   const plain = !installable.some(f => /\.(zip|7z|rar|exe)$/i.test(f.name));
-  // Largest archive is the game (multi-part picks stay in the classic UI for
-  // now); plain files all download
+  // Largest archive is the game; plain files all download
   const picks = plain ? installable : [installable.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0]];
 
   const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', v.identifier] };
@@ -1378,7 +1355,7 @@ async function playGame(v) {
   const lib = state.library[v.identifier];
   if (lib?.exe_path) return launch(v, lib.exe_path);
   const exes = await api.findExes({ identifier: v.identifier });
-  if (!exes.length) return toast(v._manual ? "No executable yet: put the app's files in its folder." : 'No executable found. Try reinstalling.');
+  if (!exes.length) return toast('No executable found. Try reinstalling.');
   if (exes.length === 1) return launch(v, exes[0]);
   state.detail.exes = { purpose: 'play', list: exes };
   renderDetail();
@@ -1570,10 +1547,6 @@ document.addEventListener('paste', (e) => {
 });
 
 // Form inputs update state as you type; only structure changes re-render
-document.addEventListener('input', (e) => {
-  const t = e.target;
-  if (t.id === 'manual-name' && state.manualForm) state.manualForm.name = t.value;
-});
 
 // ─── Your sources (Settings) ─────────────────────────────────────────────────
 
@@ -1624,7 +1597,7 @@ const itemInstalled = (x, ctx) => (ctx.kind === 'port' ? !!state.library[x.id]?.
 const gameTarget = (g) => installedVersion(g) || g;
 const targetOf = (x, ctx) => (ctx.kind === 'port' ? portTarget(x) : gameTarget(x));
 const idle = (x, ctx) => !itemDl(x, ctx);
-const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : x._manual ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
+const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : `https://archive.org/details/${gameTarget(x).identifier}`);
 
 const ROW_ACTIONS = [
   // play: get it, run it, find it on disk
@@ -1633,7 +1606,7 @@ const ROW_ACTIONS = [
   { id: 'launch', label: 'Launch', icon: 'play', group: 'play', kinds: ['port'],
     when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), run: (p) => launchPort(p) },
   { id: 'install', label: (x, ctx) => (ctx.kind === 'port' ? 'Download' : 'Install'), icon: 'download', group: 'play',
-    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x._manual && !x.sourceOnly,
+    when: (x, ctx) => !itemInstalled(x, ctx) && idle(x, ctx) && !x.sourceOnly,
     run: (x, ctx) => (ctx.kind === 'port' ? installPort(x) : installGame(x)) },
   { id: 'cancel', label: 'Cancel Download', icon: 'close', group: 'play', when: (x, ctx) => !!itemDl(x, ctx),
     run: async (x, ctx) => { const dl = itemDl(x, ctx); if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId }); } },
@@ -1641,6 +1614,9 @@ const ROW_ACTIONS = [
     when: (p, ctx) => !itemInstalled(p, ctx) && idle(p, ctx) && !p.sourceOnly, run: (p) => locateInstall(p) },
   { id: 'open-folder', label: 'Open Folder', icon: 'folder', group: 'play',
     when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx), run: (x, ctx) => api.openGameLocation({ identifier: targetOf(x, ctx).identifier }) },
+  { id: 'readme', label: 'Readme', icon: 'info', group: 'play',
+    when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx),
+    run: (x, ctx) => showReadme(targetOf(x, ctx).identifier, ctx.kind === 'port' ? x.name : getTitle(x)) },
   { id: 'launch-options', label: 'Launch Options', icon: 'settings', group: 'play', kinds: ['port'],
     when: (p, ctx) => itemInstalled(p, ctx) && idle(p, ctx), children: [
       { id: 'choose-exe', label: 'Choose Executable…', icon: 'play', run: (p) => pickExe(p, 'default') },
@@ -1676,8 +1652,6 @@ const ROW_ACTIONS = [
   { id: 'toggle-library', label: (p) => (inPortLibrary(p) ? 'Remove from Library' : 'Add to Library'), icon: 'library', group: 'manage', kinds: ['port'],
     when: (p) => !p.sourceOnly || inPortLibrary(p),
     run: (p) => togglePort(p.id) },
-  { id: 'manual-rename', label: 'Rename…', icon: 'edit', group: 'manage', kinds: ['game'],
-    when: (g) => g._manual, run: (g, ctx) => { if (!ctx.onDetail) openDetail('game', g.identifier); return onAction('manual-rename'); } },
   // Opens the details page; not offered on that page
   { id: 'details', label: 'Properties', icon: 'info', group: 'manage', when: (x, ctx) => !ctx.onDetail,
     run: (x, ctx) => openDetail(ctx.kind, ctx.kind === 'port' ? x.id : x.identifier) },
@@ -1690,7 +1664,7 @@ const ROW_ACTIONS = [
   { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
     run: (p) => api.openExternal(p.repositoryUrl) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
-    when: (g) => !g._manual, run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
+    run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
     run: async (x, ctx) => {
       try { await navigator.clipboard.writeText(linkOf(x, ctx)); toast('Link copied.'); } catch { toast(linkOf(x, ctx), 8000); }
@@ -1698,7 +1672,7 @@ const ROW_ACTIONS = [
 
   // remove: files off the disk, or the entry out of the library
   { id: 'delete', label: 'Delete', icon: 'trash', group: 'remove', danger: true,
-    when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx) && !x._manual,
+    when: (x, ctx) => itemInstalled(x, ctx) && idle(x, ctx),
     run: async (x, ctx) => {
       const name = ctx.kind === 'port' ? x.name : getTitle(x);
       if (!confirm(`Delete ${name}? Its install folder goes to the Recycle Bin.`)) return;
@@ -1709,10 +1683,8 @@ const ROW_ACTIONS = [
       render();
     } },
   { id: 'hide', label: 'Hide from Wall', icon: 'close', group: 'remove', kinds: ['game'],
-    when: (g, ctx) => !g._manual && !itemInstalled(g, ctx) && idle(g, ctx),
+    when: (g, ctx) => !itemInstalled(g, ctx) && idle(g, ctx),
     run: (g) => hideUploads((g._versions || [g]).map(v => v.identifier), getTitle(g)) },
-  { id: 'manual-remove', label: 'Remove from Library', icon: 'trash', group: 'remove', danger: true, kinds: ['game'],
-    when: (g) => g._manual, run: (g, ctx) => { if (!ctx.onDetail) openDetail('game', g.identifier); return onAction('manual-remove'); } },
 ];
 ROW_ACTIONS.forEach(rowActions.register);
 
@@ -1903,44 +1875,6 @@ async function onAction(action, el) {
     case 'source-remove': return removeSource(el.dataset.uploader);
     case 'repo-remove': return removeRepo(el.dataset.repo);
     case 'unhide-all': return unhideAll();
-    case 'announce-dismiss':
-      $('#announce').classList.add('hidden');
-      return api.dismissAnnouncement(el.dataset.id);
-    case 'manual-open': state.manualForm = { name: '', folder: null }; render(); return $('#manual-name')?.focus();
-    case 'manual-cancel': state.manualForm = null; return render();
-    case 'manual-folder': {
-      const folder = await api.chooseFolder();
-      if (!folder) return;
-      state.manualForm = { name: $('#manual-name')?.value || folder.split(/[\\/]/).pop(), folder };
-      return render();
-    }
-    case 'manual-folder-clear': state.manualForm = { name: $('#manual-name')?.value || '', folder: null }; return render();
-    case 'manual-create': return createManual();
-    case 'manual-rename': {
-      const title = prompt('Rename to', getTitle(v));
-      if (!title?.trim()) return;
-      const r = await api.renameEntry({ identifier: v.identifier, title: title.trim() });
-      if (!r.ok) return toast(`Couldn't rename: ${r.error}`);
-      await reloadLibrary();
-      openDetail('game', v.identifier);
-      return render();
-    }
-    case 'manual-locate': {
-      const dir = await api.chooseFolder();
-      if (!dir) return;
-      const r = await api.setInstallDir({ identifier: v.identifier, installDir: dir });
-      if (!r.ok) return toast(`Couldn't use that folder: ${r.error}`);
-      await reloadLibrary();
-      openDetail('game', v.identifier);
-      return render();
-    }
-    case 'manual-remove': {
-      if (!confirm(`Remove ${getTitle(v)} from your library? Its folder stays where it is.`)) return;
-      await api.removeFromLibrary({ id: v.identifier });
-      await reloadLibrary();
-      closeDetail();
-      return render();
-    }
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
     case 'scan-install': {
       const r = await api.scanInstalls($('#setting-install').value.trim() || undefined);
@@ -1948,10 +1882,10 @@ async function onAction(action, el) {
       return;
     }
     case 'choose-download': { const p = await api.chooseFolder(); if (p) $('#setting-download').value = p; return; }
-    case 'legacy-ui':
-      await api.saveSettings({ ui: 'legacy' });
-      location.href = `../index.html${location.search}`;
-      return;
+    case 'readme': return showReadme(v.identifier, getTitle(v));
+    case 'update-notes': return showUpdateNotes();
+    case 'update-get': return api.updaterInstall();
+    case 'update-dismiss': return $('#announce').classList.add('hidden');
     default: console.warn('unknown action', action, el);
   }
 }
@@ -2101,9 +2035,7 @@ function downloadsPopHtml() {
   return html;
 }
 const morePopHtml = () => `<button class="mi" data-view="settings"><i class="ico" data-ico="settings"></i>Settings</button>
-  <button class="mi" data-action="reload-all"><i class="ico" data-ico="reload"></i>Reload</button>
-  <div class="sep"></div>
-  <button class="mi" data-action="legacy-ui"><i class="ico" data-ico="swap"></i>Switch to the classic interface</button>`;
+  <button class="mi" data-action="reload-all"><i class="ico" data-ico="reload"></i>Reload</button>`;
 
 function renderPop() {
   const el = $('#pop');
@@ -2167,15 +2099,37 @@ function showProgress(identifier, percent) {
 
 // ─── start ───────────────────────────────────────────────────────────────────
 
-// announcement.json on main: one message, shown until dismissed (by id)
-async function showAnnouncement() {
-  const a = await api.getAnnouncement().catch(() => null);
+// A new y4bo release (electron-updater, src/electron/main.js): a bar over the
+// page with its notes and a link to the release. Nothing installs by itself.
+let pendingUpdate = null;
+function showUpdate(status) {
   const el = $('#announce');
-  if (!a || !el) return;
-  el.innerHTML = `<span class="msg">${esc(a.message)}</span>
-    ${a.link ? `<a data-href="${esc(a.link)}">More</a>` : ''}
-    <button class="x" data-action="announce-dismiss" data-id="${esc(a.id)}" aria-label="Dismiss">&#10005;</button>`;
+  if (status?.status !== 'available' || !el) return;
+  pendingUpdate = status;
+  el.innerHTML = `<span class="msg">y4bo ${esc(status.version)} is out.</span>
+    ${status.releaseNotes ? '<button class="btn" data-action="update-notes">What\'s new</button>' : ''}
+    <button class="btn primary" data-action="update-get">Get it</button>
+    <button class="x" data-action="update-dismiss" aria-label="Dismiss">&#10005;</button>`;
   el.classList.remove('hidden');
+}
+async function showUpdateNotes() {
+  if (!pendingUpdate) return;
+  const ok = await modal({ title: `What's new in ${pendingUpdate.version}`, body: `<pre class="readme">${esc(pendingUpdate.releaseNotes)}</pre>`,
+    html: true, primary: 'Get it', secondary: 'Later' });
+  if (ok) api.updaterInstall();
+}
+
+// Playnite's "show in launcher" (y4bo --open <id>): the item's page, once
+// the wall or the shelves have it
+let pendingOpen = null;
+function showPendingItem() {
+  const id = pendingOpen;
+  if (!id) return;
+  const kind = state.ports?.items.some(i => i.id === id) ? 'port' : detailFor('game', id) ? 'game' : null;
+  if (!kind) return;
+  pendingOpen = null;
+  api.clearOpenItem();
+  openDetail(kind, id);
 }
 
 applyFolded();
@@ -2185,8 +2139,9 @@ applyFolded();
   ({ sources: state.sources } = await api.getSources());
   await reloadLibrary();
   render();
-  showAnnouncement();
+  api.onUpdaterStatus(showUpdate);
+  api.onOpenItem(({ identifier }) => { pendingOpen = identifier; showPendingItem(); });
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall
-  loadPorts();
-  loadWall();
+  loadPorts().then(showPendingItem);
+  loadWall().then(showPendingItem);
 })();

@@ -41,9 +41,9 @@ async function startFixtures() {
 }
 
 // Fixtures + backend on a fresh data dir holding `settings`.
-//   page:     the page to open under src/frontend/ (index.html is the classic UI)
+//   page:     the page to open under src/frontend/
 // Resolves { dataDir, pageUrl, base, close }; pageUrl opens the page on that backend.
-async function startStack(settings, { page = 'index.html' } = {}) {
+async function startStack(settings, { page = 'new/index.html' } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-e2e-'));
   fs.writeFileSync(path.join(dataDir, 'settings.json'), JSON.stringify(settings, null, 2));
   const fixtures = await startFixtures();
@@ -54,7 +54,6 @@ async function startStack(settings, { page = 'index.html' } = {}) {
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
     '--gitlab-api', fixtures.base,
-    '--announcement-url', `${fixtures.base}/announcement.json`,
     '--curated-ports-url', `${fixtures.base}/curated-ports.json`,
   ], {}, () => {});
   const pageUrl = `${fixtures.base}/app/${page}?${new URLSearchParams({ api: backend.url, token: backend.token })}`;
