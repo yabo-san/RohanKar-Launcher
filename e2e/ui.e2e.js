@@ -45,6 +45,13 @@ let stack, page;
 // page, which closes the dropdown as a real scroll would
 const settled = () => expect(page.locator('#body.page-enter')).toHaveCount(0);
 
+// Every upload at once: the Uploaders heading under the Library
+async function openWall() {
+  await page.locator('.sidebar [data-view="library"]').click();
+  await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
+  await expect(page.locator('#heading')).toHaveText('All uploads');
+}
+
 test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, { page: 'new/index.html' });
   page = await browser.newPage();
@@ -60,10 +67,19 @@ test.afterAll(async () => {
 
 test('the wall shows every shipped uploader, grouped by title', async () => {
   await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
-  // No Home page: the app opens on the Game wall
-  await expect(page.locator('[data-view="home"]')).toHaveCount(0);
-  await expect(page.locator('#heading')).toHaveText('Game wall');
-  await expect(page.locator('.sidebar [data-view="wall"]')).toHaveClass(/active/);
+  // No Home page and no Game wall in the sidebar: the app opens on the Library,
+  // what's installed, with each shelf's ports and the uploaders under it
+  await expect(page.locator('[data-view="home"], .sidebar [data-view="wall"]')).toHaveCount(0);
+  await expect(page.locator('#heading')).toHaveText('Library');
+  await expect(page.locator('.sidebar [data-view="library"]')).toHaveClass(/active/);
+  await expect(page.locator('#body h2', { hasText: 'Built-in ports' })).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('#body .uploader-card')).toHaveCount(ENABLED.length);
+  const first = page.locator('#body .uploader-card').first();
+  const name = await first.locator('.title').innerText();
+  await first.click();
+  await expect(page.locator('#heading')).toHaveText(name);
+  // The Uploaders heading opens every upload at once
+  await openWall();
   const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
   const groups = new Set(docs.map(d => titleKey(d))).size;
   await expect(page.locator('#body .game-card')).toHaveCount(groups, { timeout: 30_000 });
@@ -73,7 +89,7 @@ test('the wall shows every shipped uploader, grouped by title', async () => {
 });
 
 test('A game opens its details page; Back returns to the page and the scroll it came from', async () => {
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   const body = page.locator('#body');
   const zoo = page.locator('#body .game-card', { hasText: 'Zoo Tycoon' });
   await page.setViewportSize({ width: 1280, height: 500 });
@@ -98,7 +114,7 @@ test('A game opens its details page; Back returns to the page and the scroll it 
 
   // Back lands on the wall where it was left; Forward returns
   await page.locator('#nav-back').click();
-  await expect(page.locator('#heading')).toHaveText('Game wall');
+  await expect(page.locator('#heading')).toHaveText('All uploads');
   await expect(detail).toHaveCount(0);
   await expect.poll(() => body.evaluate(b => b.scrollTop)).toBe(scrolled);
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -190,11 +206,13 @@ test('Add puts a port in the library and Remove takes it out', async () => {
   await expect(page.locator('#heading')).toHaveText('Built-in ports');
 
   await page.locator('[data-view="library"]').click();
-  await expect(page.locator('#body .port-card')).toHaveCount(1);
-  await page.locator('#body .port-card').click();
+  // The shelves under it show every port; this is the Installed ports section's
+  const installed = page.locator('#body .section', { has: page.locator('h2', { hasText: 'Installed ports' }) }).locator('.port-card');
+  await expect(installed).toHaveCount(1);
+  await installed.click();
   await page.locator('#detail [data-toggle-port]').click();
   await page.keyboard.press('Escape');
-  await expect(page.locator('#body .port-card')).toHaveCount(0);
+  await expect(installed).toHaveCount(0);
 });
 
 test('Install downloads, extracts and registers an archive.org game', async () => {
@@ -287,7 +305,7 @@ test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab r
 });
 
 test("The wall's library header sorts, searches, lists and pages, after Cider's", async () => {
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await settled();
   const titles = () => page.locator('#body .game-card .title').allInnerTexts();
   const header = page.locator('.album-header');
@@ -343,7 +361,7 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
 });
 
 test("The wall's list view: Cider 2's song list, with sorting headers, a column picker and a ⋯ menu", async () => {
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await settled();
   await page.locator('.album-header').getByRole('button', { name: 'List' }).click();
   const table = page.locator('#body .lv');
@@ -382,7 +400,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
   await page.reload();
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await settled();
   await expect(page.locator('#body .lv-head button[data-sort-col]')).toHaveText(['Name', 'Platform', 'Added', 'Downloads', 'Status']);
   await page.locator('#body [data-col-picker]').click();
@@ -456,7 +474,7 @@ test('Clicks on the search box reach it in the app: no drag region covers it, an
 });
 
 test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   const card = page.locator('#body .game-card').first();
   await card.hover();
   await expect.poll(() => card.evaluate(c => getComputedStyle(c).transform)).not.toBe('none');
@@ -474,7 +492,8 @@ test('Cards lift on hover and pages rise in; with reduced motion, neither', asyn
   expect(await entered('library')).toBe(true);
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
-  expect(await entered('wall')).toBe(false);
+  expect(await entered('settings')).toBe(false);
+  await openWall();
   await card.hover();
   expect(await card.evaluate(c => getComputedStyle(c).transform)).toBe('none');
   expect(await card.evaluate(c => getComputedStyle(c).transitionDuration)).toBe('0s');
@@ -500,7 +519,7 @@ test('Your sources: no switch or warning, user.json loads at once with no badge,
   await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a built-in uploader has it');
 
   // Your cards look like any other
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   const demo = page.locator('.game-card', { hasText: 'User Demo' });
   await expect(demo).toBeVisible();
   await expect(page.locator('.user-badge')).toHaveCount(0);
@@ -509,7 +528,7 @@ test('Your sources: no switch or warning, user.json loads at once with no badge,
   await expect(page.locator('.user-badge, .curated-badge')).toHaveCount(0);
 
   // First install pins the file; a different file later asks before installing
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await demo.click();
   await expect(page.locator('#detail .user-note')).toHaveCount(0);
   await page.locator('#btn-download').click();
@@ -557,7 +576,7 @@ test('Add: an account link joins the wall, and Settings removes it', async () =>
 });
 
 test('Hide from Wall: the upload leaves the wall, and Settings brings it back', async () => {
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   const card = page.locator('.game-card', { hasText: 'The Sims' }).first();
   await card.click({ button: 'right' });
   await page.locator('#ctxmenu [data-menu="hide"]').click();
@@ -565,7 +584,7 @@ test('Hide from Wall: the upload leaves the wall, and Settings brings it back', 
   await expect(page.locator('.game-card', { hasText: 'The Sims' })).toHaveCount(0);
   await page.locator('#btn-settings').click();
   await page.locator('#hidden-uploads [data-action="unhide-all"]').click();
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await expect(page.locator('.game-card', { hasText: 'The Sims' }).first()).toBeVisible();
 });
 
@@ -576,7 +595,7 @@ test('Report an issue: Settings, a game and a port each open a prefilled GitHub 
   expect(u.origin + u.pathname).toBe('https://github.com/yabo-san/RohanKar-Launcher/issues/new');
   await expect.poll(async () => (await href(page.locator('#btn-report-issue'))).searchParams.get('body')).toMatch(/App: y4bo \d/);
 
-  await page.locator('[data-view="wall"]').click();
+  await openWall();
   await page.locator('.game-card', { hasText: 'Halo' }).click();
   u = await href(page.locator('#detail a', { hasText: 'Report an issue' }));
   expect(u.searchParams.get('body')).toContain('Game: Halo: Combat Evolved (archive.org item rk-e2e-halo-ce');
