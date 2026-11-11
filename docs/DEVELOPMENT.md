@@ -1,7 +1,5 @@
 # Development and releases
 
-Moved here from the README unchanged (only the link to API.md is fixed for the new folder).
-
 ## Development
 
 The development environment is a dev container (`.devcontainer/`). Open it with
@@ -53,17 +51,17 @@ PR comment and removed when the PR closes. `.github/workflows/preview.yml`
 builds it with `scripts/preview/build.js`: the backend loads the live sources
 once, every response the UI asks for at start is saved as a file, and
 `scripts/preview/preview.js` answers the API from those files. Browsing,
-favorites, Add/Remove and settings work (kept for the tab); installs and
+favorites, adding links and settings work (kept for the tab); installs and
 launching answer 501. The JSON feed the app reads from main at launch
 (`overrides.json`) is fetched
 live when the page is opened, so an edit on main shows on the next reload
 (raw.githubusercontent.com caches for up to 5 minutes); the saved copy answers
-if that fails. The archive.org wall and the Quiver lists are the build's
+if that fails. The archive.org wall and the port shelf are the build's
 snapshot, and main's preview is rebuilt nightly.
 
 `mise run ui` is the same thing locally: the whole UI in a browser, with no
 Windows, Electron or build. It saves the real sources as the Pages build does
-(uploader walls, Quiver's catalogs, main's
+(uploader walls, the port shelf, main's
 renames and SteamGridDB art) and serves them on `0.0.0.0:5180`: open the
 forwarded port in a devcontainer, or `http://127.0.0.1:5180/`. There are no
 installs in this mode. `mise run ui -- --offline` uses the e2e fixtures and a
@@ -84,10 +82,12 @@ from `release.yml` on `windows-latest`; nothing in the container builds it.
 
 ## Releases
 
-Versions follow the fork line (`1.6.0-fork.0`, `1.6.0-fork.1`, …). The launcher
-checks for updates against a `latest.yml` on the `gh-pages` branch, served at
-`https://yabo-san.github.io/RohanKar-Launcher/stable/` (or `/beta/` with
-**Settings → Beta updates** on). Two steps are done by hand:
+Versions follow the fork line (`1.6.0-fork.0`, `1.6.0-fork.1`, …). Users download new builds
+from the GitHub releases page; the app doesn't update itself. Its update check (a bar linking to
+the release) reads `latest.yml` on the `gh-pages` branch, served at
+`https://yabo-san.github.io/RohanKar-Launcher/stable/` (or `/beta/` with `betaUpdates`), but only
+runs with `checkForUpdates: true` in settings.json; Settings has no switch for either. Two steps
+are done by hand:
 
 1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
    open on `main`. Merging it tags the version, builds the Windows installer

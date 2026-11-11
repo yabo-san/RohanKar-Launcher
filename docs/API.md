@@ -208,6 +208,19 @@ Marks the current copy as reviewed (`204`).
 curl -X POST http://127.0.0.1:7777/v1/catalogs/curated/seen
 ```
 
+### `POST /add/resolve`
+
+What a link pasted into the sidebar box points at: `{ kind: "account", uploader }`,
+`{ kind: "upload", identifier, title, uploader }` (looked up on archive.org, so the app can ask
+whether to get just it or follow the uploader) or `{ kind: "repo", repository, repositorySource }`
+(`github` or `gitlab`). `400 bad_link` for anything else, `404 not_found` for an upload archive.org
+doesn't have.
+
+```sh
+curl -X POST -d '{"link":"https://github.com/owner/repo"}' http://127.0.0.1:7777/v1/add/resolve
+# {"kind":"repo","repository":"owner/repo","repositorySource":"github"}
+```
+
 ### Your repos
 
 GitHub repos the user adds on their own. A repo the curated shelf doesn't list shows on the "Your
@@ -491,7 +504,8 @@ curl -X POST -d '{"appName":"Halo","exePath":"C:\\Games\\Halo\\halo.exe","startD
 ### `GET /os/updater`, `POST /os/updater-install`
 
 The latest update status (the same object as the `updater` event, or `null`), and the action
-that sends the user to the release download.
+that sends the user to the release download. The check only runs with `checkForUpdates: true` in
+settings.json, so this is normally `null`.
 
 ```sh
 curl http://127.0.0.1:7777/v1/os/updater

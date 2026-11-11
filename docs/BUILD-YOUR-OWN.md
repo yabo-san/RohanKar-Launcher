@@ -26,9 +26,9 @@ The app fetches some lists from this repo's `main` at launch (`overrides.json`,
 `raw.githubusercontent.com/yabo-san/RohanKar-Launcher/main/...` URLs in `src/backend/` to your
 fork, or your edits only show while those fetches fail.
 
-The self-updater checks `https://yabo-san.github.io/RohanKar-Launcher/` (`package.json`
-`build.publish`, `src/electron/main.js` `UPDATE_CHANNEL_BASE`). Point both at your fork's Pages,
-or your copy offers this repo's releases as updates.
+The update check (off unless `checkForUpdates` is set in settings.json) reads
+`https://yabo-san.github.io/RohanKar-Launcher/` (`package.json` `build.publish`,
+`src/electron/main.js` `UPDATE_CHANNEL_BASE`). Point both at your fork's Pages if you turn it on.
 
 ## 4. Build
 
