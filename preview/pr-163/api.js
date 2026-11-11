@@ -5,10 +5,10 @@
  * /v1 API (docs/API.md). Where it runs:
  *   - the desktop app: preload.js sets window.launcher = { apiBase, token }
  *   - a plain browser: index.html?api=http://127.0.0.1:<port>/v1&token=<token>
- * Loaded as a plain <script> before renderer.js (the classic UI) or
- * new/app.js (the new one), which call `api.*`.
+ * Loaded as a plain <script> before new/app.js, which calls `api.*`.
  */
 
+// eslint-disable-next-line no-unused-vars -- a global the page's other scripts call
 const api = (() => {
   const params = new URLSearchParams(location.search);
   const apiBase = window.launcher?.apiBase || params.get('api') || '';
@@ -112,9 +112,6 @@ const api = (() => {
     getSources:   async () => (await call('GET', '/sources')).body || { defaults: [], sources: [] },
     // Additional sources: user.json's state, invalid entries and conflicts
     getUserSources: async () => (await call('GET', '/user-sources')).body || null,
-    getFeatured:  async () => (await call('GET', '/featured')).body?.picks || [],
-    getAnnouncement:     async () => (await call('GET', '/announcement')).body?.announcement || null,
-    dismissAnnouncement: (id) => call('POST', '/announcement/dismiss', { id }),
 
     // Items: { items, errors }; throws when every source failed
     getItems: async (query = {}) => {
@@ -128,12 +125,10 @@ const api = (() => {
     },
     fetchReviews: async ({ identifier }) => (await call('GET', `/items/${enc(identifier)}/reviews`)).body?.reviews || [],
     getThumb:        ({ identifier }) => image(`/items/${enc(identifier)}/cover`),
-    getHero:         ({ identifier }) => image(`/items/${enc(identifier)}/hero`),
 
     // Library
     getLibrary:  async () => (await call('GET', '/library')).body?.library || {},
     setFavorite: ({ identifier, isFavorite }) => call('PATCH', `/library/${enc(identifier)}`, { favorite: !!isFavorite }),
-    setNotes:    ({ identifier, notes }) => call('PATCH', `/library/${enc(identifier)}`, { notes }),
     setExePath:  ({ identifier, exePath }) => call('PATCH', `/library/${enc(identifier)}`, { exePath }),
     setInstallDir: async ({ identifier, installDir }) => {
       const r = await call('PATCH', `/library/${enc(identifier)}`, { installDir });
@@ -154,20 +149,6 @@ const api = (() => {
       return r.ok ? { ok: true } : failure(r);
     },
     openGameLocation: ({ identifier }) => call('POST', `/library/${enc(identifier)}/reveal`),
-    scanForGames: async () => {
-      const r = await call('POST', '/library/scan', {});
-      return r.ok ? r.body : { found: [], error: r.body?.detail };
-    },
-
-    // A manually managed app: a named folder (made, or an existing one) to fill
-    createManualApp: async ({ name, folder = null }) => {
-      const r = await call('POST', '/library/manual', { name, folder });
-      return r.ok ? { ok: true, row: r.body } : failure(r);
-    },
-    renameEntry: async ({ identifier, title }) => {
-      const r = await call('PATCH', `/library/${enc(identifier)}`, { title });
-      return r.ok ? { ok: true } : failure(r);
-    },
 
     // Library rows for items that aren't installed (catalog ports)
     addToLibrary:      ({ id, source }) => call('POST', '/library', { id, source }),
@@ -194,14 +175,6 @@ const api = (() => {
     reviewCatalog:   async (id) => (await call('GET', `/catalogs/${enc(id)}/review`)).body || { new: [], changed: [], removed: [] },
     markCatalogSeen: (id) => call('POST', `/catalogs/${enc(id)}/seen`),
 
-    // Collections
-    getCollections:   async () => (await call('GET', '/collections')).body?.collections || [],
-    createCollection: async ({ name }) => { const r = await call('POST', '/collections', { name }); return r.ok ? { ok: true, id: r.body.id } : failure(r); },
-    deleteCollection: ({ id }) => call('DELETE', `/collections/${id}`),
-    renameCollection: async ({ id, name }) => { const r = await call('PATCH', `/collections/${id}`, { name }); return r.ok ? { ok: true } : failure(r); },
-    setCollectionColor: ({ id, color }) => call('PATCH', `/collections/${id}`, { color: color || null }),
-    addGameToCollection:      ({ collectionId, identifier }) => call('PUT', `/collections/${collectionId}/items/${enc(identifier)}`),
-    removeGameFromCollection: ({ collectionId, identifier }) => call('DELETE', `/collections/${collectionId}/items/${enc(identifier)}`),
 
     // Installs one file of an item (download, extract, record), or a catalog
     // port when identifier is its quiver: id and fileName is left out. Resolves
