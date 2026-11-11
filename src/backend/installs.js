@@ -339,7 +339,40 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const exes = disk.findExes(dest);
     const exePath = exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
+    // The release tag, so a newer release can be offered as an update
+    library.setDetails(item.id, { version: release.tag_name });
+    releaseChecks.delete(item.id);
     update(job, { status: 'done', step: null, installDir: dest, exePath });
+  }
+
+  // ─── Newer releases and the file picker ──────────────────────────────────
+
+  // The latest release's files, for the picker when a repo is added
+  async function releaseFiles(item) {
+    const { release } = await latestRelease(item);
+    return ports.releaseFiles(release);
+  }
+
+  // Installed ports whose repo has published a newer release than the one
+  // installed (the tag recorded at install). One check per port an hour, so
+  // opening the app doesn't use up GitHub's 60 requests an hour; a port
+  // installed before tags were recorded is left out. Errors are skipped.
+  const releaseChecks = new Map();   // item id -> { at, latest }
+  const CHECK_MS = 60 * 60 * 1000;
+  async function portUpdates(items, { now = Date.now() } = {}) {
+    const lib = library.all();
+    const out = [];
+    for (const item of items) {
+      const row = lib[item.id];
+      if (!row?.install_dir || !row.version || item.sourceOnly || !item.repository) continue;
+      let c = releaseChecks.get(item.id);
+      if (!c || now - c.at > CHECK_MS) {
+        try { c = { at: now, latest: (await latestRelease(item)).release.tag_name }; } catch (e) { log(`[updates] ${item.repository}: ${e.message}`); continue; }
+        releaseChecks.set(item.id, c);
+      }
+      if (c.latest && c.latest !== row.version) out.push({ id: item.id, installed: row.version, latest: c.latest });
+    }
+    return out;
   }
 
   const get  = (id) => (jobs.has(id) ? view(jobs.get(id)) : null);
@@ -373,7 +406,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { found };
   }
 
-  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan };
+  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan, releaseFiles, portUpdates };
 }
 
 module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API, GITLAB_API };

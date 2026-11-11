@@ -119,21 +119,17 @@ test('packaged app: opens the new UI, shows default sources, downloads a stub it
   try {
     const { page } = app;
 
-    // The window opens the new UI (the default) on the Library; its Uploaders heading opens
-    // every upload, which shows the stub's games
+    // The window opens the new UI (the default) on the Library; the sidebar's
+    // Packs lists the shipped uploaders that are on, and the first pack shows
+    // the stub's games
     await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
-    await page.locator('.sidebar [data-view="library"]').click();
-    await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
+    await expect(page.locator('#heading')).toHaveText('Library');
+    const shipped = DEFAULT_SOURCES.filter(src => src.enabled !== false);
+    await expect(page.locator('#nav-uploaders .navitem')).toHaveCount(shipped.length);
+    for (const src of shipped) await expect(page.locator('#nav-uploaders')).toContainText(src.label);
+    await page.locator('#nav-uploaders .navitem', { hasText: 'rohanjackson071' }).click();
     await expect(page.locator('#body .game-card').first()).toBeVisible({ timeout: 30_000 });
 
-    await page.locator('#btn-settings').click();
-    // Settings lists the shipped uploaders that are on, each removable
-    const shipped = DEFAULT_SOURCES.filter(src => src.enabled !== false);
-    await expect(page.locator('#sources-list [data-action="source-remove"]')).toHaveCount(shipped.length);
-    for (const src of shipped) await expect(page.locator('#sources-list')).toContainText(src.label);
-
-    await page.locator('.sidebar [data-view="library"]').click();
-    await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
     await page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' }).click();
     await page.locator('#btn-download').click();
     const zip = path.join(downloadDir, 'rk-e2e-halo-ce', 'rk-e2e-halo-ce.zip');

@@ -9,7 +9,7 @@ const { normalizeUploader } = require('./sources');
 const SEARCH_PAGE_SIZE  = 500;
 const SEARCH_MAX_ITEMS  = 10000;  // advancedsearch won't page past this
 const SEARCH_RETRIES    = 3;
-const SEARCH_FIELDS     = 'identifier,title,description,date,addeddate,downloads,subject';
+const SEARCH_FIELDS     = 'identifier,title,description,date,addeddate,updatedate,downloads,subject';
 const DOC_FIELDS        = SEARCH_FIELDS.split(',');
 const UPLOADS_PAGE_SIZE = 100;
 
@@ -40,6 +40,8 @@ function accountUploads(json) {
       addeddate:   one(f.addeddate) ?? one(f.publicdate),
       downloads:   one(f.downloads),
       subject:     f.subject ?? null,
+      // when it last changed, if archive.org says
+      ...(one(f.updatedate) ? { updatedate: one(f.updatedate) } : {}),
     };
     return { identifier, mediatype: one(f.mediatype), doc };
   }).filter(Boolean);

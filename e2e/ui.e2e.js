@@ -3,26 +3,29 @@
  * End-to-end for the new UI (src/frontend/new/), the default in the app, in
  * a plain browser against the standalone backend.
  *
- * - The wall holds the shipped uploaders' games, grouped by title.
- * - The port shelf is the built-in list, with no game data on its cards.
- * - Add puts a port in the library and Remove takes it out.
+ * - The sidebar is Library, Ports and Packs (archive.org uploaders), with
+ *   What's new and Settings at its foot. The app opens on the Library: what's
+ *   installed, games then ports. There is no separate "add to library" step.
+ * - A pack's page holds that uploader's games, grouped by title, sorted by
+ *   upload or update date; its title links to the uploader on archive.org.
+ * - Ports is the built-in list plus the repos you added.
  * - Install downloads, extracts and registers an archive.org game.
  * - A port installs the Windows build from its GitHub release, and only that
  *   (Perfect Dark); game data is the user's job.
  * - Opening a game or a port shows its details page (after Cider's album
- *   page); Back, or Escape, returns to the page it came from, scrolled where
- *   it was, and a search comes back with its results.
- * - There is no Home page: the app opens on the Game wall.
+ *   page); Back, or Escape, returns to the page it came from, and a search
+ *   comes back with its results.
+ * - The search box takes a pasted link: an account becomes a pack, a repo
+ *   joins Ports and installs, asking which file when its release has several.
+ * - Hide from Pack, and Show hidden brings the uploads back.
+ * - What's new lists a newer upload of an installed game.
  * - A game's page: Rohan's feature badges, archive.org reviews, the readme.
  * - A new y4bo release shows a bar with its notes.
  * - Cards lift on hover and pages rise in, and prefers-reduced-motion turns
  *   both off.
- * - Your sources: no switch and no warnings; user.json's entries load as soon
- *   as the file is set, with no badge; a file that changed since its first
- *   install asks before installing.
  * - Report an issue: Settings and each game's and port's page link to a
  *   prefilled GitHub issue.
- * - Settings has About with the credit links, and no classic UI switch.
+ * - Settings: your config pastes in; About has no personal social links.
  *
  * archive.org, GitHub and the curated list are served by fixture-server.js.
  */
@@ -35,6 +38,7 @@ const { startStack } = require('./fixture-server');
 const fixtures = require('./fixtures/search.json');
 
 const ENABLED = sourcesFromCatalog(require('../catalog/uploaders.json')).filter(s => s.enabled);
+const ROHAN = 'rohanjackson071';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -45,12 +49,22 @@ let stack, page;
 // page, which closes the dropdown as a real scroll would
 const settled = () => expect(page.locator('#body.page-enter')).toHaveCount(0);
 
-// Every upload at once: the Uploaders heading under the Library
-async function openWall() {
-  await page.locator('.sidebar [data-view="library"]').click();
-  await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
-  await expect(page.locator('#heading')).toHaveText('All uploads');
+// A pack's page: the uploader in the sidebar's Packs
+async function openPack(name) {
+  await page.locator('#nav-uploaders .navitem', { hasText: name }).click();
+  await expect(page.locator('#heading')).toHaveText(name);
 }
+async function openPorts() {
+  await page.locator('.sidebar [data-view="ports"]').click();
+  await expect(page.locator('#heading')).toHaveText('Ports');
+}
+// Paste a link into the sidebar's search box
+async function pasteLink(link) {
+  await page.locator('#q').fill(link);
+  await page.locator('#q').press('Enter');
+}
+const packGroups = (email) => new Set((fixtures[email] || []).map(d => titleKey(d))).size;
+const rohan = { uploader: 'rohanjackson071@gmail.com' };
 
 test.beforeAll(async ({ browser }) => {
   stack = await startStack({}, { page: 'new/index.html' });
@@ -65,44 +79,36 @@ test.afterAll(async () => {
   await stack?.close();
 });
 
-test('the wall shows every shipped uploader, grouped by title', async () => {
+test('The app opens on the Library; the sidebar is Library, Ports and Packs', async () => {
   await expect(page.locator('.sidebar .brand')).toHaveText('y4bo');
-  // No Home page and no Game wall in the sidebar: the app opens on the Library,
-  // what's installed, with each shelf's ports and the uploaders under it
-  await expect(page.locator('[data-view="home"], .sidebar [data-view="wall"]')).toHaveCount(0);
   await expect(page.locator('#heading')).toHaveText('Library');
   await expect(page.locator('.sidebar [data-view="library"]')).toHaveClass(/active/);
-  await expect(page.locator('#body h2', { hasText: 'Built-in ports' })).toBeVisible({ timeout: 30_000 });
-  await expect(page.locator('#body .uploader-card')).toHaveCount(ENABLED.length);
-  const first = page.locator('#body .uploader-card').first();
-  const name = await first.locator('.title').innerText();
-  await first.click();
-  await expect(page.locator('#heading')).toHaveText(name);
-  // The Uploaders heading opens every upload at once
-  await openWall();
-  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
-  const groups = new Set(docs.map(d => titleKey(d))).size;
-  await expect(page.locator('#body .game-card')).toHaveCount(groups, { timeout: 30_000 });
+  await expect(page.locator('#body .empty')).toContainText('Nothing installed yet.');
+  // No Home, no game wall, no shelves, no Add button: the search box takes links
+  await expect(page.locator('[data-view="home"], .sidebar [data-view="wall"], #nav-shelves, #nav-add, #btn-more')).toHaveCount(0);
+  await expect(page.locator('#q')).toHaveAttribute('placeholder', 'Search or paste a link');
+  await expect(page.locator('#n-ports')).toHaveText('8', { timeout: 30_000 });
+  await expect(page.locator('.sidebar .navgroup', { hasText: 'Packs' })).toBeVisible();
+  await expect(page.locator('#nav-uploaders .navitem')).toHaveCount(ENABLED.length);
   for (const s of ENABLED) {
-    await expect(page.locator(`#nav-uploaders [data-arg="${s.uploader}"] .n`)).toHaveText(String(fixtures[s.uploader].length));
+    await expect(page.locator(`#nav-uploaders [data-arg="${s.uploader}"] .n`)).toHaveText(String(fixtures[s.uploader].length), { timeout: 30_000 });
   }
+  await expect(page.locator('#btn-news')).toBeVisible();
+
+  // A pack: that uploader's games, grouped by title; its name links to archive.org
+  await openPack(ROHAN);
+  await expect(page.locator('#body .game-card')).toHaveCount(packGroups(rohan.uploader), { timeout: 30_000 });
+  await expect(page.locator('#heading .title-link')).toHaveAttribute('data-href', /archive\.org/);
 });
 
-test('A game opens its details page; Back returns to the page and the scroll it came from', async () => {
-  await openWall();
-  const body = page.locator('#body');
-  const zoo = page.locator('#body .game-card', { hasText: 'Zoo Tycoon' });
-  await page.setViewportSize({ width: 1280, height: 500 });
-  await body.evaluate(b => { b.style.scrollBehavior = 'auto'; });
-  await zoo.scrollIntoViewIfNeeded();
-  const scrolled = await body.evaluate(b => b.scrollTop);
-  expect(scrolled).toBeGreaterThan(0);
-  await zoo.click();
+test('A game opens its details page; Back returns to the pack', async () => {
+  await openPack(ROHAN);
+  await page.locator('#body .game-card', { hasText: 'Zoo Tycoon' }).click();
 
   const detail = page.locator('#detail');
   await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
   await expect(page.locator('#heading')).toHaveCount(0);
-  await expect(detail.locator('.album-sub')).toHaveText('rohanjackson071');
+  await expect(detail.locator('.album-sub')).toHaveText(ROHAN);
   await expect(detail.locator('.album-meta')).toContainText('PC');
   await expect(detail.locator('.album-meta')).toContainText('1,200 downloads');
   await expect(detail.locator('#btn-download')).toBeVisible();
@@ -112,60 +118,53 @@ test('A game opens its details page; Back returns to the page and the scroll it 
   await expect(detail.locator('.track.on')).toHaveAttribute('data-version', 'rk-e2e-zoo-tycoon');
   await expect(detail.locator('.album-foot')).toContainText('rk-e2e-zoo-tycoon');
 
-  // Back lands on the wall where it was left; Forward returns
+  // Back lands on the pack; Forward returns
   await page.locator('#nav-back').click();
-  await expect(page.locator('#heading')).toHaveText('All uploads');
+  await expect(page.locator('#heading')).toHaveText(ROHAN);
   await expect(detail).toHaveCount(0);
-  await expect.poll(() => body.evaluate(b => b.scrollTop)).toBe(scrolled);
-  await page.setViewportSize({ width: 1280, height: 800 });
   await page.locator('#nav-fwd').click();
   await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
   await settled();
 
-  // ⋯ opens the row menu (the same grouped, iconed list as a list row's ⋯),
-  // without Properties since this is that page; Escape closes it and stays
+  // ⋯ opens the row menu, without Properties since this is that page, and
+  // with no "Add to Library": installing is how a game joins the library
+  const items = ['Install', 'Favorite', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Pack'];
   await detail.locator('[data-detail-menu]').click();
   const menu = page.locator('#ctxmenu');
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
+  await expect(menu.locator('.mi')).toHaveText(items);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
-  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(7);
+  await expect(menu.locator('.mi .mi-ico.ico')).toHaveCount(items.length);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(detail).toBeVisible();
   // Right-click on the page's head opens the same menu
   await detail.locator('.album-title').click({ button: 'right' });
-  await expect(menu).toBeVisible();
-  await expect(menu.locator('.mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
+  await expect(menu.locator('.mi')).toHaveText(items);
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
 
   // More from the uploader opens that title's page; Back walks back to this one
-  const more = detail.locator('.section', { hasText: 'More from rohanjackson071' });
+  const more = detail.locator('.section', { hasText: `More from ${ROHAN}` });
   await more.locator('.game-card', { hasText: 'Halo' }).click();
   await expect(detail.locator('.album-title')).toHaveText('Halo: Combat Evolved');
   await page.locator('#nav-back').click();
   await expect(detail.locator('.album-title')).toHaveText('Zoo Tycoon (Complete Collection)');
 
-  // The uploader under the title leads to their wall
+  // The uploader under the title leads to their pack
   await detail.locator('.album-sub').click();
-  await expect(page.locator('#heading')).toHaveText('rohanjackson071');
+  await expect(page.locator('#heading')).toHaveText(ROHAN);
 });
 
-test('The port shelf is the built-in list: no curated badge, no game data, no other shelf', async () => {
-  await expect(page.locator('#nav-shelves .navitem')).toHaveCount(1);
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+test('Ports is the built-in list: no curated badge, no game data', async () => {
+  await openPorts();
   await expect(page.locator('#body .port-card')).toHaveCount(8);
   await expect(page.locator('#body .port-card .curated-badge')).toHaveCount(0);
   await expect(page.locator('#body .port-card .tag')).toHaveCount(0);
-  await expect(page.locator('#body .lib-count')).toContainText('Source: Built-in');
-  await page.locator('#btn-settings').click();
-  await expect(page.locator('#setting-full-quiver')).toHaveCount(0);
-  await expect(page.locator('#quiver-import')).toHaveCount(0);
-  await page.locator('#btn-settings').click();
+  await expect(page.locator('#body .lib-count')).toContainText('Paste a GitHub, GitLab or Codeberg link');
 });
 
 test('Card states from tags: source only links the repository, work in progress and engines still install', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+  await openPorts();
   const bfbb = page.locator('.port-card', { hasText: 'BFBB' });
   await expect(bfbb.locator('.state-badge')).toHaveText('Source only');
   await expect(bfbb.locator('.play-btn')).toHaveCount(0);
@@ -173,7 +172,6 @@ test('Card states from tags: source only links the repository, work in progress 
   const detail = page.locator('#detail');
   await expect(detail.locator('.source-only-note')).toHaveText('Source only, no download');
   await expect(detail.locator('#btn-install-port')).toHaveCount(0);
-  await expect(detail.locator('[data-toggle-port]')).toHaveCount(0);
   await expect(detail.locator('.album-actions [data-href]')).toHaveAttribute('data-href', 'https://github.com/bfbbdecomp/bfbb');
   await page.keyboard.press('Escape');
 
@@ -193,29 +191,7 @@ test('Card states from tags: source only links the repository, work in progress 
   await page.keyboard.press('Escape');
 });
 
-test('Add puts a port in the library and Remove takes it out', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
-  await page.locator('.port-card', { hasText: 'Banjo-Kazooie' }).click();
-  // What installs: the release binary, and only that
-  await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
-  await expect(page.locator('#detail .tracklist .track')).toContainText('GitHub release from BanjoRecomp/BanjoRecomp');
-  await expect(page.locator('#detail .album-cover')).toHaveClass(/square/);
-  await page.locator('#detail [data-toggle-port]').click();
-  await expect(page.locator('#detail [data-toggle-port]')).toHaveText('Remove from library');
-  await page.locator('#nav-back').click();
-  await expect(page.locator('#heading')).toHaveText('Built-in ports');
-
-  await page.locator('[data-view="library"]').click();
-  // The shelves under it show every port; this is the Installed ports section's
-  const installed = page.locator('#body .section', { has: page.locator('h2', { hasText: 'Installed ports' }) }).locator('.port-card');
-  await expect(installed).toHaveCount(1);
-  await installed.click();
-  await page.locator('#detail [data-toggle-port]').click();
-  await page.keyboard.press('Escape');
-  await expect(installed).toHaveCount(0);
-});
-
-test('Install downloads, extracts and registers an archive.org game', async () => {
+test('Install downloads, extracts and registers an archive.org game, and it shows in the Library', async () => {
   await page.locator('#q').fill('Halo');
   await page.locator('.game-card', { hasText: 'Halo: Combat Evolved' }).first().click();
   await page.locator('#btn-download').click();
@@ -231,9 +207,13 @@ test('Install downloads, extracts and registers an archive.org game', async () =
   await expect(page.locator('#q')).toHaveValue('Halo');
   await expect(page.locator('#heading')).toHaveText('Search');
   await page.keyboard.press('Escape');
+
+  await page.locator('.sidebar [data-view="library"]').click();
+  await expect(page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' })).toBeVisible();
+  await expect(page.locator('#n-library')).toHaveText('1');
 });
 
-test('An installed upload with a newer one on archive.org gets the Newer release badge', async () => {
+test("An installed upload with a newer one on archive.org gets the Newer release badge, and What's new lists it", async () => {
   await page.locator('#q').fill('Zoo Tycoon');
   const card = page.locator('.game-card', { hasText: 'Zoo Tycoon' }).first();
   await card.click();
@@ -248,11 +228,27 @@ test('An installed upload with a newer one on archive.org gets the Newer release
   await page.keyboard.press('Escape');
   await expect(card.locator('.tag.update')).toHaveText('NEWER RELEASE');
   await page.keyboard.press('Escape');
+
+  // What's new: the newer upload, until it's dismissed
+  await expect(page.locator('#n-news')).toHaveText('1');
+  await page.locator('#btn-news').click();
+  const pop = page.locator('#pop');
+  const row = pop.locator('.news-row', { hasText: 'Zoo Tycoon' });
+  await expect(row).toContainText('Newer upload on archive.org');
+  await row.locator('[data-action="news-dismiss"]').click();
+  await expect(row).toHaveCount(0);
+  await expect(pop).toBeVisible();
+  await expect(pop.locator('.news-empty')).toContainText('Nothing new');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#n-news')).toHaveText('');
 });
 
-test('Perfect Dark installs its GitHub build only', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+test('Perfect Dark installs its GitHub build only, and joins the Library', async () => {
+  await openPorts();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
+  // What installs: the release binary, and only that
+  await expect(page.locator('#detail .tracklist .track')).toHaveCount(1);
+  await expect(page.locator('#detail .album-cover')).toHaveClass(/square/);
   await page.locator('#btn-install-port').click();
   await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
   const dir = path.join(stack.dataDir, 'games', 'PerfectDark-PerfectDarkPCPort');
@@ -260,17 +256,20 @@ test('Perfect Dark installs its GitHub build only', async () => {
   expect(fs.readdirSync(path.join(dir, 'data'))).toEqual(['put_your_rom_here.txt']);
   await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
   await page.keyboard.press('Escape');
+
+  await page.locator('.sidebar [data-view="library"]').click();
+  await expect(page.locator('#body .port-card', { hasText: 'Perfect Dark' })).toBeVisible();
 });
 
 test('Right-click menu on a port card: installed actions, Launch Options submenu, Escape closes', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+  await openPorts();
   const card = page.locator('.port-card', { hasText: 'Perfect Dark' });
   await card.click({ button: 'right' });
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
   // Cider 2's context menu: an icon per item, sections split by dividers, a chevron for a submenu
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi')).toHaveText(['Launch', 'Open Folder', 'Readme', 'Launch Options',
-    'Remove from Library', 'Properties', 'Go to Shelf', 'Go to Source Repo', 'Copy Link', 'Delete']);
+    'Properties', 'Go to Ports', 'Go to Source Repo', 'Copy Link', 'Delete']);
   await expect(menu.locator(':scope > .sep')).toHaveCount(3);
   await expect(menu.locator(':scope > .mi .mi-ico.ico').first()).toBeVisible();
   await expect(menu.locator('.has-sub > .mi .chev')).toBeVisible();
@@ -280,7 +279,6 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await expect(menu).toBeHidden();
 
   // Not installed: Download and Locate Existing Install
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
   await page.locator('.port-card', { hasText: 'Mario Kart 64' }).click({ button: 'right' });
   await expect(menu.locator(':scope > .mi, :scope > .has-sub > .mi').first()).toHaveText('Download');
   await expect(menu.locator('[data-menu="locate"]')).toBeVisible();
@@ -290,8 +288,8 @@ test('Right-click menu on a port card: installed actions, Launch Options submenu
   await page.keyboard.press('Escape');
 });
 
-test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab release', async () => {
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+test('Star Fox 64: Recompiled installs from its GitLab release', async () => {
+  await openPorts();
   await page.locator('.port-card', { hasText: 'Star Fox 64' }).click();
   const detail = page.locator('#detail');
   await expect(detail.locator('.tracklist .track')).toContainText('GitLab release from sonicdcer/Starfox64Recomp');
@@ -301,11 +299,15 @@ test('Star Fox 64: Recompiled installs from the curated shelf, from its GitLab r
   expect(fs.existsSync(path.join(dir, 'Starfox64Recompiled.exe'))).toBe(true);
   expect(fs.existsSync(path.join(dir, 'portable.txt'))).toBe(true);
   await expect(page.locator('#detail')).toContainText(`Installed to ${dir}`);
+  // The installed release is recorded, and it is the latest: no Update button
+  await expect(detail.locator('[data-action="install"]', { hasText: 'Update' })).toHaveCount(0);
+  const lib = await page.evaluate(() => api.getLibrary());
+  expect(Object.values(lib).find(l => /Starfox64Recomp/i.test(l.identifier))?.version).toBe('v1.0.3');
   await page.keyboard.press('Escape');
 });
 
-test("The wall's library header sorts, searches, lists and pages, after Cider's", async () => {
-  await openWall();
+test("A pack's header sorts by upload or update date, searches and lists, after Cider's", async () => {
+  await openPack(ROHAN);
   await settled();
   const titles = () => page.locator('#body .game-card .title').allInnerTexts();
   const header = page.locator('.album-header');
@@ -316,25 +318,27 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
     await expect(page.locator('#ddmenu')).toBeHidden();
   };
 
+  await header.locator('[data-pref="sort"]').click();
+  await expect(page.locator('#ddmenu [role="option"]')).toHaveText(['Newest upload', 'Recently updated', 'Title', 'Most downloaded']);
+  await page.keyboard.press('Escape');
+  // One sort control: picking a sort picks its order, and there is no paging
+  await expect(header.locator('[data-pref="order"], [data-pref="scroll"]')).toHaveCount(0);
+
   await choose('sort', 'name');
-  await choose('order', 'asc');
   await expect(header.locator('[data-pref="sort"]')).toHaveAccessibleName('Sort by: Title');
   const asc = await titles();
   expect(asc).toEqual([...asc].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
-  // From the keyboard: Down opens it on the chosen item, arrows move, Enter picks, Escape closes
-  await header.locator('[data-pref="order"]').focus();
+  // From the keyboard: Down opens it on the chosen item, Escape closes
+  await header.locator('[data-pref="sort"]').focus();
   await page.keyboard.press('ArrowDown');
   await expect(page.locator('#ddmenu [aria-selected="true"]')).toBeFocused();
-  await expect(page.locator('#ddmenu [aria-selected="true"]')).toHaveText('Ascending');
+  await expect(page.locator('#ddmenu [aria-selected="true"]')).toHaveText('Title');
   await page.keyboard.press('Escape');
   await expect(page.locator('#ddmenu')).toBeHidden();
-  await expect(header.locator('[data-pref="order"]')).toBeFocused();
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
-  await expect(page.locator('#ddmenu')).toBeHidden();
-  await expect(header.locator('[data-pref="order"]')).toHaveAccessibleName('Sort order: Descending');
-  expect(await titles()).toEqual([...asc].reverse());
+  await expect(header.locator('[data-pref="sort"]')).toBeFocused();
+
+  await choose('sort', 'updated');
+  await expect(header.locator('[data-pref="sort"]')).toHaveAccessibleName('Sort by: Recently updated');
 
   // Punctuation is ignored, as in Cider's library search; focus stays in the box
   await page.locator('#lib-search').fill('zoo-tycoon');
@@ -349,35 +353,23 @@ test("The wall's library header sorts, searches, lists and pages, after Cider's"
   await expect(page.locator('#body .list-row').first()).toBeVisible();
   await expect(page.locator('#body .game-card')).toHaveCount(0);
   await expect(header.getByRole('button', { name: 'List' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(header.getByRole('button', { name: 'Cover art' })).toHaveAttribute('aria-pressed', 'false');
   await header.getByRole('button', { name: 'Cover art' }).click();
   await expect(page.locator('#body .game-card').first()).toBeVisible();
-
-  await choose('scroll', 'paged');
-  await expect(header.locator('.pagination-container')).toBeVisible();
-  await expect(header.locator('.md-input-number')).toContainText('/ 1');
-  await choose('scroll', 'infinite');
   await choose('sort', 'dateAdded');
 });
 
-test("The wall's list view: Cider 2's song list, with sorting headers, a column picker and a ⋯ menu", async () => {
-  await openWall();
+test("A pack's list view: Cider 2's song list, with sorting headers, a column picker and a ⋯ menu", async () => {
+  await openPack('r4zel1ght');
   await settled();
   await page.locator('.album-header').getByRole('button', { name: 'List' }).click();
   const table = page.locator('#body .lv');
   const rows = table.locator('.lv-row');
-  const docs = ENABLED.flatMap(s => fixtures[s.uploader] || []);
-  await expect(rows).toHaveCount(new Set(docs.map(d => titleKey(d))).size);
+  await expect(rows).toHaveCount(packGroups('spideymaster661@gmail.com'));
   await expect(table.locator('.lv-row img, .lv-row [data-thumb]')).toHaveCount(0);
-
-  // Column headers: the fixtures have no release dates or sizes, so those stay out
-  const headers = table.locator('.lv-head [role="columnheader"] button[data-sort-col]');
-  await expect(headers).toHaveText(['Name', 'Uploader', 'Platform', 'Added', 'Downloads', 'Status']);
-  await expect(rows.first().locator('[role="cell"]').nth(4)).toHaveText('PC');
 
   // A header click sorts by it; a second click flips the order
   const names = () => rows.locator('.lv-title').allInnerTexts();
-  await headers.filter({ hasText: 'Name' }).click();
+  await table.locator('.lv-head button[data-sort-col="name"]').click();
   await expect(table.locator('.lv-th', { hasText: 'Name' })).toHaveAttribute('aria-sort', 'ascending');
   const asc = await names();
   expect(asc).toEqual([...asc].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())));
@@ -385,14 +377,10 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await table.locator('.lv-head button[data-sort-col="name"]').click();
   await expect(table.locator('.lv-th', { hasText: 'Name' })).toHaveAttribute('aria-sort', 'descending');
   expect(await names()).toEqual([...asc].reverse());
-  await table.locator('.lv-head button[data-sort-col="downloads"]').click();
-  const downloads = (await rows.locator('.lv-td.num').allInnerTexts()).map(t => Number(t.replace(/,/g, '')));
-  expect(downloads).toEqual([...downloads].sort((a, b) => b - a));
 
   // The column picker hides a column, and the choice is kept
   await table.locator('[data-col-picker]').click();
   const picker = page.locator('#ddmenu');
-  await expect(picker.locator('[role="option"][data-value="size"]')).toContainText('no data');
   await picker.locator('[role="option"][data-value="uploader"]').click();
   await expect(picker).toBeVisible();
   await expect(picker.locator('[role="option"][data-value="uploader"]')).toHaveAttribute('aria-selected', 'false');
@@ -400,9 +388,9 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await page.keyboard.press('Escape');
   await expect(picker).toBeHidden();
   await page.reload();
-  await openWall();
+  await openPack('r4zel1ght');
   await settled();
-  await expect(page.locator('#body .lv-head button[data-sort-col]')).toHaveText(['Name', 'Platform', 'Added', 'Downloads', 'Status']);
+  await expect(page.locator('#body .lv-head button[data-sort-col="uploader"]')).toHaveCount(0);
   await page.locator('#body [data-col-picker]').click();
   await page.locator('#ddmenu [role="option"][data-value="uploader"]').click();
   await page.keyboard.press('Escape');
@@ -415,7 +403,7 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await row.locator('.lr-more').click();
   const menu = page.locator('#ctxmenu');
   await expect(menu).toBeVisible();
-  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Add to Library', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Wall']);
+  await expect(menu.locator(':scope > .mi')).toHaveText(['Install', 'Favorite', 'Properties', 'Go to Uploader', 'View on archive.org', 'Copy Link', 'Hide from Pack']);
   await menu.locator('[data-menu="favorite"]').click();
   await expect(menu).toBeHidden();
   await expect(row.locator('.lv-star [data-ico="star-fill"]')).toBeVisible();
@@ -433,8 +421,6 @@ test("The wall's list view: Cider 2's song list, with sorting headers, a column 
   await page.locator('.album-header').getByRole('button', { name: 'Cover art' }).click();
   await page.locator('.album-header [data-pref="sort"]').click();
   await page.locator('#ddmenu [data-value="dateAdded"]').click();
-  await page.locator('.album-header [data-pref="order"]').click();
-  await page.locator('#ddmenu [data-value="desc"]').click();
 });
 
 test('Sidebar groups fold and stay folded', async () => {
@@ -474,7 +460,7 @@ test('Clicks on the search box reach it in the app: no drag region covers it, an
 });
 
 test('Cards lift on hover and pages rise in; with reduced motion, neither', async () => {
-  await openWall();
+  await openPack(ROHAN);
   const card = page.locator('#body .game-card').first();
   await card.hover();
   await expect.poll(() => card.evaluate(c => getComputedStyle(c).transform)).not.toBe('none');
@@ -493,98 +479,38 @@ test('Cards lift on hover and pages rise in; with reduced motion, neither', asyn
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   expect(await entered('settings')).toBe(false);
-  await openWall();
+  await openPack(ROHAN);
   await card.hover();
   expect(await card.evaluate(c => getComputedStyle(c).transform)).toBe('none');
   expect(await card.evaluate(c => getComputedStyle(c).transitionDuration)).toBe('0s');
   await page.emulateMedia({ reducedMotion: 'no-preference' });
 });
 
-test('Your sources: no switch or warning, user.json loads at once with no badge, a changed file asks first', async () => {
-  const modal = page.locator('#modal');
-  await page.locator('#btn-settings').click();
-  await expect(page.locator('#setting-additional')).toHaveCount(0);
-  await expect(page.locator('#nav-add')).toBeVisible();
-
-  // user.json: loaded, its invalid entry and its conflict with the built-in list listed
-  const file = path.join(stack.dataDir, 'user.json');
-  fs.copyFileSync(path.join(__dirname, 'fixtures', 'user.json'), file);
-  await page.locator('#setting-user-file').fill('https://example.com/user.json');
-  await page.locator('[data-action="user-file-save"]').click();
-  await expect(page.locator('#toast')).toContainText('not a URL');
-  await page.locator('#setting-user-file').fill(file);
-  await page.locator('[data-action="user-file-save"]').click();
-  await expect(page.locator('#user-file-counts')).toHaveText('Loaded: 2 archive.org downloads, 1 GitHub release.');
-  await expect(page.locator('#user-invalid')).toContainText('github[1] not a repo: repository must be owner/repo');
-  await expect(page.locator('#user-conflicts')).toContainText('rk-e2e-halo-ce (user.json archive): a built-in uploader has it');
-
-  // Your cards look like any other
-  await openWall();
-  const demo = page.locator('.game-card', { hasText: 'User Demo' });
-  await expect(demo).toBeVisible();
-  await expect(page.locator('.user-badge')).toHaveCount(0);
-  await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await expect(page.locator('.port-card', { hasText: 'User Tool' })).toBeVisible();
-  await expect(page.locator('.user-badge, .curated-badge')).toHaveCount(0);
-
-  // First install pins the file; a different file later asks before installing
-  await openWall();
-  await demo.click();
-  await expect(page.locator('#detail .user-note')).toHaveCount(0);
-  await page.locator('#btn-download').click();
-  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
-  const pinsFile = path.join(stack.dataDir, 'pins.json');
-  const pins = JSON.parse(fs.readFileSync(pinsFile, 'utf8'));
-  expect(Object.keys(pins)).toEqual(['archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip']);
-  fs.writeFileSync(pinsFile, JSON.stringify({ 'archive:rk-e2e-user-demo\nrk-e2e-user-demo.zip': 'f'.repeat(40) }));
-  // Reinstall over it, as an update would (deleting needs the desktop app)
-  const reinstall = page.evaluate(() => installGame(state.detail.version)); // eslint-disable-line no-undef
-  await expect(modal.locator('.modal-title')).toHaveText('File changed');
-  await expect(modal.locator('.modal-content')).toContainText('rk-e2e-user-demo.zip from User Demo is not the file you installed before');
-  await modal.locator('.md-btn-primary', { hasText: 'Install anyway' }).click();
-  await reinstall;
-  await expect(page.locator('#toast')).toContainText('User Demo is installed.');
-  expect(JSON.parse(fs.readFileSync(pinsFile, 'utf8'))).toEqual(pins);
-  await page.keyboard.press('Escape');
-
-});
-
-test('Add: an account link joins the wall, and Settings removes it', async () => {
-  const modal = page.locator('#modal');
+test('Paste an account link: it becomes a pack; right-click the pack to remove it', async () => {
   const saved = () => JSON.parse(fs.readFileSync(path.join(stack.dataDir, 'settings.json'), 'utf8')).sources || [];
-  await page.locator('#nav-add').click();
-  await expect(modal.locator('.modal-title')).toHaveText('Add');
-  await modal.locator('#modal-input').fill('https://archive.org/details/@stranger');
-  await modal.locator('#modal-input').press('Enter');
+  await pasteLink('https://archive.org/details/@stranger');
   // The fake archive.org has no such account, so only the saved list and the sidebar show it
   await expect.poll(() => saved().some(s => s.uploader === '@stranger')).toBe(true);
-  await expect(page.locator('#nav-uploaders .navitem', { hasText: 'stranger' })).toBeVisible();
+  const nav = page.locator('#nav-uploaders .navitem', { hasText: 'stranger' });
+  await expect(nav).toBeVisible();
+  await expect(page.locator('#q')).toHaveValue('');
 
-  await page.locator('#btn-settings').click();
-  await expect(page.locator('#setting-sources')).toHaveCount(0);
-  const row = page.locator('#sources-list .repo-row', { hasText: 'stranger' });
-  await expect(row).toContainText('archive.org account');
-  await row.locator('[data-action="source-remove"]').click();
+  await nav.click({ button: 'right' });
+  const menu = page.locator('#ctxmenu');
+  await expect(menu.locator('.mi')).toHaveText(['Open on archive.org', 'Remove Pack']);
+  await menu.locator('[data-menu="pack-remove"]').click();
   await expect.poll(() => saved().some(s => s.uploader === '@stranger')).toBe(false);
-  await expect(row).toHaveCount(0);
-
-  // Something that isn't a link says what to paste
-  await page.locator('#nav-add').click();
-  await modal.locator('#modal-input').fill('banjo');
-  await modal.locator('.md-btn-primary').click();
-  await expect(page.locator('#toast')).toContainText('Paste a link');
+  await expect(nav).toHaveCount(0);
 });
 
-test('Hide from Wall: the upload leaves the wall, and Settings brings it back', async () => {
-  await openWall();
+test('Hide from Pack: the upload leaves the pack, and Show hidden brings it back', async () => {
+  await openPack('r4zel1ght');
   const card = page.locator('.game-card', { hasText: 'The Sims' }).first();
   await card.click({ button: 'right' });
   await page.locator('#ctxmenu [data-menu="hide"]').click();
   await expect(page.locator('#toast')).toContainText('Hid The Sims');
   await expect(page.locator('.game-card', { hasText: 'The Sims' })).toHaveCount(0);
-  await page.locator('#btn-settings').click();
-  await page.locator('#hidden-uploads [data-action="unhide-all"]').click();
-  await openWall();
+  await page.locator('#body [data-action="unhide-all"]').click();
   await expect(page.locator('.game-card', { hasText: 'The Sims' }).first()).toBeVisible();
 });
 
@@ -595,40 +521,59 @@ test('Report an issue: Settings, a game and a port each open a prefilled GitHub 
   expect(u.origin + u.pathname).toBe('https://github.com/yabo-san/RohanKar-Launcher/issues/new');
   await expect.poll(async () => (await href(page.locator('#btn-report-issue'))).searchParams.get('body')).toMatch(/App: y4bo \d/);
 
-  await openWall();
+  await openPack(ROHAN);
   await page.locator('.game-card', { hasText: 'Halo' }).click();
   u = await href(page.locator('#detail a', { hasText: 'Report an issue' }));
   expect(u.searchParams.get('body')).toContain('Game: Halo: Combat Evolved (archive.org item rk-e2e-halo-ce');
   await page.keyboard.press('Escape');
 
-  await page.locator('#nav-shelves .navitem', { hasText: 'Built-in' }).click();
+  await openPorts();
   await page.locator('.port-card', { hasText: 'Perfect Dark' }).click();
   u = await href(page.locator('#detail a', { hasText: 'Report an issue' }));
   expect(u.searchParams.get('body')).toMatch(/Port: Perfect Dark \(.+\/perfect_dark\)/);
   await page.keyboard.press('Escape');
 });
 
-test('Add a repo link: it lands on Your ports, tries to install, and Settings removes it', async () => {
-  const modal = page.locator('#modal');
-  await page.locator('#nav-add').click();
-  await modal.locator('#modal-input').fill('https://github.com/someone/banjo-fork/releases');
-  await modal.locator('.md-btn-primary').click();
-  const file = path.join(stack.dataDir, 'catalogs', 'repos.local.json');
-  const saved = () => (fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : null);
-  await expect.poll(saved).toEqual([{ repository: 'someone/banjo-fork' }]);
+const reposFile = () => path.join(stack.dataDir, 'catalogs', 'repos.local.json');
+const savedRepos = () => (fs.existsSync(reposFile()) ? JSON.parse(fs.readFileSync(reposFile(), 'utf8')) : null);
+
+test('Paste a repo link: it joins Ports and tries to install; Remove Repo takes it out', async () => {
+  await pasteLink('https://github.com/someone/banjo-fork/releases');
+  await expect.poll(savedRepos).toEqual([{ repository: 'someone/banjo-fork' }]);
   // The fake GitHub has no such repo, so the install it starts fails and says so
   await expect(page.locator('#detail')).toContainText('banjo-fork');
   await expect(page.locator('#toast')).toContainText('banjo-fork', { timeout: 30_000 });
   await page.keyboard.press('Escape');
 
-  await page.locator('#nav-shelves .navitem', { hasText: 'Your ports' }).click();
-  await expect(page.locator('.port-card', { hasText: 'banjo-fork' })).toBeVisible();
+  await openPorts();
+  const card = page.locator('.port-card', { hasText: 'banjo-fork' });
+  await expect(card).toBeVisible();
+  await card.click({ button: 'right' });
+  await page.locator('#ctxmenu [data-menu="remove-repo"]').click();
+  await expect(card).toHaveCount(0);
+  await expect.poll(savedRepos).toEqual([]);
+});
 
-  await page.locator('#btn-settings').click();
-  const row = page.locator('#sources-list .repo-row', { hasText: 'someone/banjo-fork' });
-  await expect(row).toContainText('GitHub');
-  await row.locator('[data-action="repo-remove"]').click();
-  await expect(row).toHaveCount(0);
+test('Paste a repo whose release has several Windows files: pick one, it installs, and updates take the same file', async () => {
+  await pasteLink('https://github.com/someone/two-builds');
+  const modal = page.locator('#modal');
+  await expect(modal.locator('.modal-title')).toHaveText('Which file from someone/two-builds v2?');
+  const opts = modal.locator('.file-opt');
+  await expect(opts).toHaveCount(3);
+  // The automatic pick is first and chosen; there is no "bookmark only" choice
+  await expect(opts.first()).toContainText('two-builds-win64.zip');
+  await expect(opts.first().locator('input')).toBeChecked();
+  await expect(modal.locator('.md-btn')).toHaveText(['Cancel', 'Install']);
+  await opts.filter({ hasText: 'two-builds-win32.zip' }).click();
+  await modal.locator('.md-btn-primary').click();
+  await expect(modal).toHaveCount(0);
+  await expect.poll(savedRepos).toEqual([{ repository: 'someone/two-builds', assetPattern: '^two-builds-win\\d+\\.zip$' }]);
+  await expect(page.locator('#detail #btn-play')).toBeVisible({ timeout: 30_000 });
+  const lib = await page.evaluate(() => api.getLibrary());
+  const row = Object.values(lib).find(l => /two-builds/i.test(l.identifier));
+  expect(row?.version).toBe('v2');
+  expect(fs.existsSync(path.join(row.install_dir, 'TwoBuilds.exe'))).toBe(true);
+  await page.keyboard.press('Escape');
 });
 
 test("A game page shows Rohan's feature badges and the archive.org reviews; Readme opens the one in its folder", async () => {
@@ -664,11 +609,22 @@ test('A new y4bo release shows a bar with its notes and a link to get it', async
   await expect(bar).toBeHidden();
 });
 
-test('Settings has About, with the credit links', async () => {
+test('Settings: paste a config to add packs; About has no personal social links', async () => {
   await page.locator('#btn-settings').click();
+  await page.locator('[data-action="config-paste"]').click();
+  const modal = page.locator('#modal');
+  await expect(modal.locator('.modal-title')).toHaveText('Paste a config');
+  await modal.locator('#modal-input').fill(JSON.stringify({ y4bo: 1, packs: [{ uploader: '@friend', label: 'Friend' }] }));
+  await modal.locator('.md-btn-primary').click();
+  await expect(page.locator('#toast')).toContainText('Added 1 pack, 0 repos, 0 hidden uploads.');
+  await expect(page.locator('#nav-uploaders .navitem', { hasText: 'Friend' })).toBeVisible();
+  const config = await page.evaluate(() => api.getConfig());
+  expect(config.packs.map(p => p.uploader)).toContain('@friend');
+  expect(config.repos.map(r => r.repository)).toEqual(['someone/two-builds']);
+
   const about = page.locator('#about');
-  await expect(about.locator('button')).toHaveText(['GitHub', 'Rohan Kar on X', 'Support Rohan Kar on Ko-fi', 'Donate to the Internet Archive']);
-  await expect(about.locator('[data-href="https://ko-fi.com/rohankarmoon"]')).toHaveCount(1);
-  // The classic interface is gone, and so is its switch
-  await expect(page.locator('#btn-classic-ui')).toHaveCount(0);
+  await expect(about.locator('button')).toHaveText(['y4bo on GitHub', 'Donate to the Internet Archive']);
+  await expect(about).toContainText("Built on Rohan Kar's launcher");
+  // No Playnite export button (the extension reads the export file), no classic UI switch
+  await expect(page.locator('#btn-classic-ui, [data-action="playnite-export"], #setting-user-file')).toHaveCount(0);
 });

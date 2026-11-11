@@ -46,8 +46,7 @@ test('the preview shows the feeds on main, not the build-time copies', async ({ 
   feed['overrides.json'] = { 'rk-e2e-halo-ce': { title: 'Halo, renamed on main' } };
 
   await page.goto(`${base}/new/index.html`);
-  await page.locator('.sidebar [data-view="library"]').click();
-  await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
+  await page.locator('#nav-uploaders .navitem', { hasText: 'rohanjackson071' }).click();
   await expect(page.locator('#body')).toContainText('Halo, renamed on main');
   await expect(page.locator('body')).toContainText('feeds live');
 });
@@ -56,7 +55,6 @@ test('a feed that fails falls back to what the build saved', async ({ page }) =>
   for (const k of Object.keys(feed)) delete feed[k];
 
   await page.goto(`${base}/new/index.html`);
-  await page.locator('.sidebar [data-view="library"]').click();
-  await page.locator('#body .h2link', { hasText: 'Uploaders' }).click();
+  await page.locator('#nav-uploaders .navitem', { hasText: 'rohanjackson071' }).click();
   await expect(page.locator('#body')).toContainText('Halo: Combat Evolved');
 });

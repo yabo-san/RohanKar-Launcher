@@ -216,12 +216,37 @@ URL-encoded (`owner%2Frepo`).
 
 | route | does |
 | --- | --- |
-| `GET /repos` | `{ repos: [{ repository, name?, folderName?, releaseAssetFilter? }] }` |
+| `GET /repos` | `{ repos: [{ repository, name?, folderName?, releaseAssetFilter?, assetPattern? }] }` |
 | `PUT /repos/:repo` | Adds one (replacing any for that repo); unknown fields are dropped; `400 bad_repo` names every problem |
 | `DELETE /repos/:repo` | Removes it (`204`), `404` if it isn't there |
+| `GET /repos/:repo/release?source=gitlab` | The latest release's files, for the file picker: `{ tag, files: [{ name, size, windows, pattern }], auto, choose }`. `auto` is the file an install would take; `choose` is true when the release has several Windows files or none. A file's `pattern` saved as the repo's `assetPattern` makes every update take the same file. `502 release_failed` when the forge can't be reached |
 
 ```sh
 curl -X PUT -d '{"name":"My Port"}' http://127.0.0.1:7777/v1/repos/owner%2Fport
+```
+
+### `GET /ports/updates`
+
+Installed ports whose repo has a newer release than the one installed (the
+tag is recorded at install). Releases are checked at most once an hour per
+port; a repo that can't be reached is left out.
+
+```sh
+curl http://127.0.0.1:7777/v1/ports/updates
+# {"updates":[{"id":"quiver:curated:sonicdcer/starfox64recomp","installed":"v1.0.3","latest":"v1.1.0"}]}
+```
+
+### `GET /config`, `PUT /config`
+
+Your config: the packs you follow, the repos you added and the uploads you
+hid, as one JSON block to copy to another machine. `PUT` takes `{ text }`
+(the pasted text) or the config itself, and merges it: nothing already there
+is removed. It answers `{ added: { packs, repos, hidden }, errors }`, or
+`400 bad_config` with the reason.
+
+```sh
+curl http://127.0.0.1:7777/v1/config
+# {"y4bo":1,"packs":[{"uploader":"@rohan","label":"Rohan"}],"repos":[{"repository":"owner/port"}],"hidden":["some-item"]}
 ```
 
 ### `GET /library`

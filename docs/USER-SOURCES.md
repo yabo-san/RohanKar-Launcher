@@ -11,21 +11,27 @@ launcher works as a download client for any archive.org upload; Open folder gets
 
 ## Where you add your own
 
-Everything goes in through **Add** (the sidebar, the + in the title row, or pasting a link
-anywhere in the window). Paste a link and press Enter:
+Paste a link into the search box at the top of the sidebar (or anywhere in the window) and
+press Enter:
 
 | You paste | What happens |
 | --- | --- |
-| `https://archive.org/details/@handle` (or `@handle`, or the account's email) | The account's software uploads join the game wall |
-| `https://archive.org/details/<identifier>` | It asks: just this upload, or the whole account that uploaded it |
-| `https://github.com/owner/repo` (or `owner/repo`) | The repo joins Your ports and its latest release's Windows build installs |
+| `https://archive.org/details/@handle` | The account becomes a pack: its own entry under Packs in the sidebar |
+| `https://archive.org/details/<identifier>` | It asks: get just this game (it installs), or follow the uploader as a pack |
+| `https://github.com/owner/repo` | The repo joins Ports and its latest release installs |
 | `https://gitlab.com/group/project` (subgroups too) | The same, from GitLab's releases |
 
-A repo whose latest release has no Windows build stays on Your ports; right-click opens its page.
+When a release has several Windows files (or none that look like one), the app asks which file
+to install. The pick is saved as the repo's `assetPattern`, with version numbers made generic,
+so updates take the same file. A repo whose release has nothing to install stays on Ports;
+right-click opens its page.
 
-Right-click a game and **Hide from Wall** to leave its uploads out (an installed game keeps its
-card). Settings > Your sources lists every account, upload and repo you added, each with Remove,
-and brings hidden uploads back.
+Right-click a game and **Hide from Pack** to leave its uploads out (an installed game keeps its
+card); **Show hidden** on the pack's page brings them back. Right-click a pack in the sidebar to
+open it on archive.org or remove it, and right-click a repo you added to remove it.
+
+**Your config** in Settings copies the packs you follow, the repos you added and the uploads you
+hid as one block of JSON, and pastes one back in. Pasting only adds; nothing you have is removed.
 
 Settings also takes an optional **GitHub token**. GitHub allows 60 release checks an hour without
 one; with one, it's sent on GitHub API requests only and never logged.
@@ -38,7 +44,7 @@ its `handles` is that built-in account, not a second one.
 
 ## user.json
 
-A local file (no URLs for now), named by its full path in Settings. Schema version 1, three arrays:
+A local file (no URLs for now), named by its full path as `userSourcesFile` in settings.json (the app no longer has a Settings field for it; Your config covers the same ground). Schema version 1, three arrays:
 
 ```json
 {
@@ -63,7 +69,7 @@ A local file (no URLs for now), named by its full path in Settings. Schema versi
   optional (archive.org's title otherwise); `files` lists sha1s for files you want checked.
 - `github`: a standalone GitHub release binary: `repository`, and optionally `name`,
   `folderName`, `assetPattern` and the `sha1` of the release asset. A repository no catalog lists
-  shows on Your ports.
+  shows on Ports.
 - `exclude`: uploads to leave off the wall, from any uploader, built-in ones included: identifiers
   or item URLs, as for `archive`. Settings' `- ` lines do the same.
 

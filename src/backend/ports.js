@@ -81,6 +81,26 @@ function pickAsset(assets, { pattern = null, filter = null } = {}) {
   if (!ranked.length) return { error: 'No Windows build in the latest release', names: all.map(a => a.name) };
   return { asset: ranked[0] };
 }
+// A picked asset's name as an assetPattern that still matches the next
+// release's: version numbers become \d+, the rest is literal.
+// "pd-x86_64-windows-1.2.zip" -> "^pd-x\d+_\d+-windows-\d+\.\d+\.zip$"
+function patternFor(name) {
+  const lit = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return `^${lit.replace(/\d+/g, '\\d+')}$`;
+}
+
+// What a release offers, for the file picker: every asset's name and the
+// pattern that would pick it again, the Windows-looking ones first, and the
+// one pickAsset takes on its own. choose: true when there's a real choice
+// (several Windows-looking files, or none).
+function releaseFiles(release) {
+  const all = (release?.assets || []).filter(a => a && a.name && a.browser_download_url);
+  const win = (a) => LOOKS_WINDOWS.test(a.name) && !NOT_WINDOWS.test(a.name);
+  const files = all.slice().sort((a, b) => win(b) - win(a))
+    .map(a => ({ name: a.name, size: a.size ?? null, windows: win(a), pattern: patternFor(a.name) }));
+  const auto = pickAsset(all).asset?.name || null;
+  return { tag: release?.tag_name || null, files, auto, choose: files.filter(f => f.windows).length !== 1 && files.length > 0 };
+}
 const rank = (name) => (PREFER_64.test(name) ? 2 : 0) - (NOT_64.test(name) ? 1 : 0);
 
 function sha1File(file) {
@@ -124,5 +144,5 @@ function portTraits(entry = {}) {
   };
 }
 
-module.exports = { pickRelease, pickAsset, toRegExp, sha1File, inside, releaseRoot, portTraits,
+module.exports = { pickRelease, pickAsset, patternFor, releaseFiles, toRegExp, sha1File, inside, releaseRoot, portTraits,
   releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, ARCHIVE_EXT };

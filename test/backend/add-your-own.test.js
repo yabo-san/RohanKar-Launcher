@@ -146,7 +146,7 @@ test('fetchSource: an unknown handle, a failing endpoint, an item URL, and junk'
   await assert.rejects(archive.fetchSource({ uploader: '@nobody' }), /no uploads found for @nobody/);
   await assert.rejects(archive.fetchSource({ uploader: '@flaky' }), /HTTP 404/);
   assert.deepEqual(await archive.fetchSource({ uploader: 'https://archive.org/details/my-demo' }), [
-    { identifier: 'my-demo', title: 'My Demo', description: null, date: '2024', addeddate: null, downloads: null, subject: null },
+    { identifier: 'my-demo', title: 'My Demo', description: null, date: '2024', addeddate: null, updatedate: null, downloads: null, subject: null },
   ]);
   await assert.rejects(archive.fetchSource({ uploader: 'https://archive.org/details/missing' }), /isn't an archive.org item/);
   await assert.rejects(archive.fetchSource({ uploader: 'two words' }), /isn't an email, @handle or archive.org URL/);

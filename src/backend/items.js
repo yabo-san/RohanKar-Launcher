@@ -148,6 +148,8 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     title:       getTitle(doc),
     source:      { type: 'archive.org', uploader: doc._source.uploader, label: doc._source.label || doc._source.uploader },
     addeddate:   doc.addeddate || null,
+    // When the upload last changed on archive.org (a single date, the newest)
+    updatedate:  [].concat(doc.updatedate || []).sort().pop() || null,
     date:        doc.date || null,
     downloads:   doc.downloads ?? null,
     description: doc.description ?? null,

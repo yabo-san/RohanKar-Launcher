@@ -18,7 +18,8 @@ proper frontend looks like. **The frontend is vibecoded.**
   and extract (zip, 7z, rar).
 - **GitHub and GitLab:** install a repo's latest release build. A few personal picks are built in;
   add any other repo yourself.
-- **Add your own:** archive.org uploaders in Settings, single archive.org items or repos in a `user.json`.
+- **Add your own:** paste an archive.org uploader, a single upload or a GitHub/GitLab repo link into the search box.
+  Settings copies your setup out as text and pastes one back in.
   Want your own built-in list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
 - **Launch:** picks the right exe, or lets you choose when there are several.
 - **Add to Steam:** adds an installed game to Steam as a non-Steam shortcut (Big Picture, Steam Deck).

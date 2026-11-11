@@ -16,6 +16,7 @@ const disk = require('./disk');
 const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
 const { classifyLink } = require('./links');
+const config = require('./config');
 
 const API_VERSION = 'v1';
 const HOST = '127.0.0.1';
@@ -177,6 +178,41 @@ function createApi(backend) {
   route('DELETE', '/repos/:repo', ({ params }) => {
     if (!catalogs.removeRepo(params.repo)) throw new HttpError(404, 'not_found', `No repo of yours for ${params.repo}`);
     return { status: 204 };
+  });
+  // The files of a repo's latest release, for the picker when it's added
+  // (?source=gitlab for GitLab). { tag, files: [{ name, windows, pattern }], auto, choose }
+  route('GET', '/repos/:repo/release', async ({ params, query }) => {
+    const item = { repository: params.repo, repositorySource: query.source === 'gitlab' ? 'gitlab' : null };
+    try { return { body: await installs.releaseFiles(item) }; }
+    catch (e) { throw new HttpError(502, 'release_failed', e.message); }
+  });
+
+  // Installed ports with a newer release out: [{ id, installed, latest }]
+  route('GET', '/ports/updates', async () => {
+    await catalogs.warm();
+    return { body: { updates: await installs.portUpdates(catalogs.items()) } };
+  });
+
+  // ─── Your config: what the user added, to copy and paste (config.js) ─────
+  const currentConfig = async () => ({
+    sources: sourcesFromSettings(settings.load(), await backend.getDefaultSources()),
+    repos: catalogs.localRepos(),
+    hidden: settings.load().excludeItems || [],
+  });
+  route('GET', '/config', async () => ({ body: config.buildConfig(await currentConfig()) }));
+  // { text } (pasted) or a config object; merges, and answers what it added
+  route('PUT', '/config', async ({ body }) => {
+    const b = requireObject(body);
+    const r = config.readConfig(typeof b.text === 'string' ? b.text : b);
+    if (!r.ok) throw new HttpError(400, 'bad_config', r.error);
+    const m = config.mergeConfig(await currentConfig(), r.config);
+    const bad = [];
+    for (const repo of m.repos) {
+      const a = catalogs.addRepo(repo);
+      if (!a.ok) bad.push(`${repo.repository}: ${a.errors.join('; ')}`);
+    }
+    settings.save({ sources: m.sources, excludeItems: m.excludeItems });
+    return { body: { added: { ...m.added, repos: m.added.repos - bad.length }, errors: bad } };
   });
 
   // ─── Library ──────────────────────────────────────────────────────────────

@@ -10,6 +10,8 @@
  *   - GitLab, for Star Fox 64: Recompiled: /projects/sonicdcer%2FStarfox64Recomp/releases is
  *     test/fixtures/gitlab's copy of the real response, its links pointing here; the Windows
  *     link is a zip with no extension, as on GitLab
+ *   - GitHub, for a pasted repo with two Windows builds: /repos/someone/two-builds/releases
+ *     lists a win64 zip, a win32 zip and a Linux tarball, so adding it asks which file
  *   - /curated-ports.json is fixtures/curated-ports.json: the curated shelf
  *   - /metadata/rk-e2e-user-demo is the archive.org item fixtures/user.json adds
  *   - anything else (covers, overrides.json, uploaders.json) is a 404, so the
@@ -29,6 +31,8 @@ const PD_BUILD = makeZip({
   'pd-x86_64-windows/pd.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.pal.x86_64.exe': 'MZ', 'pd-x86_64-windows/pd.jpn.x86_64.exe': 'MZ',
   'pd-x86_64-windows/SDL2.dll': 'DLL', 'pd-x86_64-windows/data/put_your_rom_here.txt': 'fixture',
 });
+// someone/two-builds: either Windows file is a zip with one exe
+const TWO_BUILDS = makeZip({ 'TwoBuilds.exe': 'MZ' });
 
 // URL → { status, type, body }; base is where this server answers, for the
 // asset links in a release
@@ -52,6 +56,12 @@ function answer(url, base = '') {
     ] }]), 'application/json');
   }
   if (url.pathname === '/gh/pd-x86_64-windows.zip') return reply(200, PD_BUILD, 'application/zip');
+
+  if (url.pathname === '/repos/someone/two-builds/releases') {
+    return reply(200, JSON.stringify([{ tag_name: 'v2', assets: ['two-builds-linux.tar.gz', 'two-builds-win64.zip', 'two-builds-win32.zip']
+      .map(name => ({ name, browser_download_url: `${base}/gh/${name}` })) }]), 'application/json');
+  }
+  if (/^\/gh\/two-builds-win(32|64)\.zip$/.test(url.pathname)) return reply(200, TWO_BUILDS, 'application/zip');
 
   if (url.pathname === '/projects/sonicdcer%2FStarfox64Recomp/releases') {
     const releases = require('../test/fixtures/gitlab/starfox64recomp-releases.json').map(r => ({ ...r, assets: { ...r.assets,
