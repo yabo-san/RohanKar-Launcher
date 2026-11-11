@@ -50,11 +50,44 @@ test('no repository or folder is listed twice', () => {
   assert.deepEqual(folders.filter((f, i) => folders.indexOf(f) !== i), []);
 });
 
-test('the shelf is the personal picks: GoldenEye 007 (Project Midas), Perfect Dark, Star Fox 64', () => {
-  assert.deepEqual(catalog.apps.map((a) => a.name), ['GoldenEye 007', 'Perfect Dark', 'Star Fox 64']);
-  assert.deepEqual(catalog.apps.map((a) => a.repository),
-    ['murkantor/Project-Midas', 'perfect-dark-pc-port/perfect_dark', 'sonicdcer/Starfox64Recomp']);
+const PICKS = [
+  ['GoldenEye 007', 'murkantor/Project-Midas'],
+  ['Perfect Dark', 'perfect-dark-pc-port/perfect_dark'],
+  ['Star Fox 64', 'sonicdcer/Starfox64Recomp'],
+  ['Doom Retro', 'bradharding/doomretro'],
+  ['DSDA-Doom', 'kraflab/dsda-doom'],
+  ['Doom Launcher', 'nstlaurent/DoomLauncher'],
+  ['Quake (ironwail)', 'andrei-drexler/ironwail'],
+  ['QuakeInjector', 'hrehfeld/QuakeInjector'],
+  ['Diablo (DevilutionX)', 'diasurgical/devilutionx'],
+];
+
+test('the shelf is the personal picks, in order', () => {
+  assert.deepEqual(catalog.apps.map((a) => [a.name, a.repository]), PICKS);
   assert.ok(catalog.apps.every((a) => !a.more), 'no entry hides behind More ports');
+});
+
+// Each pick's filter against its latest release's real file names (checked 2026-11-11)
+const RELEASES = {
+  'bradharding/doomretro': [['doomretro-6.3-win64.zip'], 'doomretro-6.3-win64.zip'],
+  'kraflab/dsda-doom': [['dsda-doom-0.29.4-linux-x86_64.appimage', 'dsda-doom-0.29.4-mac-arm64.zip',
+    'dsda-doom-0.29.4-mac-x86_64.zip', 'dsda-doom-0.29.4-win-x64.zip'], 'dsda-doom-0.29.4-win-x64.zip'],
+  'nstlaurent/DoomLauncher': [['DoomLauncher_3.8.2.0.zip', 'DoomLauncher_3.8.2.0_install.zip'], 'DoomLauncher_3.8.2.0.zip'],
+  'andrei-drexler/ironwail': [['ironwail-0.8.2-linux-x64.tar.gz', 'ironwail-0.8.2-win32.zip', 'ironwail-0.8.2-win64.zip'],
+    'ironwail-0.8.2-win64.zip'],
+  'hrehfeld/QuakeInjector': [['QuakeInjector-alpha08.zip', 'QuakeInjector.exe-alpha08.zip'], 'QuakeInjector.exe-alpha08.zip'],
+  'diasurgical/devilutionx': [['devilutionx-android.apk', 'devilutionx-linux-x86_64.appimage', 'devilutionx-macOS-universal.dmg',
+    'devilutionx-ps4.pkg', 'devilutionx-src.tar.xz', 'devilutionx-windows-i386.zip', 'devilutionx-windows-x86_64.zip'],
+  'devilutionx-windows-x86_64.zip'],
+};
+
+test('each Doom, Quake and Diablo pick takes its Windows build', () => {
+  const { pickAsset } = require('../src/backend/ports');
+  for (const [repo, [names, want]] of Object.entries(RELEASES)) {
+    const entry = catalog.apps.find((a) => a.repository === repo);
+    const assets = names.map((name) => ({ name, browser_download_url: `https://example.invalid/${name}` }));
+    assert.equal(pickAsset(assets, { filter: entry.releaseAssetFilter }).asset?.name, want, repo);
+  }
 });
 
 test('Project Midas picks its Windows .7z over the Linux and Steam Deck builds', () => {

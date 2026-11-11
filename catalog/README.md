@@ -6,7 +6,7 @@ fallback. Every file changes by pull request.
 | file | what | entries |
 | --- | --- | --- |
 | `uploaders.json` | the built-in archive.org uploaders (Rohan, r4ze, pstriple): handle, email (what `uploader:` matches), aliases, `track`, notes | 3 |
-| `curated-ports.json` | the port shelf: three personal picks, edited by hand (see Port shelf below) | 3 |
+| `curated-ports.json` | the port shelf: personal picks, edited by hand (see Port shelf below) | 9 |
 | `art.json` | every SteamGridDB portrait grid (600x900) and hero (1920x620) found per pstriple item, keyed by archive.org identifier: grid id, CDN URL, artist, style, votes, curated. Some entries also carry a `banner` (a hero URL), which the covers service serves as the item's hero. Edited by hand now that the pstriple art is done; pinned banners are never overwritten | per item |
 
 Rules: uploader emails are what archive.org's `uploader:` field matches; handles are labels.
@@ -14,7 +14,7 @@ Rules: uploader emails are what archive.org's `uploader:` field matches; handles
 ## Port shelf
 
 `curated-ports.json` is the port shelf. It holds a few personal picks (Project Midas, Perfect
-Dark, Star Fox 64: Recompiled), not a list of recommended ports: given the state of AI game
+Dark, Star Fox 64: Recompiled, and the Doom, Quake and Diablo engines and launchers), not a list of recommended ports: given the state of AI game
 porting, the launcher doesn't judge which ports are good. Users add any other GitHub or GitLab
 repo themselves. It is written by hand; nothing generates it. To add a port, copy an entry,
 edit it and open a PR. `npm test` (`test/curated-ports.test.js`) checks every entry. The file
