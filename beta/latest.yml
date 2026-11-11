@@ -1,8 +1,8 @@
-version: 1.6.0-fork.23
+version: 1.6.0-fork.24
 files:
-  - url: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.23/y4bo-Setup-1.6.0-fork.23.exe
-    sha512: Gyu6gwWmt9lBqOP89StkhNRCk19ESkbZcvKsCBV9EFuAaUCOIo3US6QywjKKMsB7I2kYxqsPck6+9CNSS1TWfA==
-    size: 99987032
-path: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.23/y4bo-Setup-1.6.0-fork.23.exe
-sha512: Gyu6gwWmt9lBqOP89StkhNRCk19ESkbZcvKsCBV9EFuAaUCOIo3US6QywjKKMsB7I2kYxqsPck6+9CNSS1TWfA==
-releaseDate: '2026-11-11T10:55:05.498Z'
+  - url: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.24/y4bo-Setup-1.6.0-fork.24.exe
+    sha512: EK3Pqm9sJPAZ3x0XnGsjKcATXerBS6baCSmi5xBpkmSAwd8jGwjQHnsNjKDdEaoE6bl9XYFpLgQJTSVBoi24Jg==
+    size: 99990490
+path: https://github.com/yabo-san/RohanKar-Launcher/releases/download/v1.6.0-fork.24/y4bo-Setup-1.6.0-fork.24.exe
+sha512: EK3Pqm9sJPAZ3x0XnGsjKcATXerBS6baCSmi5xBpkmSAwd8jGwjQHnsNjKDdEaoE6bl9XYFpLgQJTSVBoi24Jg==
+releaseDate: '2026-11-11T19:29:10.799Z'
