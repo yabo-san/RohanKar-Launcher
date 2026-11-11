@@ -1,6 +1,6 @@
 {
   "name": "y4bo personal picks",
-  "description": "The built-in port shelf: a few personal picks, not a recommendation list. Add any other GitHub or GitLab repo yourself. Hand-edited; format: catalog/README.md.",
+  "description": "The built-in port shelf: personal picks, not a recommendation list. Add any other GitHub or GitLab repo yourself. Hand-edited; format: catalog/README.md.",
   "version": 1,
   "apps": [
     {
@@ -54,6 +54,72 @@
       "repositorySource": "gitlab",
       "repository": "sonicdcer/Starfox64Recomp",
       "description": "N64 recompilation. Bring your own Star Fox 64 (USA) ROM; the game asks for it on first run."
+    },
+    {
+      "name": "Doom Retro",
+      "repository": "bradharding/doomretro",
+      "folderName": "doomretro",
+      "releaseAssetFilter": "win64",
+      "description": "Doom engine. Needs an IWAD (doom.wad, doom2.wad) from you.",
+      "tags": [
+        "engine",
+        "doom"
+      ]
+    },
+    {
+      "name": "DSDA-Doom",
+      "repository": "kraflab/dsda-doom",
+      "folderName": "dsda-doom",
+      "releaseAssetFilter": "win-x64",
+      "description": "Doom engine, demo-accurate. Needs an IWAD (doom.wad, doom2.wad) from you.",
+      "tags": [
+        "engine",
+        "doom"
+      ]
+    },
+    {
+      "name": "Doom Launcher",
+      "repository": "nstlaurent/DoomLauncher",
+      "folderName": "DoomLauncher",
+      "releaseAssetFilter": "DoomLauncher_",
+      "description": "Doom front end. Point it at a Doom engine (Doom Retro or DSDA-Doom) and your IWADs.",
+      "tags": [
+        "launcher",
+        "doom"
+      ]
+    },
+    {
+      "name": "Quake (ironwail)",
+      "repository": "andrei-drexler/ironwail",
+      "folderName": "ironwail",
+      "releaseAssetFilter": "win64",
+      "description": "Quake engine. Needs the Quake data (id1/pak0.pak, pak1.pak) from you.",
+      "tags": [
+        "engine",
+        "quake"
+      ]
+    },
+    {
+      "name": "QuakeInjector",
+      "repository": "hrehfeld/QuakeInjector",
+      "folderName": "QuakeInjector",
+      "releaseAssetFilter": "QuakeInjector.exe",
+      "description": "Installs Quake maps and mods. Point it at a Quake engine (ironwail) and your Quake folder.",
+      "tags": [
+        "launcher",
+        "quake"
+      ]
+    },
+    {
+      "name": "Diablo (DevilutionX)",
+      "repository": "diasurgical/devilutionx",
+      "folderName": "devilutionx",
+      "releaseAssetFilter": "windows-x86_64",
+      "description": "Diablo engine. Needs DIABDAT.MPQ from your Diablo CD or GOG copy, placed next to devilutionx.exe.",
+      "tags": [
+        "engine",
+        "diablo"
+      ]
     }
   ]
 }

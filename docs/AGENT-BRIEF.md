@@ -26,9 +26,9 @@ belong in the app. Curation is not the point.
    changed uploads, get a badge and a one-click update. It never updates on its own.
 
 The app ships with a starting set: the uploaders in `catalog/uploaders.json` (Rohan, r4ze,
-pstriple) and three personal picks in `catalog/curated-ports.json` (GoldenEye 007 via Project Midas, Perfect Dark,
-Star Fox 64: Recompiled). Given the state of AI game porting, the launcher offers no judgement on
-which ports are good: don't grow the picks back into a recommendation list; users add any other
+pstriple) and K's personal picks in `catalog/curated-ports.json` (GoldenEye 007 via Project Midas, Perfect Dark,
+Star Fox 64: Recompiled, plus Doom Retro, DSDA-Doom, Doom Launcher, ironwail, QuakeInjector and DevilutionX). Given the state of AI game porting, the launcher offers no judgement on
+which ports are good: only K adds picks; don't grow them into a recommendation list; users add any other
 repo themselves. `curated-ports.json` is edited by hand, by pull request; never write the outside
 list it was once scraped from (URL, document ID or author) anywhere. It vouches for nothing: no badges, gates or warnings that set
 built-in sources apart from what users add. The art and title work in `overrides.json` and

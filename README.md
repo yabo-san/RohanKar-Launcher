@@ -5,7 +5,7 @@ release builds from GitHub and GitLab.
 
 It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
 ports are good or bad. The shelf has a few personal picks (GoldenEye 007 via Project Midas, Perfect Dark,
-Star Fox 64: Recompiled), and everything else is yours to add: any archive.org uploader
+Star Fox 64: Recompiled, and Doom, Quake and Diablo engines you bring your own game files to), and everything else is yours to add: any archive.org uploader
 or upload, any GitHub or GitLab repo.
 
 I made this to test a CI/CD pipeline (see the commit history), not to show what a
