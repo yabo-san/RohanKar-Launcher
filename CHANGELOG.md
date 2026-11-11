@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.0-fork.24](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.23...v1.6.0-fork.24) (2026-11-11)
+
+
+### Features
+
+* streamlined UI: Library, Ports and Packs ([#167](https://github.com/yabo-san/RohanKar-Launcher/issues/167)) ([928d163](https://github.com/yabo-san/RohanKar-Launcher/commit/928d1631bd619027c095dab91543f70debe2d9c2))
+
+
+### Bug Fixes
+
+* delete the download once a game or port is installed ([#168](https://github.com/yabo-san/RohanKar-Launcher/issues/168)) ([6fb05d8](https://github.com/yabo-san/RohanKar-Launcher/commit/6fb05d85ffa4850da389c8d6f2d667bcd5e8432e))
+
 ## [1.6.0-fork.23](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.22...v1.6.0-fork.23) (2026-11-11)
 
 
