@@ -71,7 +71,7 @@ A local file (no URLs for now), named by its full path as `userSourcesFile` in s
   `folderName`, `assetPattern` and the `sha1` of the release asset. A repository no catalog lists
   shows on Ports.
 - `exclude`: uploads to leave off the wall, from any uploader, built-in ones included: identifiers
-  or item URLs, as for `archive`. Settings' `- ` lines do the same.
+  or item URLs, as for `archive`.
 
 An older file's `collisions` array is not read: each entry is listed as invalid ("collisions are
 no longer supported"), since collisions are parked on the `parked/collisions` branch.
@@ -81,7 +81,7 @@ no longer supported"), since collisions are parked on the `parked/collisions` br
 ## Rules
 
 1. **Built-in wins.** A user entry with the same repository or identifier as a built-in one is
-   ignored and listed under the file in Settings as a conflict: a `github` entry for a repository a
+   ignored and reported as a conflict by `GET /v1/user-sources`: a `github` entry for a repository a
    port shelf lists, and an `archive` entry for an item a built-in uploader has.
 2. **sha1.** A file with a sha1 is checked, and a mismatch fails the install.
    A file without one has its sha1 recorded on first install (`pins.json` in the data folder). If
@@ -98,7 +98,7 @@ no longer supported"), since collisions are parked on the `parked/collisions` br
 
 The logic is in `src/backend/sources.js` (what a line or URL names, title filters),
 `archive.js` (an account's uploads by handle), `user-sources.js` (read, validate, pins), `catalogs.js` (`github`
-entries and Your ports), `items.js` (uploaders, `archive` entries and excludes) and `installs.js` (sha1 checks
+entries and the repos you added), `items.js` (uploaders, `archive` entries and excludes) and `installs.js` (sha1 checks
 and pins). The renderer only draws what `GET /v1/user-sources` and the items say.
 
 ## How a handle is resolved

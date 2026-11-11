@@ -42,6 +42,8 @@ The finished work orders are in git history. Where anything disagrees with this 
   the app. Never migrate it in a way that drops entries.
 - What a user added lives on their machine. Never copy it into the repo.
 - Uninstall moves the folder to the Recycle Bin; it never deletes outright.
+- The downloaded archive is deleted once an install succeeds.
+- Never change the default install folder: Playnite and existing installs depend on it.
 
 ## Out of scope. Do not build, propose or reopen
 
@@ -55,9 +57,14 @@ The finished work orders are in git history. Where anything disagrees with this 
 - A second interface. The classic UI is gone; there is one UI, `src/frontend/new/`. Gamepad
   navigation, collections editing and notes went with it (collections still export as Playnite
   tags, from what library.db holds).
-- Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import. Remove both,
-  including `src/backend/quiver-import.js` and the four Quiver catalog URLs in the frontend.
+- Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import (both removed).
   The shelf file keeps Quiver's catalog shape only because installed copies of the app read it.
+- A Home page, a separate "add to library" step, or a Playnite export button (the export file is
+  still written on every library change). The sidebar is Library, Packs, Ports, What's new and
+  Settings.
+- In-app updates of the app itself (K, 2026-11-11). Users get builds from GitHub releases. The
+  update check in `src/electron/main.js` is off unless `checkForUpdates` is set in settings.json,
+  and Settings has no switch for it.
 
 ## Acceptance: installs must work
 

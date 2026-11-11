@@ -13,11 +13,14 @@ proper frontend looks like. **The frontend is vibecoded.**
 
 ## What it does
 
+- **Library, Packs, Ports:** the sidebar. Library is what you got, each archive.org uploader you
+  follow is a pack, and Ports are the repos. Getting a game puts it in your library.
 - **archive.org:** a few uploaders are built in (Rohan's uploads, pstriple, r4ze, with box art
   and titles cleaned up by hand); add any other uploader or single upload. One-click download
-  and extract (zip, 7z, rar).
-- **GitHub and GitLab:** install a repo's latest release build. A few personal picks are built in;
-  add any other repo yourself.
+  and extract (zip, 7z and rar; 7z and rar need [7-Zip](https://www.7-zip.org/) installed).
+  The download is deleted once the game is installed.
+- **GitHub and GitLab:** install a repo's latest release build, and pick the file when a release
+  has several. A few personal picks are built in; add any other repo yourself.
 - **Add your own:** paste an archive.org uploader, a single upload or a GitHub/GitLab repo link into the search box.
   Settings copies your setup out as text and pastes one back in.
   Want your own built-in list? Fork it and build your own: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
@@ -26,7 +29,9 @@ proper frontend looks like. **The frontend is vibecoded.**
 - **Playtime:** tracks how long you've played each game.
 - **Uninstall:** moves the game's folder to the Recycle Bin, so it can be undone.
 - **Open folder:** opens the install folder, for adding data files, mods or saves by hand.
-- **Updates:** the launcher updates itself; installed ports show when a newer release is out.
+- **Find installs:** Settings, Find installs here adds games already in your install folder.
+- **What's new:** newer releases of your ports (one click updates) and new uploads from your packs.
+  The app doesn't update itself: new y4bo builds are on the [releases page](https://github.com/yabo-san/RohanKar-Launcher/releases/latest).
 - **Playnite:** the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library in Playnite.
 
 ## Install
