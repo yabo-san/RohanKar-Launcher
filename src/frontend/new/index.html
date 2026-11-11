@@ -18,32 +18,19 @@
 
   <div class="app" id="app">
     <nav class="sidebar" id="sidebar" aria-label="Main">
-      <div class="search"><input id="q" type="search" placeholder="Search" aria-label="Search games and ports" autocomplete="off" /></div>
-      <div class="seg" role="group" aria-label="Show">
-        <button class="on" data-seg="all" aria-label="Everything" title="Everything"><i class="ico" data-ico="browse"></i></button>
-        <button data-seg="yours" aria-label="Only yours" title="Only yours"><i class="ico" data-ico="box"></i></button>
-      </div>
+      <div class="search"><input id="q" type="search" placeholder="Search or paste a link" aria-label="Search, or paste an archive.org, GitHub or GitLab link to add it" autocomplete="off" /></div>
 
       <div class="navscroll">
-        <button class="navgroup" data-collapse="browse">y4bo</button>
-        <div class="navlist" data-group="browse">
-          <button class="navitem" data-action="add-open" id="nav-add"><i class="ico" data-ico="plus"></i>Add…</button>
-        </div>
-
-        <button class="navgroup" data-collapse="yours">Library</button>
-        <div class="navlist" data-group="yours">
+        <div class="navlist">
           <button class="navitem active" data-view="library"><i class="ico" data-ico="library"></i>Library<span class="n" id="n-library"></span></button>
+          <button class="navitem" data-view="ports"><i class="ico" data-ico="code"></i>Ports<span class="n" id="n-ports"></span></button>
         </div>
 
-        <button class="navgroup" data-collapse="uploaders">Uploaders</button>
+        <button class="navgroup" data-collapse="uploaders">Packs</button>
         <div class="navlist" id="nav-uploaders" data-group="uploaders"></div>
-
-        <button class="navgroup" data-collapse="ports">Ports</button>
-        <div class="navlist" data-group="ports">
-          <div id="nav-shelves"></div>
-        </div>
       </div>
 
+      <button class="navitem news" id="btn-news" data-pop="news" aria-haspopup="true"><i class="ico" data-ico="bell"></i>What's new<span class="n attn" id="n-news"></span></button>
       <button class="me" id="btn-settings" data-view="settings" title="Settings">
         <i class="me-avatar" aria-hidden="true">y4</i>
         <span class="me-text"><span class="brand">y4<span>bo</span></span><small>Settings</small></span>
@@ -55,10 +42,8 @@
         <button class="tb" id="nav-back" aria-label="Back" title="Back" disabled><i class="ico" data-ico="back"></i></button>
         <button class="tb" id="nav-fwd" aria-label="Forward" title="Forward" disabled><i class="ico" data-ico="fwd"></i></button>
         <button class="tb" id="btn-sidebar" aria-label="Toggle sidebar" title="Toggle sidebar"><i class="ico" data-ico="sidebar"></i></button>
-        <button class="tb" data-action="add-open" aria-label="Add" title="Add: paste an archive.org, GitHub or GitLab link"><i class="ico" data-ico="addwin"></i></button>
         <span class="drag"></span>
         <button class="tb" id="btn-downloads" data-pop="downloads" aria-label="Downloads" title="Downloads" aria-haspopup="true"><i class="ico" data-ico="downloads"></i><span class="badge dot" id="dl-dot" hidden></span></button>
-        <button class="tb" id="btn-more" data-pop="more" aria-label="More" title="More" aria-haspopup="true"><i class="ico" data-ico="more"></i></button>
         <div class="winctl">
           <button id="win-min" class="light min" aria-label="Minimise" title="Minimise"></button>
           <button id="win-max" class="light max" aria-label="Maximise" title="Maximise"></button>

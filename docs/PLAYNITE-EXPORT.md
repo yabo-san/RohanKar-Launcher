@@ -21,11 +21,10 @@ file; it never opens `library.db`.
 
 ## What is in it
 
-Every library entry: what you installed, favorited, or added with **Add to Library** (on a game's
-menu in y4bo). Entries without an install go out as `installed: false`, so they appear in
-Playnite as cards with an Install button, and Install runs `y4bo.exe --install <id>`. That is the
-way to get a game onto Playnite without downloading it first: add it in y4bo, install it from
-Playnite whenever.
+Every library entry: what you installed or favorited in y4bo. Entries without an install go out
+as `installed: false`, so they appear in Playnite as cards with an Install button, and Install
+runs `y4bo.exe --install <id>`. That is the way to get a game onto Playnite without downloading
+it first: favorite it in y4bo, install it from Playnite whenever.
 
 `exportCatalog: true` in settings.json sends the whole loaded catalog instead, each game not in
 the library as `installed: false`, the way the RomM plugin presents everything. Off by default:
