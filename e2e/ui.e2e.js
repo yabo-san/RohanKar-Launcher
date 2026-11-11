@@ -609,6 +609,18 @@ test('A new y4bo release shows a bar with its notes and a link to get it', async
   await expect(bar).toBeHidden();
 });
 
+test("Settings: Find installs here adopts a game already in the folder, as Rohan's Scan Install Folder did", async () => {
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-e2e-scan-'));
+  fs.mkdirSync(path.join(dir, '(12)Age of Empires II'));
+  await page.locator('#btn-settings').click();
+  await page.locator('#setting-install').fill(dir);
+  await page.locator('[data-action="scan-install"]').click();
+  await expect(page.locator('#toast')).toContainText('Found 1 install.');
+  const lib = await page.evaluate(() => api.getLibrary());
+  expect(lib['rk-e2e-age-of-empires-2']?.install_dir).toBe(path.join(dir, '(12)Age of Empires II'));
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('Settings: paste a config to add packs; About has no personal social links', async () => {
   await page.locator('#btn-settings').click();
   await page.locator('[data-action="config-paste"]').click();

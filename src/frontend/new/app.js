@@ -888,7 +888,8 @@ function viewSettings() {
   return `<div class="form">
     <div class="field"><label for="setting-install">Install folder</label>
       <div class="inline"><input type="text" id="setting-install" value="${esc(s.installPath || '')}" placeholder="Default: the app's games folder">
-      <button class="btn" data-action="choose-install">Choose…</button></div></div>
+      <button class="btn" data-action="choose-install">Choose…</button>
+      <button class="btn" data-action="scan-install" title="Games already in this folder join your library, as Scan Install Folder did in the RohanKar launcher">Find installs here</button></div></div>
     <div class="field"><label for="setting-github-token">GitHub token</label>
       <div class="hint">Optional. GitHub allows 60 release checks an hour without one, which a few installs and updates can use up.
         A token with no scopes is enough: GitHub, Settings, Developer settings, Personal access tokens.</div>
@@ -1866,6 +1867,12 @@ async function onAction(action, el) {
     case 'news-dismiss': return newsDismiss([el.dataset.key]);
     case 'news-clear': return newsDismiss(newsItems().map(n => n.key), { seenNow: true });
     case 'choose-install': { const p = await api.chooseFolder(); if (p) $('#setting-install').value = p; return; }
+    case 'scan-install': {
+      const r = await api.scanInstalls($('#setting-install').value.trim() || undefined);
+      toast(r.found ? (r.found.length ? `Found ${r.found.length} install${r.found.length === 1 ? '' : 's'}.` : 'Nothing new here that the catalogs know by name.') : `Couldn't scan: ${r.error}`);
+      if (r.found?.length) await reloadLibrary();
+      return;
+    }
     case 'readme': return showReadme(v.identifier, getTitle(v));
     case 'update-notes': return showUpdateNotes();
     case 'update-get': return api.updaterInstall();
