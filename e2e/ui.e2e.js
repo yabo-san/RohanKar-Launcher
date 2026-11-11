@@ -609,18 +609,6 @@ test('A new y4bo release shows a bar with its notes and a link to get it', async
   await expect(bar).toBeHidden();
 });
 
-test("Settings: Find installs here adopts a game already in the folder, as Rohan's Scan Install Folder did", async () => {
-  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-e2e-scan-'));
-  fs.mkdirSync(path.join(dir, '(12)Age of Empires II'));
-  await page.locator('#btn-settings').click();
-  await page.locator('#setting-install').fill(dir);
-  await page.locator('[data-action="scan-install"]').click();
-  await expect(page.locator('#toast')).toContainText('Found 1 install.');
-  const lib = await page.evaluate(() => api.getLibrary());
-  expect(lib['rk-e2e-age-of-empires-2']?.install_dir).toBe(path.join(dir, '(12)Age of Empires II'));
-  fs.rmSync(dir, { recursive: true, force: true });
-});
-
 test('Settings: paste a config to add packs; About has no personal social links', async () => {
   await page.locator('#btn-settings').click();
   await page.locator('[data-action="config-paste"]').click();
@@ -639,4 +627,17 @@ test('Settings: paste a config to add packs; About has no personal social links'
   await expect(about).toContainText("Built on Rohan Kar's launcher");
   // No Playnite export button (the extension reads the export file), no classic UI switch
   await expect(page.locator('#btn-classic-ui, [data-action="playnite-export"], #setting-user-file')).toHaveCount(0);
+});
+
+test("Settings: Find installs here adopts a game already in the folder, as Rohan's Scan Install Folder did", async () => {
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rk-e2e-scan-'));
+  fs.mkdirSync(path.join(dir, '(12)Age of Empires II'));
+  await page.locator('#btn-settings').click();
+  await page.locator('#setting-install').fill(dir);
+  await page.locator('[data-action="scan-install"]').click();
+  // The library row, not the toast: a pack that failed to load (@friend, above)
+  // can replace the toast with its own error
+  await expect.poll(() => page.evaluate(() => api.getLibrary().then(l => l['rk-e2e-age-of-empires-2']?.install_dir)))
+    .toBe(path.join(dir, '(12)Age of Empires II'));
+  fs.rmSync(dir, { recursive: true, force: true });
 });
