@@ -124,3 +124,17 @@ test('looseKey: drops case, punctuation, spaces and archive suffixes', () => {
   assert.equal(disk.looseKey('banjo-kazooie-recompiled.-7z'), 'banjokazooierecompiled');
   assert.equal(disk.looseKey('Pokémon Red'), 'pokemonred');
 });
+
+test('matchInstallFolders: looks inside a folder of games, not inside a game', (t) => {
+  const root = tree(tmpDir(t), {
+    'rohan/(137)Oni - Anniversary Edition/': null, 'rohan/desktop.ini': '',
+    'Other/readme.txt': '', 'Other/Halo 2/': null,
+    'rohan/deeper/Halo 2/': null,
+    'SomeGame/game.exe': '', 'SomeGame/Halo 2/': null,
+  });
+  const found = disk.matchInstallFolders(root, ['oni-ae', 'halo-2'], { 'Oni: Anniversary Edition': 'oni-ae', 'Halo 2': 'halo-2' });
+  assert.deepEqual(found.map(f => [path.relative(root, f.folderPath), f.identifier]), [
+    [path.join('rohan', '(137)Oni - Anniversary Edition'), 'oni-ae'],
+  ]);
+  assert.equal(disk.matchInstallFolders(root, ['halo-2'], { 'Halo 2': 'halo-2' }, { nested: 2 }).length, 1);
+});

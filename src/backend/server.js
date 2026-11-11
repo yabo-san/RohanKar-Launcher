@@ -291,17 +291,8 @@ function createApi(backend) {
   });
 
   route('POST', '/library/scan', async ({ body }) => {
-    const s = settings.load();
-    const dir = requireObject(body).dir || s.installPath || s.downloadPath;
-    if (!dir) throw new HttpError(400, 'bad_request', 'Set an install folder in settings or pass dir');
-    try { await items.load(); } catch (e) { throw new HttpError(502, 'sources_failed', e.message); }
-    const versions = items.loadedVersions();
-    const titleMap = {};
-    for (const v of versions) {
-      const t = Array.isArray(v.title) ? v.title[0] : v.title;
-      if (t && String(t).trim()) titleMap[String(t).trim()] = v.identifier;
-    }
-    return { body: installs.scan({ scanDir: dir, knownIdentifiers: versions.map(v => v.identifier), titleMap }) };
+    const { dir } = requireObject(body);
+    try { return { body: await backend.scanInstalls(dir) }; } catch (e) { throw new HttpError(502, 'sources_failed', e.message); }
   });
 
   // ─── Installs ─────────────────────────────────────────────────────────────

@@ -202,6 +202,34 @@ function createBackend({
     }
   }
 
+  // ─── Adopt installs already on disk ───────────────────────────────────────
+
+  // Matches folders in dir (or the install, download and default games
+  // folders) against every archive.org upload loaded
+  async function scanInstalls(dir) {
+    await items.load();
+    const versions = items.loadedVersions();
+    const titleMap = {};
+    for (const v of versions) {
+      const t = Array.isArray(v.title) ? v.title[0] : v.title;
+      if (t && String(t).trim()) titleMap[String(t).trim()] = v.identifier;
+    }
+    const s = settings.load();
+    const scanDirs = dir ? [dir] : [s.installPath, s.downloadPath, gamesDir];
+    return installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap });
+  }
+
+  // Once per start, after the uploads first load: a fresh install (or a new
+  // install folder) picks up what's already there without a trip to Settings
+  let autoScanned = false;
+  events.on('event', ({ type, data }) => {
+    if (type !== 'items' || autoScanned || !data?.count) return;
+    autoScanned = true;
+    scanInstalls()
+      .then(r => { if (r.found.length) log(`[scan] Adopted ${r.found.length} at startup`); })
+      .catch(e => log(`[scan] startup scan failed: ${e.message}`));
+  });
+
   // ─── Playnite export ──────────────────────────────────────────────────────
 
   const playniteFile = path.join(dataDir, 'playnite-export.json');
@@ -301,7 +329,7 @@ function createBackend({
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources,
-    installRoot,
+    installRoot, scanInstalls,
     launch, openFolder, removeFromLibrary, uninstall, exportPlaynite, flushPlayniteExport, close,
   };
 }

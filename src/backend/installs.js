@@ -391,10 +391,15 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   // ─── Adopt installs already on disk ───────────────────────────────────────
 
-  function scan({ scanDir, knownIdentifiers, titleMap }) {
+  // scanDirs: several folders in one pass (install, download, default); a
+  // folder found under two of them is adopted once
+  function scan({ scanDir, scanDirs, knownIdentifiers, titleMap }) {
     if (!library.available) return { found: [] };
     const found = [];
-    for (const m of disk.matchInstallFolders(scanDir, knownIdentifiers, titleMap)) {
+    const dirs = [...new Set([scanDir, ...(scanDirs || [])].filter(Boolean).map(d => path.resolve(d)))];
+    const matches = dirs.flatMap(d => disk.matchInstallFolders(d, knownIdentifiers, titleMap));
+    for (const m of matches) {
+      if (found.some(f => f.identifier === m.identifier)) continue;
       const existing = library.get(m.identifier);
       if (existing?.install_dir && fs.existsSync(existing.install_dir)) continue;
       const exes = disk.findExes(m.folderPath);
