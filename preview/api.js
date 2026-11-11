@@ -167,6 +167,17 @@ const api = (() => {
     getRepos: async () => (await call('GET', '/repos')).body?.repos || [],
     saveRepo: async (repo, entry) => { const r = await call('PUT', `/repos/${enc(repo)}`, entry); return r.ok ? { ok: true, entry: r.body } : failure(r); },
     removeRepo: (repo) => call('DELETE', `/repos/${enc(repo)}`),
+    // The latest release's files, for the picker: { ok, tag, files: [{ name, windows, pattern }], auto, choose }
+    getRepoRelease: async (repo, source) => {
+      const r = await call('GET', `/repos/${enc(repo)}/release`, undefined, source === 'gitlab' ? { source } : {});
+      return r.ok ? { ok: true, ...r.body } : failure(r);
+    },
+    // Installed ports with a newer release: [{ id, installed, latest }]
+    getPortUpdates: async () => { const r = await call('GET', '/ports/updates'); return r.ok ? r.body.updates || [] : []; },
+
+    // Your config: what the user added, to copy; pasting merges it in
+    getConfig: async () => { const r = await call('GET', '/config'); return r.ok ? r.body : null; },
+    pasteConfig: async (text) => { const r = await call('PUT', '/config', { text }); return r.ok ? { ok: true, ...r.body } : failure(r); },
 
     // The port shelves (the curated catalog, Your ports) and what changed in them
     getCatalogs:      async () => (await call('GET', '/catalogs')).body?.catalogs || [],

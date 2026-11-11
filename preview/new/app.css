@@ -326,6 +326,7 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 [data-ico=swap] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 8h14.5M15 4.5 18.5 8 15 11.5M20 16H5.5M9 12.5 5.5 16 9 19.5'/%3E%3C/svg%3E"); }
 [data-ico=wall] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3.5' y='4' width='5' height='16' rx='1.2'/%3E%3Crect x='10.5' y='4' width='5' height='16' rx='1.2'/%3E%3Cpath d='m17.8 4.6 3 .8-3.6 14.1-2.4-.6'/%3E%3C/svg%3E"); }
 [data-ico=library] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 20V4M9.5 20V4M14 20 17.8 4.2l2.9.7L17 20z'/%3E%3C/svg%3E"); }
+[data-ico=bell] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 16.5V11a6 6 0 0 1 12 0v5.5l1.8 1.8H4.2z'/%3E%3Cpath d='M10 21h4'/%3E%3C/svg%3E"); }
 [data-ico=updates] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 12a8 8 0 1 1-2.6-5.9L20 8.5'/%3E%3Cpath d='M20 3.5v5h-5'/%3E%3C/svg%3E"); }
 [data-ico=settings] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='3'/%3E%3Cpath d='M12 2.8v2.4M12 18.8v2.4M4.9 4.9l1.7 1.7M17.4 17.4l1.7 1.7M2.8 12h2.4M18.8 12h2.4M4.9 19.1l1.7-1.7M17.4 6.6l1.7-1.7'/%3E%3C/svg%3E"); }
 [data-ico=plus] { --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 4.5v15M4.5 12h15'/%3E%3C/svg%3E"); }
@@ -840,3 +841,33 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 .review-title { font-weight: 600; margin-top: 4px; }
 .review p { margin: 4px 0 0; color: var(--text2); white-space: pre-wrap; }
 pre.readme { max-height: 60vh; overflow: auto; margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Consolas, monospace; }
+
+/* What's new: the sidebar button above Settings, and its pane (a .pop) */
+.sidebar .navitem.news { flex: none; margin-top: 4px; }
+.pop.news-pop { width: 400px; max-height: 70vh; overflow-y: auto; }
+.news-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; }
+.news-head b { font-size: 14px; }
+.news-head .grow { flex: 1; }
+.news-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-top: 1px solid var(--border); }
+.news-row .grow { flex: 1; min-width: 0; }
+.news-row .grow b, .news-row .grow small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.news-row .grow small { color: var(--text2); font-size: 11px; }
+.news-row .x { border: 0; background: none; color: var(--text2); width: 28px; height: 28px; border-radius: 14px; cursor: pointer; }
+.news-row .x:hover { background: var(--fill); color: var(--text); }
+.news-empty { padding: 12px 8px; color: var(--text2); }
+.news-row .linkrow { border: 0; background: none; color: inherit; text-align: left; padding: 0; cursor: pointer; font: inherit; }
+.news-row .btn { flex: none; }
+
+/* A pack's name links to its archive.org page */
+.page-title .title-link { color: inherit; text-decoration: underline; text-decoration-color: rgb(255 255 255 / 22%); text-underline-offset: 6px; cursor: pointer; }
+.page-title .title-link:hover { text-decoration-color: currentColor; }
+.linkbtn { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; }
+.lib-gap { height: 28px; }
+
+/* The release file picker when a repo is added */
+.file-pick { display: flex; flex-direction: column; gap: 2px; margin: 10px 0; max-height: 50vh; overflow-y: auto; }
+.file-opt { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--rad-ctl); cursor: pointer; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.file-opt:hover { background: var(--fill); }
+.file-opt:has(input:checked) { background: var(--key-soft); }
+.file-opt .grow { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.file-opt input { accent-color: var(--accent); }
