@@ -28,6 +28,15 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   const downloadDir = () => settings.load().downloadPath || gamesDir;
   const installDir  = () => settings.load().installPath  || gamesDir;
 
+  // Once installed, nothing reads the download again (a reinstall or update
+  // fetches it fresh), so it goes. A file that was copied in as it is can be
+  // the installed file itself when both folders are the same: that one stays.
+  function removeDownload(filePath, copiedTo = null) {
+    if (copiedTo && path.resolve(copiedTo) === path.resolve(filePath)) return;
+    fs.rmSync(filePath, { force: true });
+    try { fs.rmdirSync(path.dirname(filePath)); } catch { /* not empty */ }
+  }
+
   // Downloads url into <download folder>/<identifier>/<fileName>. Resolves
   // { ok, filePath } or { ok: false, error }; cancel(key) resolves it as 'Cancelled'.
   function download({ key, identifier, url, fileName, onProgress = () => {} }) {
@@ -88,28 +97,20 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // collection into <identifier>/_GAME_<subFolder>, which findExes groups by.
   // 7-Zip when installed (zip/7z/rar), extract-zip for .zip otherwise.
   async function extract({ filePath, identifier, subFolder }) {
-    const s = settings.load();
     const parentDir = path.join(installDir(), disk.sanitizeFolderName(identifier));
     const destDir = subFolder ? path.join(parentDir, '_GAME_' + disk.sanitizeFolderName(subFolder)) : parentDir;
     fs.mkdirSync(destDir, { recursive: true });
 
-    const done = () => {
-      disk.unblockDirectory(destDir, { platform, log });
-      if (s.deleteAfterInstall) {
-        fs.unlink(filePath, () => {
-          try { fs.rmdirSync(path.dirname(filePath)); } catch { /* not empty */ }
-        });
-      }
-      return { ok: true, installDir: destDir, parentInstallDir: parentDir };
-    };
-
     const r = await extractTo(filePath, destDir);
-    return r.ok ? done() : r;
+    if (!r.ok) return r;
+    disk.unblockDirectory(destDir, { platform, log });
+    removeDownload(filePath, r.copiedTo);
+    return { ok: true, installDir: destDir, parentInstallDir: parentDir };
   }
 
   // Unpacks an archive into destDir: 7-Zip when installed (zip/7z/rar),
   // extract-zip for .zip otherwise; any other file is copied in as it is.
-  // Resolves { ok } or { ok: false, error }.
+  // Resolves { ok } ({ ok, copiedTo } for a copied file) or { ok: false, error }.
   async function extractTo(filePath, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
     const lower = filePath.toLowerCase();
@@ -130,8 +131,9 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
     // Not an archive: kept as it is, the launcher is just its download client
     try {
-      fs.copyFileSync(filePath, path.join(destDir, path.basename(filePath)));
-      return { ok: true };
+      const copiedTo = path.join(destDir, path.basename(filePath));
+      if (path.resolve(copiedTo) !== path.resolve(filePath)) fs.copyFileSync(filePath, copiedTo);
+      return { ok: true, copiedTo };
     } catch (e) {
       return { ok: false, error: e.message };
     }
@@ -312,6 +314,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       if (!ok) return;
     }
     update(job, { status: 'extracting', percent: 100 });
+    let copiedTo = null;
     if (ports.ARCHIVE_EXT.test(bin.filePath)) {
       // Unpacked beside the download first: a release that is one folder
       // (pd-x86_64-windows/) lays down that folder's contents
@@ -322,7 +325,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       fs.cpSync(ports.releaseRoot(staging), dest, { recursive: true, force: true });
       fs.rmSync(staging, { recursive: true, force: true });
     } else {
-      fs.copyFileSync(bin.filePath, path.join(dest, path.basename(bin.filePath)));
+      copiedTo = path.join(dest, path.basename(bin.filePath));
+      if (path.resolve(copiedTo) !== path.resolve(bin.filePath)) fs.copyFileSync(bin.filePath, copiedTo);
     }
     for (const f of [].concat(entry.filesToAdd || [])) {
       const target = ports.inside(dest, f);
@@ -330,7 +334,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
 
     // Record it against the catalog item, keeping its library row
-    if (settings.load().deleteAfterInstall) fs.rmSync(bin.filePath, { force: true });
+    removeDownload(bin.filePath, copiedTo);
     disk.unblockDirectory(dest, { platform, log });
     const exes = disk.findExes(dest);
     const exePath = exes.length === 1 ? exes[0] : null;

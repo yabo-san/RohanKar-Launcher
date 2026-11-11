@@ -395,8 +395,8 @@ list of archive.org identifiers or item URLs; they are stored as identifiers, an
 `400` naming it.
 
 ```sh
-curl -X PUT -d '{"installPath":"D:\\Games","deleteAfterInstall":true}' http://127.0.0.1:7777/v1/settings
-# {"sources":[…],"installPath":"D:\\Games","deleteAfterInstall":true}
+curl -X PUT -d '{"installPath":"D:\\Games"}' http://127.0.0.1:7777/v1/settings
+# {"sources":[…],"installPath":"D:\\Games"}
 ```
 
 ### `GET /user-sources`

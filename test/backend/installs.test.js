@@ -66,15 +66,15 @@ test('download: cancel resolves as Cancelled, before or during the transfer', as
 });
 
 test('extract: zip into the item folder or a collection subfolder; other formats refused', async (t) => {
-  const { dir, installs } = await setup(t, {}, { deleteAfterInstall: true });
+  const { dir, settings, installs } = await setup(t);
   const zip = path.join(dir, 'dl', 'g', 'g.zip');
   fs.mkdirSync(path.dirname(zip), { recursive: true });
   fs.writeFileSync(zip, makeZip({ 'Game/game.exe': 'MZ' }));
   const r = await installs.extract({ filePath: zip, identifier: 'g.' });
   assert.deepEqual(r, { ok: true, installDir: path.join(dir, 'games', 'g'), parentInstallDir: path.join(dir, 'games', 'g') });
   assert.ok(fs.existsSync(path.join(dir, 'games', 'g', 'Game', 'game.exe')));
-  await new Promise(res => setTimeout(res, 50));
-  assert.equal(fs.existsSync(zip), false, 'deleteAfterInstall removes the archive');
+  assert.equal(fs.existsSync(zip), false, 'the archive is removed once unpacked');
+  assert.equal(fs.existsSync(path.dirname(zip)), false, 'and its emptied download folder');
 
   fs.mkdirSync(path.dirname(zip), { recursive: true });
   fs.writeFileSync(zip, makeZip({ 'a.exe': 'MZ' }));
@@ -89,7 +89,19 @@ test('extract: zip into the item folder or a collection subfolder; other formats
   fs.writeFileSync(iso, 'ISO');
   const plain = await installs.extract({ filePath: iso, identifier: 'plain' });
   assert.equal(fs.readFileSync(path.join(plain.installDir, 'x.iso'), 'utf8'), 'ISO');
+  assert.equal(fs.existsSync(iso), false, 'the download is removed once copied in');
   assert.deepEqual(await installs.extract({ filePath: path.join(dir, 'gone.iso'), identifier: 'g' }).then(r => r.ok), false);
+
+  // One folder for downloads and installs: the archive goes, a copied-in file is the install and stays
+  settings.save({ downloadPath: '', installPath: path.join(dir, 'games') });
+  const same = path.join(dir, 'games', 'same');
+  fs.mkdirSync(same, { recursive: true });
+  fs.writeFileSync(path.join(same, 's.zip'), makeZip({ 's.exe': 'MZ' }));
+  await installs.extract({ filePath: path.join(same, 's.zip'), identifier: 'same' });
+  assert.deepEqual([fs.existsSync(path.join(same, 's.exe')), fs.existsSync(path.join(same, 's.zip'))], [true, false]);
+  fs.writeFileSync(path.join(same, 'y.iso'), 'ISO');
+  assert.equal((await installs.extract({ filePath: path.join(same, 'y.iso'), identifier: 'same' })).ok, true);
+  assert.equal(fs.readFileSync(path.join(same, 'y.iso'), 'utf8'), 'ISO', 'a file copied onto itself is kept');
 });
 
 test('extract: uses 7-Zip when it is installed', { skip: process.platform === 'win32' && 'uses a sh stand-in for 7z.exe' }, async (t) => {
