@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0-fork.25](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.24...v1.6.0-fork.25) (2026-11-11)
+
+
+### Features
+
+* **catalog:** add Doom, Quake and Diablo engines and launchers to the shelf ([#174](https://github.com/yabo-san/RohanKar-Launcher/issues/174)) ([1755333](https://github.com/yabo-san/RohanKar-Launcher/commit/17553334a974cbd8334e3dfae26b47db9b8f70f4))
+* **settings:** bring back Rohan's Scan Install Folder as Find installs here ([#170](https://github.com/yabo-san/RohanKar-Launcher/issues/170)) ([c09e759](https://github.com/yabo-san/RohanKar-Launcher/commit/c09e75987166fee429378d57940d2414f2b0c721))
+
+
+### Bug Fixes
+
+* **scan:** adopt existing installs at startup, and inside a folder of games ([#160](https://github.com/yabo-san/RohanKar-Launcher/issues/160)) ([a96b4ed](https://github.com/yabo-san/RohanKar-Launcher/commit/a96b4ed4b84b3bb47c5a901707ffb6f73328369d))
+* **scan:** only scan for existing installs when asked ([#176](https://github.com/yabo-san/RohanKar-Launcher/issues/176)) ([a1802ae](https://github.com/yabo-san/RohanKar-Launcher/commit/a1802ae0140350f51222f641967c44dad669c34a))
+* **ui:** space the sidebar rows under the search box and inset What's new ([#173](https://github.com/yabo-san/RohanKar-Launcher/issues/173)) ([5697176](https://github.com/yabo-san/RohanKar-Launcher/commit/569717681a0b1b81445b676ea886adba97b5200b))
+
 ## [1.6.0-fork.24](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.23...v1.6.0-fork.24) (2026-11-11)
 
 
