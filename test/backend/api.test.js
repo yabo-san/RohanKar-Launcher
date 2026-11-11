@@ -197,14 +197,6 @@ test('POST /library/scan adopts folders named after items', async (t) => {
   assert.deepEqual(r.body.found.map(f => [f.identifier, f.matchedBy]).sort(), [['rk-e2e-halo-ce', 'title'], ['rk-e2e-the-sims', 'identifier']]);
 });
 
-test('startup: the first item load adopts installs in the games folder, nested ones too', async (t) => {
-  const { backend } = await testApi(t);
-  fs.mkdirSync(path.join(backend.dataDir, 'games', 'rohan', '(12)Halo - Combat Evolved'), { recursive: true });
-  await backend.items.load();
-  await new Promise(r => setTimeout(r, 50));
-  assert.equal(backend.library.get('rk-e2e-halo-ce')?.install_dir, path.join(backend.dataDir, 'games', 'rohan', '(12)Halo - Combat Evolved'));
-});
-
 test('installs: start, progress over SSE, get, list, cancel, errors', async (t) => {
   const { call, backend, fake, info } = await testApi(t);
   backend.settings.save({ installPath: path.join(backend.dataDir, 'games') });

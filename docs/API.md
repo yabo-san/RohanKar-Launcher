@@ -343,8 +343,8 @@ curl -X POST http://127.0.0.1:7777/v1/library/rk-e2e-halo-ce/reveal
 Adopts installs already on disk: folders in `dir` (default: the install folder, the download
 folder and the app's own games folder) named after a loaded item's identifier or title, loosely
 (case, spaces and punctuation ignored, or the start of exactly one title). A folder holding only
-folders, such as `D:\Games\rohan`, is looked into one level. The backend also runs this once per
-start, after the uploads first load.
+folders, such as `D:\Games\rohan`, is looked into one level. It only runs when asked: Settings > Find installs here,
+as upstream's Scan Install Folder did.
 
 ```sh
 curl -X POST -d '{"dir":"D:\\Games"}' http://127.0.0.1:7777/v1/library/scan

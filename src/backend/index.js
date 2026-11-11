@@ -219,17 +219,6 @@ function createBackend({
     return installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap });
   }
 
-  // Once per start, after the uploads first load: a fresh install (or a new
-  // install folder) picks up what's already there without a trip to Settings
-  let autoScanned = false;
-  events.on('event', ({ type, data }) => {
-    if (type !== 'items' || autoScanned || !data?.count) return;
-    autoScanned = true;
-    scanInstalls()
-      .then(r => { if (r.found.length) log(`[scan] Adopted ${r.found.length} at startup`); })
-      .catch(e => log(`[scan] startup scan failed: ${e.message}`));
-  });
-
   // ─── Playnite export ──────────────────────────────────────────────────────
 
   const playniteFile = path.join(dataDir, 'playnite-export.json');
