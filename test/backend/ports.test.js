@@ -62,7 +62,7 @@ test('inside keeps a relative path under its root', (t) => {
 });
 
 // A fake GitHub on the fake archive's server: releases for o/pd, and its assets
-async function setup(t, { assets, bin: binZip, deleteAfterInstall = false } = {}) {
+async function setup(t, { assets, bin: binZip } = {}) {
   const state = { routes: {}, zips: {} };
   const fake = await fakeArchive(t, state);
   const bin = binZip || makeZip({ 'pd.exe': 'MZ', 'data/.keep': '' });
@@ -77,7 +77,7 @@ async function setup(t, { assets, bin: binZip, deleteAfterInstall = false } = {}
 
   const dir = tmpDir(t);
   const settings = createSettings(path.join(dir, 'settings.json'));
-  settings.save({ downloadPath: path.join(dir, 'dl'), installPath: path.join(dir, 'games'), deleteAfterInstall });
+  settings.save({ downloadPath: path.join(dir, 'dl'), installPath: path.join(dir, 'games') });
   const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
   t.after(() => library.close());
   const events = [];
@@ -93,7 +93,7 @@ async function setup(t, { assets, bin: binZip, deleteAfterInstall = false } = {}
 }
 
 test('a port installs its release build only: filesToAdd laid down, library row kept, no data step', async (t) => {
-  const { dir, library, installs, events, item } = await setup(t, { deleteAfterInstall: true });
+  const { dir, library, installs, events, item } = await setup(t);
   library.add(item.id, 'https://c/Nintendo.json');
   const r = installs.startPort({ item });
   assert.equal(r.ok, true);
@@ -105,7 +105,7 @@ test('a port installs its release build only: filesToAdd laid down, library row 
   assert.deepEqual([job.status, job.error, job.installDir, job.exePath, job.file], ['done', null, dest, path.join(dest, 'pd.exe'), 'pd-x86_64-windows.zip']);
   assert.ok(fs.existsSync(path.join(dest, 'portable.txt')));
   assert.ok(fs.existsSync(path.join(dest, 'data', '.keep')));
-  assert.ok(!fs.existsSync(path.join(dir, 'dl', 'PerfectDark-PerfectDarkPCPort', 'pd-x86_64-windows.zip')), 'deleteAfterInstall removes the download');
+  assert.ok(!fs.existsSync(path.join(dir, 'dl', 'PerfectDark-PerfectDarkPCPort', 'pd-x86_64-windows.zip')), 'the download is removed once installed');
   const row = library.get(item.id);
   assert.deepEqual([row.install_dir, row.exe_path, row.source], [dest, path.join(dest, 'pd.exe'), 'https://c/Nintendo.json']);
 
@@ -129,7 +129,7 @@ test('a release wrapped in one folder is unwrapped; with several exes none is pi
   assert.ok(fs.existsSync(path.join(dest, 'pd.x86_64.exe')));
   assert.ok(fs.existsSync(path.join(dest, 'data', 'put_your_rom_here.txt')));
   assert.ok(!fs.existsSync(path.join(dest, 'pd-x86_64-windows')), 'no wrapper folder left');
-  assert.deepEqual(fs.readdirSync(path.join(dir, 'dl', 'PerfectDark-PerfectDarkPCPort')).filter(n => n.startsWith('.unpack-')), [], 'staging is cleaned up');
+  assert.ok(!fs.existsSync(path.join(dir, 'dl', 'PerfectDark-PerfectDarkPCPort')), 'download and staging are cleaned up');
 });
 
 test('no Windows build, unreadable releases, no release, no repository', async (t) => {
