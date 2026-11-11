@@ -391,10 +391,10 @@ body { font-family: var(--font); font-size: 13px; color: var(--text); background
 .seg button.on { background: #3b3c3a; color: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / 30%); }
 .seg button:not(.on):hover { background: rgb(255 255 255 / 4%); }
 
-.navscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 12px 10px; scrollbar-width: none; }
+.navscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 12px 10px; scrollbar-width: none; }
 .navscroll::-webkit-scrollbar { display: none; }
 .navgroup {
-  display: flex; align-items: center; width: 100%; height: 30px; margin: 2px 0 0; padding: 0 8px; border: 0; border-radius: 6px;
+  display: flex; align-items: center; width: 100%; height: 30px; margin: 2px 0 0; padding: 0 9px; border: 0; border-radius: 6px;
   background: none; cursor: pointer; text-align: left; font: 600 11.5px var(--font); letter-spacing: 0; text-transform: none; color: var(--text2);
 }
 .navgroup::after { content: ''; width: 15px; height: 15px; margin-left: auto; margin-right: -2px; color: #d8d8d8; --m: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9.5 6 6 6-6'/%3E%3C/svg%3E"); transition: transform .2s var(--ease); }
@@ -843,7 +843,9 @@ body.unfocused .winctl:not(:hover) .light { background: var(--dim); }
 pre.readme { max-height: 60vh; overflow: auto; margin: 0; white-space: pre-wrap; font: 12px/1.5 ui-monospace, Consolas, monospace; }
 
 /* What's new: the sidebar button above Settings, and its pane (a .pop) */
-.sidebar .navitem.news { flex: none; margin-top: 4px; }
+/* Inset like the rows above it, with room before the Settings bar */
+.sidebar .navitem.news { flex: none; width: auto; margin: 4px 12px 8px; }
+@media (max-width: 860px) { .sidebar .navitem.news { margin: 4px 8px 8px; } }
 .pop.news-pop { width: 400px; max-height: 70vh; overflow-y: auto; }
 .news-head { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; }
 .news-head b { font-size: 14px; }
