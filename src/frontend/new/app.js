@@ -201,6 +201,8 @@ function versionFromItem(v) {
     _override:    v.override || undefined,
     _newer:       v.newer || null,
     _user:        !!v.user,
+    _local:       !!v.local,                // installed, but no loaded pack has the upload any more
+    _installedIn: v.installedIn || null,    // the installed copy an update put this upload into
   };
 }
 
@@ -1121,6 +1123,9 @@ function gameDetail(d) {
   if (dl) {
     actions = pill(dl.status === 'extracting' ? 'Extracting…' : `Downloading… ${dl.percent || 0}%`, 'disabled', { primary: true })
       + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
+  } else if (!lib?.install_dir && state.library[v._installedIn]?.install_dir) {
+    // Installed as an update over another version: that copy is the one to play
+    actions = pill('Go to installed copy', `data-version="${esc(v._installedIn)}"`, { primary: true, icon: 'play' });
   } else if (lib?.install_dir) {
     actions = pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"')
       + pill('Readme', 'data-action="readme"');
@@ -1144,8 +1149,11 @@ function gameDetail(d) {
     actions,
     extra: `${badges ? `<div class="badges">${badges}</div>` : ''}${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
-      ${newerOf ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
-        <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button></div>` : ''}`,
+      ${v._local ? `<div class="newer-note">This copy isn't in any of your packs any more: archive.org may have pulled it. It stays installed and playable.</div>` : ''}
+      ${newerOf && !dl ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
+        <button class="btn primary" data-action="update-upload" data-update="${esc(newerOf.identifier)}">Update</button>
+        <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button>
+        <div class="hint">Update unpacks it over this copy, in the same folder: saves and the Playnite entry stay.</div></div>` : ''}`,
     desc,
   }) + versionsTable(d) + '<section class="section album-reviews" id="reviews" hidden></section>' + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
@@ -1154,6 +1162,7 @@ function gameDetail(d) {
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
     lib?.install_dir ? `<dt>Installed to</dt><dd>${esc(lib.install_dir)}</dd>` : '',
+    lib?.install_dir && lib.upload ? `<dt>Updated with</dt><dd><a data-href="https://archive.org/details/${esc(lib.upload)}">${esc(lib.upload)}</a></dd>` : '',
     ...playRows(lib),
   ]) + (more.length ? section(`More from ${v._sourceLabel || v._uploader}`, more.map(gameCard).join(''), { cls: 'row', seeAll: ['uploader', v._uploader] }) : '');
 }
@@ -1277,10 +1286,12 @@ function confirmHashChange(job, name) {
   });
 }
 
-async function installGame(v, { acceptHashChange = false } = {}) {
-  const identifier = v.identifier;
+// into: the identifier of an installed copy v updates (a newer upload of
+// the same game): the files go over that copy, and its card shows the progress
+async function installGame(v, { acceptHashChange = false, into = null } = {}) {
+  const identifier = into || v.identifier;
   if (state.downloads.has(identifier)) return;
-  const list = await api.fetchFileList({ identifier });
+  const list = await api.fetchFileList({ identifier: v.identifier });
   if (!list.ok || !list.files?.length) return toast(`Couldn't read the file list: ${list.error || 'no files'}`);
   // What core says installs: archives (extracted), else an exe, else the
   // uploader's own files, downloaded as they are
@@ -1290,13 +1301,14 @@ async function installGame(v, { acceptHashChange = false } = {}) {
   // Largest archive is the game; plain files all download
   const picks = plain ? installable : [installable.slice().sort((a, b) => Number(b.size || 0) - Number(a.size || 0))[0]];
 
-  const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', v.identifier] };
+  const dl = { percent: 0, status: 'downloading', jobId: null, name: getTitle(v), open: ['game', identifier] };
   state.downloads.set(identifier, dl);
   render();
   let job;
   for (const file of picks) {
     job = await api.install({
-      identifier,
+      identifier:   v.identifier,
+      into,
       fileName:     file.name,
       acceptHashChange,
       onStart:      (j) => { dl.jobId = j.id; },
@@ -1307,9 +1319,16 @@ async function installGame(v, { acceptHashChange = false } = {}) {
   }
   state.downloads.delete(identifier);
   await reloadLibrary();
+  if (into && job.status === 'done') {
+    // Which upload is newer comes from the backend: read the titles again
+    await loadWall();
+    const fresh = onDetailPage() && state.view.name === 'game' && detailFor('game', state.view.arg);
+    if (fresh) state.detail = { ...fresh, version: fresh.game._versions?.find(x => x.identifier === into) || fresh.version };
+  }
   render();
-  if (job.hashChange) return (await confirmHashChange(job, getTitle(v))) && installGame(v, { acceptHashChange: true });
-  if (job.status === 'done') toast(plain ? `${getTitle(v)} is downloaded. Open its folder to use the files.` : `${getTitle(v)} is installed.`);
+  if (job.hashChange) return (await confirmHashChange(job, getTitle(v))) && installGame(v, { acceptHashChange: true, into });
+  if (job.status === 'done' && into) toast(`${getTitle(v)} is updated.`);
+  else if (job.status === 'done') toast(plain ? `${getTitle(v)} is downloaded. Open its folder to use the files.` : `${getTitle(v)} is installed.`);
   else if (job.status !== 'cancelled') toast(`Install failed: ${job.error || 'unknown error'}`);
 }
 
@@ -1835,6 +1854,10 @@ async function onAction(action, el) {
   const v = detailTarget();
   switch (action) {
     case 'install': return d?.port ? installPort(d.port) : installGame(v);
+    case 'update-upload': {
+      const newer = (d?.game?._versions || []).find(x => x.identifier === el?.dataset.update);
+      return newer && installGame(newer, { into: v.identifier });
+    }
     case 'cancel': {
       const dl = state.downloads.get(v.identifier);
       if (dl?.jobId) await api.cancelInstall({ jobId: dl.jobId });

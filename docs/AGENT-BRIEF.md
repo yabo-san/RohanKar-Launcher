@@ -43,6 +43,11 @@ The finished work orders are in git history. Where anything disagrees with this 
 - What a user added lives on their machine. Never copy it into the repo.
 - Uninstall moves the folder to the Recycle Bin; it never deletes outright.
 - The downloaded archive is deleted once an install succeeds.
+- An install saves the game's title and upload date in its row, so an upload pulled from
+  archive.org keeps its name (in the app and the Playnite export) and stays as an installed copy.
+  A pulled copy joins the card of a loaded upload with the same title, else gets its own card.
+- A reupload of an installed game is its update: Update unpacks it over the same folder and keeps
+  the same library entry and Playnite id; the row's `upload` says which upload it now holds.
 - Never change the default install folder: Playnite and existing installs depend on it.
 
 ## Out of scope. Do not build, propose or reopen
