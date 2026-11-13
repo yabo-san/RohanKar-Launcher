@@ -15,7 +15,8 @@ belong in the app. Curation is not the point.
 2. **Browse.** Games come from the user's catalogues and Ports from their repos. Right-click
    excludes an upload from a catalogue, and the exclusion can be undone.
 3. **Install.** One click.
-   - A repo installs its latest release's Windows build. A repo with no build stays as a tile
+   - A repo installs its latest release's Windows build (on Linux, its Linux build when it has
+     one). A repo with no build stays as a tile
      that opens its page.
    - An archive.org upload downloads, and a zip, 7z or rar is extracted. Playing it only really
      works for uploads shaped like Rohan's (one game per upload, ready to run). Anything else is

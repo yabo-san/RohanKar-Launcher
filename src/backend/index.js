@@ -84,7 +84,7 @@ function createBackend({
   events.setMaxListeners(0);
   const emit = (type, data) => events.emit('event', { type, data });
 
-  const os       = { ...defaultHost(platform), ...host };
+  const os       = { ...defaultHost(), ...host };  // the real system's opener, whatever system the release picks are for
   const settings = createSettings(path.join(dataDir, 'settings.json'));
   const netlog   = createNetLog(path.join(dataDir, 'archive-net.log'));
   const library  = createLibrary({

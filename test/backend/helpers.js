@@ -148,6 +148,8 @@ async function testBackend(t, { state, curated = false, ...opts } = {}) {
     uploadersUrl: `${fake.base}/uploaders.json`,
     githubApi: fake.base,
     gitlabApi: fake.base,
+    // Windows' asset picks, whatever system the tests run on
+    platform: 'win32',
     // No curated shelf unless a test asks for one, so counts stay the fixtures'
     curatedPortsUrl: curated ? `${fake.base}/curated-ports.json` : null,
     sleep: async () => {},
