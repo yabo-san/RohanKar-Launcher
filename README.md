@@ -17,6 +17,10 @@ Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yab
 SmartScreen will warn (unsigned): **More info, then Run anyway**.
 Verify a download: `gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher`
 
+On Linux or a Steam Deck, download `y4bo-x86_64.AppImage` instead, allow it to run (Properties,
+Permissions), and open it. Windows games run through Proton, which Steam installs (Library,
+Tools, search for Proton).
+
 New builds aren't installed by the app; get them from the same releases page.
 For Playnite, the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library there.
 Want your own built-in list? Fork it: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
