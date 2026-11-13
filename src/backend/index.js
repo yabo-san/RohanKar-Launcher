@@ -25,6 +25,7 @@ const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
 const disk = require('./disk');
+const ports = require('./ports');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
 
@@ -76,6 +77,8 @@ function createBackend({
   platform = process.platform,
   // The packaged app's own 7-Zip (resources/7zip/7zzs), used on Linux
   bundledSevenZip = null,
+  // Steam's Game Mode: POST /os/keyboard opens Steam's on-screen keyboard
+  gameMode = ports.steamGameMode(),
   sleep,
   log = (msg) => console.log(msg),
 }) {
@@ -318,7 +321,7 @@ function createBackend({
   }
 
   return {
-    dataDir, appDir, appVersion, events, emit, os,
+    dataDir, appDir, appVersion, gameMode, events, emit, os,
     setUpdaterStatus, get updaterStatus() { return updaterStatus; },
     requestOpen, get openRequest() { return openRequest; }, clearOpenRequest: () => { openRequest = null; },
     settings, netlog, library, archive, covers, installs, catalogs, items, userSources, getOverrides, getDefaultSources,
