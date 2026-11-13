@@ -243,7 +243,7 @@ async function run(opts, {
       const settings = createSettings(path.join(dir, 'settings.json'));
       settings.save({ installPath: path.join(dir, 'games'), downloadPath: path.join(dir, 'dl') });
       const library = createLibrary({ dbPath: path.join(dir, 'library.db'), log: () => {} });
-      const installs = createInstalls({ settings, library, archive: createArchive({ base: archiveBase, log: () => {} }), gamesDir: dir, log: () => {}, githubApi, ...(gitlabSupported() ? { gitlabApi } : {}), ...(fs.existsSync(LINUX_7Z) ? { sevenZip: LINUX_7Z } : {}) });
+      const installs = createInstalls({ settings, library, archive: createArchive({ base: archiveBase, log: () => {} }), gamesDir: dir, log: () => {}, githubApi, platform: 'win32', ...(gitlabSupported() ? { gitlabApi } : {}), ...(fs.existsSync(LINUX_7Z) ? { sevenZip: LINUX_7Z } : {}) });
       try {
         for (const repo of wanted) {
           const e = find(repo);

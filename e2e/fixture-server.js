@@ -53,6 +53,8 @@ async function startStack(settings, { page = 'new/index.html' } = {}) {
     '--overrides-url', `${fixtures.base}/overrides.json`,
     '--uploaders-url', `${fixtures.base}/uploaders.json`,
     '--github-api', fixtures.base,
+    // The UI tests walk Windows' flow, whatever system runs them
+    '--platform', 'win32',
     '--gitlab-api', fixtures.base,
     '--curated-ports-url', `${fixtures.base}/curated-ports.json`,
   ], {}, () => {});

@@ -2,7 +2,7 @@
 /**
  * Install engine: download an archive.org file, extract it, find its
  * executable, record it in library.db. Ports (catalog items) take the latest
- * GitHub or GitLab release's Windows build (ports.js); game data is the user's job.
+ * GitHub or GitLab release's build for this system (ports.js); game data is the user's job.
  * Files from additional sources are checked against the user's sha1, or
  * pinned on first install (pins); a changed file stops with hashChange set.
  */
@@ -21,7 +21,7 @@ const GITHUB_API = 'https://api.github.com';
 const GITLAB_API = 'https://gitlab.com/api/v4';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -109,11 +109,19 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   }
 
   // Unpacks an archive into destDir: 7-Zip when installed (zip/7z/rar),
-  // extract-zip for .zip otherwise; any other file is copied in as it is.
+  // extract-zip for .zip otherwise, the system's tar for a tarball (a Linux
+  // build); any other file is copied in as it is.
   // Resolves { ok } ({ ok, copiedTo } for a copied file) or { ok: false, error }.
   async function extractTo(filePath, destDir) {
     fs.mkdirSync(destDir, { recursive: true });
     const lower = filePath.toLowerCase();
+    if (ports.TAR_EXT.test(lower)) {
+      return new Promise((resolve) => {
+        execFile('tar', ['-xf', filePath, '-C', destDir], (err) => {
+          resolve(err ? { ok: false, error: err.message } : { ok: true });
+        });
+      });
+    }
     if (/\.(zip|7z|rar)$/.test(lower) && fs.existsSync(sevenZip)) {
       return new Promise((resolve) => {
         execFile(sevenZip, ['x', filePath, `-o${destDir}`, '-y'], (err) => {
@@ -287,7 +295,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     return { release, source: gitlab ? 'gitlab' : 'github' };
   }
 
-  // The latest release's Windows build, unpacked into the port's folder
+  // The latest release's build for this system, unpacked into the port's folder
   async function runPortJob(job, item) {
     const entry = item.entry || {};
     const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
@@ -298,14 +306,14 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
     update(job, { status: 'downloading', step: 'binary', percent: 0 });
     const { release, source } = await latestRelease(item);
-    const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter });
+    const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter, platform, deck });
     if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
     update(job, { file: pick.asset.name });
     const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
     if (job.status === 'cancelled') return;
     if (!bin.ok) return fail(bin.error);
     // A GitLab package link's name has no extension: name it after what it holds
-    if (!ports.ARCHIVE_EXT.test(bin.filePath) && !/\.exe$/i.test(bin.filePath)) {
+    if (!ports.isArchive(bin.filePath) && !/\.exe$/i.test(bin.filePath)) {
       const ext = ports.sniffArchiveExt(bin.filePath);
       if (ext) { fs.renameSync(bin.filePath, bin.filePath + ext); bin.filePath += ext; }
     }
@@ -315,7 +323,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
     update(job, { status: 'extracting', percent: 100 });
     let copiedTo = null;
-    if (ports.ARCHIVE_EXT.test(bin.filePath)) {
+    if (ports.isArchive(bin.filePath)) {
       // Unpacked beside the download first: a release that is one folder
       // (pd-x86_64-windows/) lays down that folder's contents
       const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
@@ -350,7 +358,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // The latest release's files, for the picker when a repo is added
   async function releaseFiles(item) {
     const { release } = await latestRelease(item);
-    return ports.releaseFiles(release);
+    return ports.releaseFiles(release, { platform, deck });
   }
 
   // Installed ports whose repo has published a newer release than the one

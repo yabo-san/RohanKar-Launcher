@@ -98,3 +98,32 @@ test('Project Midas picks its Windows .7z over the Linux and Steam Deck builds',
     .map((name) => ({ name, browser_download_url: `https://example.invalid/${name}` }));
   assert.equal(pickAsset(assets, { filter: midas.releaseAssetFilter }).asset.name, 'ProjectMidas-v1-windows.7z');
 });
+
+// On Linux (Steam Deck), the same releases: the Linux build where there is one,
+// the shelf's Windows filter set aside; Windows' (through Proton) otherwise
+const LINUX = {
+  'bradharding/doomretro': 'doomretro-6.3-win64.zip',
+  'kraflab/dsda-doom': 'dsda-doom-0.29.4-linux-x86_64.appimage',
+  'nstlaurent/DoomLauncher': 'DoomLauncher_3.8.2.0.zip',
+  'andrei-drexler/ironwail': 'ironwail-0.8.2-linux-x64.tar.gz',
+  'hrehfeld/QuakeInjector': 'QuakeInjector.exe-alpha08.zip',
+  'diasurgical/devilutionx': 'devilutionx-linux-x86_64.appimage',
+};
+
+test('on Linux each Doom, Quake and Diablo pick takes its Linux build, or Windows\' when it has none', () => {
+  const { pickAsset } = require('../src/backend/ports');
+  for (const [repo, [names]] of Object.entries(RELEASES)) {
+    const entry = catalog.apps.find((a) => a.repository === repo);
+    const assets = names.map((name) => ({ name, browser_download_url: `https://example.invalid/${name}` }));
+    assert.equal(pickAsset(assets, { filter: entry.releaseAssetFilter, platform: 'linux' }).asset?.name, LINUX[repo], repo);
+  }
+});
+
+test('on Linux Project Midas takes its Linux build, and on a Steam Deck its Steam Deck build', () => {
+  const { pickAsset } = require('../src/backend/ports');
+  const midas = catalog.apps.find((a) => a.repository === 'murkantor/Project-Midas');
+  const assets = ['ProjectMidas-v1-linux.7z', 'ProjectMidas-v1-steamdeck.7z', 'ProjectMidas-v1-windows.7z']
+    .map((name) => ({ name, browser_download_url: `https://example.invalid/${name}` }));
+  assert.equal(pickAsset(assets, { filter: midas.releaseAssetFilter, platform: 'linux' }).asset.name, 'ProjectMidas-v1-linux.7z');
+  assert.equal(pickAsset(assets, { filter: midas.releaseAssetFilter, platform: 'linux', deck: true }).asset.name, 'ProjectMidas-v1-steamdeck.7z');
+});

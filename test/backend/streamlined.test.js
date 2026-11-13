@@ -20,10 +20,10 @@ test('patternFor: version numbers become \\d+, the rest is literal, and it picks
   assert.equal(ports.patternFor('a+b (c).exe'), '^a\\+b \\(c\\)\\.exe$');
 });
 
-test('releaseFiles: Windows files first, the automatic pick, and whether to ask', () => {
+test('releaseFiles: the files that run here first, the automatic pick, and whether to ask', () => {
   const two = ports.releaseFiles({ tag_name: 'v2', assets: [asset('game-linux.tar.gz'), asset('game-win64.zip'), asset('game-win32.zip')] });
   assert.equal(two.tag, 'v2');
-  assert.deepEqual(two.files.map(f => [f.name, f.windows]), [['game-win64.zip', true], ['game-win32.zip', true], ['game-linux.tar.gz', false]]);
+  assert.deepEqual(two.files.map(f => [f.name, f.platform, f.here]), [['game-win64.zip', 'windows', true], ['game-win32.zip', 'windows', true], ['game-linux.tar.gz', 'linux', false]]);
   assert.equal(two.auto, 'game-win64.zip');
   assert.equal(two.choose, true);
   const one = ports.releaseFiles({ tag_name: 'v1', assets: [asset('game-windows.zip'), asset('game-linux.zip')] });
@@ -31,6 +31,10 @@ test('releaseFiles: Windows files first, the automatic pick, and whether to ask'
   const none = ports.releaseFiles({ tag_name: 'v1', assets: [asset('source.tar.gz')] });
   assert.deepEqual([none.auto, none.choose], [null, true]);
   assert.deepEqual(ports.releaseFiles(null), { tag: null, files: [], auto: null, choose: false });
+  // On Linux the Linux build comes first and is the one choice
+  const linux = ports.releaseFiles({ tag_name: 'v2', assets: [asset('game-win64.zip'), asset('game-linux.tar.gz')] }, { platform: 'linux' });
+  assert.deepEqual(linux.files.map(f => [f.name, f.here]), [['game-linux.tar.gz', true], ['game-win64.zip', true]]);
+  assert.deepEqual([linux.auto, linux.choose], ['game-linux.tar.gz', false]);
 });
 
 test('accountUploads keeps updatedate', () => {

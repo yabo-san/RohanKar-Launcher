@@ -9,10 +9,43 @@ const path   = require('path');
 const crypto = require('crypto');
 
 const ARCHIVE_EXT = /\.(zip|7z|rar)$/i;
-const NOT_WINDOWS = /linux|macos|mac-|[-_.]mac\b|osx|darwin|android|ios\b|appimage|flatpak|\.deb$|\.rpm$|\.dmg$|\.pkg$|\.tar(\.\w+)?$|\.apk$/i;
-const LOOKS_WINDOWS = /win|windows|x64|x86_64|amd64|\.exe$/i;
+// Tarballs, which only Linux builds come as; the system's tar unpacks them
+const TAR_EXT = /\.(tar|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tbz2?)$/i;
+const isArchive = (name) => ARCHIVE_EXT.test(name) || TAR_EXT.test(name);
 const PREFER_64 = /x64|x86_64|amd64|win64/i;
-const NOT_64 = /x86(?!_64)|win32|arm|i686/i;
+const NOT_64 = /x86(?!_64)|win32|arm|i[3-6]86/i;
+
+// Never the build itself: checksums, signatures, debug symbols, source archives
+const AUXILIARY = /\.(json|sha\d*|md5|sig|asc|minisig|pdb|txt)$|(^|[._-])(checksums?|sha\d*sums?|source|src|debug|symbols|pdb)([._-]|$)|^source code/i;
+// What an install can lay down: an archive, a program, or a file with no
+// extension (a GitLab package link, or a bare Linux binary). A .tar.* only on
+// Linux, where the system's tar unpacks it.
+const INSTALLABLE = {
+  windows: /\.(zip|7z|rar|exe)$|^(?!.*\.[a-z][a-z0-9]{0,4}$)/i,
+  linux:   /\.(zip|7z|rar|exe|appimage|x86_64|tar\.gz|tgz|tar\.xz|txz|tar\.bz2|tar)$|^(?!.*\.[a-z][a-z0-9]{0,4}$)/i,
+};
+
+// Which system a release file is for, from its name, by Quiver's markers:
+// 'windows', 'linux', 'macos', 'android', 'ios' or 'unknown'. Nothing marked
+// is 'unknown', which counts as Windows' (a bare game.zip is a Windows build).
+function platformOf(name) {
+  const s = String(name).toLowerCase();
+  if (/windows|(?<!dar)win(?:32|64)|(?:^|[^a-z])win(?:[^a-z]|$)|\.exe$|\.msi$/.test(s)) return 'windows';
+  if (/linux|appimage|flatpak|steamdeck|steam-deck|\.deb$|\.rpm$/.test(s)) return 'linux';
+  if (/macos|darwin|osx|(?:^|[^a-z])mac(?:[^a-z]|$)|\.dmg$/.test(s)) return 'macos';
+  if (/android|\.apk$/.test(s)) return 'android';
+  if (/(?:^|[^a-z])ios(?:[^a-z]|$)|iphone|ipados|\.ipa$/.test(s)) return 'ios';
+  return 'unknown';
+}
+
+// The systems whose builds run here, best first. On Linux a Windows build is
+// the last resort: it runs through Proton.
+// A file an install can use on this system (os: 'windows' or 'linux'). A
+// Flatpak bundle needs Flatpak to install it, so it doesn't count.
+const isBuild = (name, os) => !AUXILIARY.test(name) && !/flatpak/i.test(name) && INSTALLABLE[os].test(name);
+
+const tiersFor = (platform) => (platform === 'linux' ? ['linux', 'unknown', 'windows'] : ['windows', 'unknown']);
+const osOf = (platform) => (platform === 'linux' ? 'linux' : 'windows');
 
 // The newest release that is neither a draft nor a prerelease, from the
 // GitHub API's /releases list (newest first)
@@ -39,8 +72,10 @@ function releasesFromGitlab(list) {
 const gitlabReleasesUrl = (api, repository) => `${api}/projects/${encodeURIComponent(repository)}/releases`;
 
 // An archive's extension from its first bytes, for a download whose name has
-// none (GitLab package links like ...-Windows-RelWithDebInfo): '.zip', '.7z' or ''
-const MAGIC = [['.zip', Buffer.from('504b0304', 'hex')], ['.7z', Buffer.from('377abcaf271c', 'hex')], ['.rar', Buffer.from('526172211a07', 'hex')]];
+// none (GitLab package links like ...-Windows-RelWithDebInfo): '.zip', '.7z',
+// '.rar', a compressed tarball's, or ''
+const MAGIC = [['.zip', Buffer.from('504b0304', 'hex')], ['.7z', Buffer.from('377abcaf271c', 'hex')], ['.rar', Buffer.from('526172211a07', 'hex')],
+  ['.tar.gz', Buffer.from('1f8b', 'hex')], ['.tar.xz', Buffer.from('fd377a585a00', 'hex')], ['.tar.bz2', Buffer.from('425a68', 'hex')]];
 function sniffArchiveExt(file) {
   let fd;
   try {
@@ -58,27 +93,40 @@ function toRegExp(pattern) {
   return new RegExp(pattern.replace(/^\(\?i\)/, ''), insensitive ? 'i' : '');
 }
 
-// Picks the Windows asset of a release.
+// Picks the build of a release for this computer (platform: process.platform).
 //   pattern: an assetPattern (a regex), wins when set
 //   filter:  Quiver's releaseAssetFilter, a substring of the asset name
-// Otherwise any asset that looks like a Windows build. Among several, an
-// archive or exe beats anything else and 64-bit beats 32-bit/ARM.
+// Otherwise this system's build, then an unmarked one, then (on Linux only)
+// Windows', which runs through Proton. Checksums, symbols and source archives
+// never count. On Linux a filter that only matches Windows builds is set
+// aside when the release has a Linux build: the shelf's filters pick Windows
+// builds for Windows. Among several, 64-bit beats 32-bit and ARM, and on a
+// Steam Deck (deck) a Steam Deck build beats a plain Linux one.
 // Returns { asset } or { error, names }.
-function pickAsset(assets, { pattern = null, filter = null } = {}) {
+function pickAsset(assets, { pattern = null, filter = null, platform = 'win32', deck = false } = {}) {
   const all = (Array.isArray(assets) ? assets : []).filter(a => a && a.name && a.browser_download_url);
+  const os = osOf(platform);
+  const builds = all.filter(a => isBuild(a.name, os));
+  const names = all.map(a => a.name);
   let pool;
   if (pattern) {
     let re;
-    try { re = toRegExp(pattern); } catch (e) { return { error: `Bad asset pattern ${pattern}: ${e.message}`, names: all.map(a => a.name) }; }
+    try { re = toRegExp(pattern); } catch (e) { return { error: `Bad asset pattern ${pattern}: ${e.message}`, names }; }
     pool = all.filter(a => re.test(a.name));
-  } else if (filter) {
-    pool = all.filter(a => a.name.toLowerCase().includes(String(filter).toLowerCase()));
   } else {
-    pool = all.filter(a => LOOKS_WINDOWS.test(a.name) && !NOT_WINDOWS.test(a.name));
+    pool = builds;
+    if (filter) {
+      const f = String(filter).toLowerCase();
+      const filtered = builds.filter(a => a.name.toLowerCase().includes(f));
+      const native = builds.filter(a => platformOf(a.name) === 'linux');
+      const setAside = os === 'linux' && native.length && filtered.every(a => platformOf(a.name) === 'windows');
+      pool = setAside ? native : filtered;
+    }
+    pool = tiersFor(platform).map(t => pool.filter(a => platformOf(a.name) === t)).find(l => l.length) || [];
   }
-  const usable = pool.filter(a => ARCHIVE_EXT.test(a.name) || /\.exe$/i.test(a.name));
-  const ranked = (usable.length ? usable : pool).slice().sort((a, b) => rank(b.name) - rank(a.name));
-  if (!ranked.length) return { error: 'No Windows build in the latest release', names: all.map(a => a.name) };
+  const usable = pool.filter(a => INSTALLABLE[os].test(a.name));
+  const ranked = (usable.length ? usable : pool).slice().sort((a, b) => rank(b.name, deck) - rank(a.name, deck));
+  if (!ranked.length) return { error: `No ${os === 'linux' ? 'Linux or Windows' : 'Windows'} build in the latest release`, names };
   return { asset: ranked[0] };
 }
 // A picked asset's name as an assetPattern that still matches the next
@@ -89,19 +137,32 @@ function patternFor(name) {
   return `^${lit.replace(/\d+/g, '\\d+')}$`;
 }
 
-// What a release offers, for the file picker: every asset's name and the
-// pattern that would pick it again, the Windows-looking ones first, and the
-// one pickAsset takes on its own. choose: true when there's a real choice
-// (several Windows-looking files, or none).
-function releaseFiles(release) {
+// What a release offers, for the file picker: every asset's name, the
+// system it's for, and the pattern that would pick it again, the ones that
+// run here first (best system first), and the one pickAsset takes on its own.
+// choose: true when there's a real choice (several files for the best
+// system that has any, or none at all).
+function releaseFiles(release, { platform = 'win32', deck = false } = {}) {
   const all = (release?.assets || []).filter(a => a && a.name && a.browser_download_url);
-  const win = (a) => LOOKS_WINDOWS.test(a.name) && !NOT_WINDOWS.test(a.name);
-  const files = all.slice().sort((a, b) => win(b) - win(a))
-    .map(a => ({ name: a.name, size: a.size ?? null, windows: win(a), pattern: patternFor(a.name) }));
-  const auto = pickAsset(all).asset?.name || null;
-  return { tag: release?.tag_name || null, files, auto, choose: files.filter(f => f.windows).length !== 1 && files.length > 0 };
+  const os = osOf(platform);
+  const tiers = tiersFor(platform);
+  const tierOf = (a) => (isBuild(a.name, os) ? tiers.indexOf(platformOf(a.name)) : -1);
+  const order = (a) => { const t = tierOf(a); return t < 0 ? tiers.length : t; };
+  const sorted = all.slice().sort((a, b) => order(a) - order(b));
+  const files = sorted.map(a => ({ name: a.name, size: a.size ?? null, platform: platformOf(a.name), here: tierOf(a) >= 0, pattern: patternFor(a.name) }));
+  const auto = pickAsset(all, { platform, deck }).asset?.name || null;
+  const best = sorted.length ? order(sorted[0]) : tiers.length;
+  const choices = sorted.filter(a => order(a) === best && best < tiers.length).length;
+  return { tag: release?.tag_name || null, files, auto, choose: choices !== 1 && files.length > 0 };
 }
-const rank = (name) => (PREFER_64.test(name) ? 2 : 0) - (NOT_64.test(name) ? 1 : 0);
+const rank = (name, deck = false) => (PREFER_64.test(name) ? 2 : 0) - (NOT_64.test(name) ? 1 : 0)
+  + (/steam-?deck/i.test(name) ? (deck ? 1 : -1) : 0);
+
+// A Steam Deck: SteamOS, or a Steam session that says so
+function onSteamDeck({ env = process.env, osRelease = () => { try { return fs.readFileSync('/etc/os-release', 'utf8'); } catch { return ''; } } } = {}) {
+  if (String(env.SteamDeck || '').trim() === '1') return true;
+  return /^ID=["']?steamos["']?$/m.test(osRelease());
+}
 
 function sha1File(file) {
   return new Promise((resolve, reject) => {
@@ -144,5 +205,5 @@ function portTraits(entry = {}) {
   };
 }
 
-module.exports = { pickRelease, pickAsset, patternFor, releaseFiles, toRegExp, sha1File, inside, releaseRoot, portTraits,
-  releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, ARCHIVE_EXT };
+module.exports = { pickRelease, pickAsset, platformOf, onSteamDeck, patternFor, releaseFiles, toRegExp, sha1File, inside, releaseRoot, portTraits,
+  releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, isArchive, ARCHIVE_EXT, TAR_EXT };
