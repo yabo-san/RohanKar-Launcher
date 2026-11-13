@@ -1475,6 +1475,9 @@ async function addRepo({ repository, repositorySource }) {
   return installPort(p);
 }
 
+// The system a release file is for, as the picker labels it (from ports.platformOf)
+const PLATFORM_NAMES = { windows: 'Windows', linux: 'Linux', macos: 'macOS', android: 'Android', ios: 'iOS' };
+
 // The release's files as a list to pick from, the automatic pick first and focused
 function pickReleaseFile(repository, rel) {
   const files = rel.files.slice().sort((a, b) => (b.name === rel.auto) - (a.name === rel.auto));
@@ -1487,7 +1490,7 @@ function pickReleaseFile(repository, rel) {
       <div class="modal-header"><div class="modal-title" id="modal-title">Which file from ${esc(repository)}${rel.tag ? ` ${esc(rel.tag)}` : ''}?</div></div>
       <div class="modal-content"><div class="file-pick" role="radiogroup" aria-label="Release file">
         ${files.map((f, i) => `<label class="file-opt"><input type="radio" name="release-file" value="${i}"${i === 0 ? ' checked' : ''}>
-          <span class="grow">${esc(f.name)}</span>${f.windows ? '<span class="hint">Windows</span>' : ''}</label>`).join('')}
+          <span class="grow">${esc(f.name)}</span>${PLATFORM_NAMES[f.platform] ? `<span class="hint">${PLATFORM_NAMES[f.platform]}</span>` : ''}</label>`).join('')}
       </div><div class="hint">Updates download the same file from each new release.</div></div>
       <div class="modal-footer"><button class="md-btn" data-modal="0">Cancel</button><button class="md-btn md-btn-primary" data-modal="1">Install</button></div>
     </div>`;
