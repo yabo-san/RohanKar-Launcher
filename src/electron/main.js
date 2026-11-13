@@ -71,7 +71,9 @@ let backend = null;         // the utility process
 let backendExited = false;
 let quitting = false;
 
-const BACKEND_ARGS = ['--data-dir', USER_DATA];
+// The packaged app brings its own 7-Zip on Linux (package.json extraResources)
+const BACKEND_ARGS = ['--data-dir', USER_DATA,
+  ...(app.isPackaged ? ['--seven-zip', path.join(process.resourcesPath, '7zip', '7zzs')] : [])];
 
 // Answers the backend's requests for OS actions
 function answerHost(proc) {

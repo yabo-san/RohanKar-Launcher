@@ -47,4 +47,4 @@ run = "xvfb-run -a npx playwright test"
 
 [tasks.build-dir]
 description = "Unpacked Linux build in dist/linux-unpacked (no installer)"
-run = "npx electron-builder --linux --dir --publish never"
+run = ["node scripts/fetch-7zip.js", "npx electron-builder --linux --dir --publish never"]

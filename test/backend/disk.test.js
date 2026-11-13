@@ -138,3 +138,50 @@ test('matchInstallFolders: looks inside a folder of games, not inside a game', (
   ]);
   assert.equal(disk.matchInstallFolders(root, ['halo-2'], { 'Halo 2': 'halo-2' }, { nested: 2 }).length, 1);
 });
+
+const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1, 1, 0]);
+
+test('findExes on Linux: its own programs first (AppImage, .x86_64, ELF binaries), else the .exe', (t) => {
+  const root = tmpDir(t);
+  const linux = { platform: 'linux' };
+  // Perfect Dark's Linux build next to a stray Windows exe: the Linux program wins
+  const pd = tree(path.join(root, 'pd'), { 'pd.x86_64': 'x', 'tool.exe': 'MZ', 'readme.txt': 'r' });
+  assert.deepEqual(disk.findExes(pd, 0, linux).map(p => path.basename(p)), ['pd.x86_64']);
+  // An ELF binary with no extension is a program; a library or data file isn't
+  const bins = tree(path.join(root, 'bins'), { 'libSDL2-2.0.so.0': '', 'game.dat': '' });
+  fs.writeFileSync(path.join(bins, 'ironwail'), ELF);
+  fs.writeFileSync(path.join(bins, 'libSDL2-2.0.so.0'), ELF);
+  fs.writeFileSync(path.join(bins, 'game.dat'), ELF);
+  fs.writeFileSync(path.join(bins, 'LICENSE'), 'text, not ELF');
+  assert.deepEqual(disk.findExes(bins, 0, linux).map(p => path.basename(p)), ['ironwail']);
+  const appimage = tree(path.join(root, 'ai'), { 'dsda-doom.AppImage': '' });
+  assert.deepEqual(disk.findExes(appimage, 0, linux).map(p => path.basename(p)), ['dsda-doom.AppImage']);
+  // Only a Windows build: its exe, which runs through Proton
+  const win = tree(path.join(root, 'win'), { 'game.exe': 'MZ' });
+  assert.deepEqual(disk.findExes(win, 0, linux).map(p => path.basename(p)), ['game.exe']);
+  // On Windows a Linux program is never offered
+  assert.deepEqual(disk.findExes(pd, 0, { platform: 'win32' }).map(p => path.basename(p)), ['tool.exe']);
+  assert.equal(disk.isLinuxProgram(path.join(root, 'missing')), false);
+});
+
+test('makeRunnable: on Linux, programs that lost their run permission get it back', { skip: process.platform === 'win32' }, (t) => {
+  const root = tmpDir(t);
+  const dir = tree(path.join(root, 'g'), { 'pd.x86_64': 'x', 'start.sh': '#!/bin/sh', 'data/level.dat': 'd', 'already.AppImage': '' });
+  fs.writeFileSync(path.join(dir, 'bin-elf'), ELF);
+  fs.chmodSync(path.join(dir, 'already.AppImage'), 0o755);
+  for (const f of ['pd.x86_64', 'start.sh', 'bin-elf']) fs.chmodSync(path.join(dir, f), 0o644);
+  const logs = [];
+  assert.equal(disk.makeRunnable(dir, { platform: 'linux', log: (m) => logs.push(m) }), 3);
+  const mode = (f) => fs.statSync(path.join(dir, f)).mode & 0o777;
+  assert.deepEqual(['pd.x86_64', 'start.sh', 'bin-elf'].map(mode), [0o755, 0o755, 0o755]);
+  assert.equal(mode('data/level.dat'), 0o644, 'data stays data');
+  assert.match(logs[0], /Allowed 3 programs to run/);
+  // A single downloaded program, and no-ops
+  const single = path.join(root, 'Game.AppImage');
+  fs.writeFileSync(single, '');
+  fs.chmodSync(single, 0o644);
+  assert.equal(disk.makeRunnable(single, { platform: 'linux' }), 1);
+  assert.equal(disk.makeRunnable(dir, { platform: 'win32' }), 0);
+  assert.equal(disk.makeRunnable(null, { platform: 'linux' }), 0);
+  assert.equal(disk.makeRunnable(path.join(root, 'missing'), { platform: 'linux' }), 0);
+});

@@ -8,3 +8,4 @@ playwright-report/
 .launcher-data/
 sandbox/
 preview-site/
+vendor/

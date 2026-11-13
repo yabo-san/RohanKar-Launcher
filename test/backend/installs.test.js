@@ -209,6 +209,29 @@ test('start: one file of an item finishing leaves the folder its other file is d
   assert.ok(!fs.existsSync(path.join(dir, 'dl', 'two')), 'the last one removes it');
 });
 
+test('start on Linux: a .7z unpacks with the 7-Zip found, its programs made runnable; with none it fails', { skip: process.platform === 'win32' }, async (t) => {
+  const state = { files: { seven: [{ name: 'seven.7z', source: 'original' }] }, zips: { 'seven/seven.7z': Buffer.from('7z') } };
+  // A stand-in 7-Zip: records its arguments, unpacks a Linux program with no run permission
+  const tools = tmpDir(t);
+  const fake7z = path.join(tools, '7zz');
+  fs.writeFileSync(fake7z, '#!/bin/sh\necho "$@" > "$(dirname "$0")/args"\nout=$(echo "$3" | sed "s/^-o//")\nprintf x > "$out/game.x86_64"\nchmod 644 "$out/game.x86_64"\n');
+  fs.chmodSync(fake7z, 0o755);
+  const { installs } = await setup(t, state, {}, { platform: 'linux', sevenZip: fake7z });
+  const job = (await installs.start({ itemId: 'seven' })).jobs[0];
+  await installs.wait(job.id);
+  const done = installs.get(job.id);
+  assert.deepEqual([done.status, done.error], ['done', null]);
+  assert.match(fs.readFileSync(path.join(tools, 'args'), 'utf8'), /^x .*seven\.7z -o.*seven -y/);
+  assert.equal(done.exePath, path.join(done.installDir, 'game.x86_64'));
+  assert.equal(fs.statSync(done.exePath).mode & 0o111, 0o111, 'runnable');
+
+  const none = await setup(t, state, {}, { platform: 'linux', sevenZip: null });
+  const failed = (await none.installs.start({ itemId: 'seven' })).jobs[0];
+  await none.installs.wait(failed.id);
+  assert.deepEqual([none.installs.get(failed.id).status, none.installs.get(failed.id).error],
+    ['error', "Couldn't unpack seven.7z: 7-Zip isn't available. Install 7-Zip (7zz) or use the AppImage, which brings its own."]);
+});
+
 test('start: a running job is reused; cancel stops it', async (t) => {
   const { fake, installs } = await setup(t);
   fake.routes['/download/slow/slow.zip'] = () => {};
