@@ -31,10 +31,14 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // Once installed, nothing reads the download again (a reinstall or update
   // fetches it fresh), so it goes. A file that was copied in as it is can be
   // the installed file itself when both folders are the same: that one stays.
+  // The emptied folder goes too, unless another download is about to write
+  // into it (an item's second file): removing it would fail that download.
   function removeDownload(filePath, copiedTo = null) {
     if (copiedTo && path.resolve(copiedTo) === path.resolve(filePath)) return;
     fs.rmSync(filePath, { force: true });
-    try { fs.rmdirSync(path.dirname(filePath)); } catch { /* not empty */ }
+    const dir = path.resolve(path.dirname(filePath));
+    if ([...activeDownloads.values()].some(d => d.dir === dir)) return;
+    try { fs.rmdirSync(dir); } catch { /* not empty */ }
   }
 
   // Downloads url into <download folder>/<identifier>/<fileName>. Resolves
@@ -78,6 +82,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       });
 
       activeDownloads.set(key, {
+        dir: path.resolve(destDir),
         cancel: () => {
           handle.aborted = true;
           try { handle.req?.destroy(); } catch { /* already gone */ }
