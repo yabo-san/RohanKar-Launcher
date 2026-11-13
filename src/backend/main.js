@@ -46,6 +46,7 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
     ...(args['github-api'] ? { githubApi: args['github-api'] } : {}),
     ...(args['gitlab-api'] ? { gitlabApi: args['gitlab-api'] } : {}),
     ...(args['curated-ports-url'] ? { curatedPortsUrl: args['curated-ports-url'] } : {}),
+    ...(args['seven-zip'] ? { bundledSevenZip: args['seven-zip'] } : {}),
     // Another system's release picks (win32, linux), for tests
     ...(args.platform ? { platform: args.platform } : {}),
     ...(bridge ? { host: bridge.host } : {}),

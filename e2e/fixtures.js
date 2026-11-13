@@ -2,7 +2,8 @@
 /**
  * archive.org as the e2e tests see it, from fixtures/search.json:
  *   - advancedsearch.php?q=uploader:<id> ... returns that uploader's docs
- *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip
+ *   - /metadata/<id> lists one <id>.zip, and /download/<id>/<id>.zip is fixtures/tiny.zip;
+ *     rk-e2e-age-of-empires-2 has a .7z instead (fixtures/tiny.7z, the same readme.txt)
  *   - /metadata/rk-e2e-halo-ce/reviews has one review; every other item has none
  *   - GitHub, for the Perfect Dark port: /repos/perfect-dark-pc-port/perfect_dark/releases
  *     lists one Windows zip laid out like the real one (pd-x86_64-windows/ with
@@ -23,6 +24,9 @@ const path = require('path');
 
 const SEARCH   = require('./fixtures/search.json');
 const TINY_ZIP = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.zip'));
+// The same readme.txt as a .7z: Age of Empires II's file, so an install needs 7-Zip
+const TINY_7Z  = fs.readFileSync(path.join(__dirname, 'fixtures', 'tiny.7z'));
+const SEVEN_Z_ITEM = 'rk-e2e-age-of-empires-2';
 const { makeZip } = require('../test/backend/helpers');
 // Star Fox 64: Recompiled's Windows link: a zip, served without an extension
 const SF64_BUILD = makeZip({ 'Starfox64Recompiled.exe': 'MZ', 'assets/.keep': '' });
@@ -81,9 +85,11 @@ function answer(url, base = '') {
   if (kind === 'metadata' && id === 'rk-e2e-user-demo') {
     return reply(200, JSON.stringify({ metadata: { title: 'User Demo', uploader: 'someone@example.com', date: '2024' }, files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
   }
+  if (kind === 'metadata' && id === SEVEN_Z_ITEM) return reply(200, JSON.stringify({ files: [{ name: `${id}.7z`, size: String(TINY_7Z.length) }] }), 'application/json');
   if (kind === 'metadata') return reply(200, JSON.stringify({ files: [{ name: `${id}.zip`, size: String(TINY_ZIP.length) }] }), 'application/json');
+  if (kind === 'download' && id === SEVEN_Z_ITEM && file === `${id}.7z`) return reply(200, TINY_7Z, 'application/x-7z-compressed');
   if (kind === 'download' && file === `${id}.zip`) return reply(200, TINY_ZIP, 'application/zip');
   return reply(404, 'not in fixtures', 'text/plain');
 }
 
-module.exports = { answer, SEARCH, TINY_ZIP };
+module.exports = { answer, SEARCH, TINY_ZIP, TINY_7Z };

@@ -1,7 +1,8 @@
 'use strict';
 /**
  * What the launcher reads from install folders: executables, readmes, and
- * pre-existing installs to adopt. Also clears Windows' downloaded-file mark.
+ * pre-existing installs to adopt. Also clears Windows' downloaded-file mark,
+ * and on Linux lets a build's programs run.
  */
 const fs   = require('fs');
 const path = require('path');
@@ -27,11 +28,31 @@ const readdir = (dir) => {
   try { return fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
 };
 
-// .exe files directly inside one directory (no recursion)
-function exesInDir(dir) {
-  return (readdir(dir) || [])
-    .filter(e => e.isFile() && e.name.toLowerCase().endsWith('.exe'))
-    .map(e => path.join(dir, e.name));
+// A Linux program by its name: an AppImage, a .x86_64, or no extension at
+// all; libraries and data never. isElf then checks a nameless file's bytes.
+const LINUX_NAME = /\.(appimage|x86_64)$/i;
+const NOT_PROGRAM = /\.so(\.\d+)*$|\.[a-z][a-z0-9]{0,4}$/i;
+function isElf(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const head = Buffer.alloc(4);
+    return fs.readSync(fd, head, 0, 4, 0) === 4 && head.equals(Buffer.from([0x7f, 0x45, 0x4c, 0x46]));
+  } catch { return false; }
+  finally { if (fd !== undefined) fs.closeSync(fd); }
+}
+const isLinuxProgram = (file) => LINUX_NAME.test(file) || (!NOT_PROGRAM.test(path.basename(file)) && isElf(file));
+
+// The programs directly inside one directory (no recursion): .exe files, and
+// on Linux its own programs first (a folder with only a Windows build runs
+// that through Proton)
+function exesInDir(dir, { platform = process.platform } = {}) {
+  const files = (readdir(dir) || []).filter(e => e.isFile()).map(e => path.join(dir, e.name));
+  if (platform === 'linux') {
+    const native = files.filter(isLinuxProgram);
+    if (native.length) return native;
+  }
+  return files.filter(f => f.toLowerCase().endsWith('.exe'));
 }
 
 // Executables to offer for an install folder:
@@ -40,27 +61,28 @@ function exesInDir(dir) {
 //   - exes at this level: those
 //   - otherwise the first non-ignored subfolder (to MAX_DEPTH) that has any
 // so a game's internal DOSBox/tool exes don't flood the picker.
-function findExes(installDir, depth = 0) {
+function findExes(installDir, depth = 0, { platform = process.platform } = {}) {
   if (!installDir || depth > MAX_DEPTH) return [];
+  const opts = { platform };
   const entries = readdir(installDir);
   if (!entries) return [];
 
   const gameFolders = entries.filter(e => e.isDirectory() && e.name.startsWith('_GAME_'));
   if (gameFolders.length > 0) {
-    return gameFolders.flatMap(gf => findExes(path.join(installDir, gf.name), depth + 1));
+    return gameFolders.flatMap(gf => findExes(path.join(installDir, gf.name), depth + 1, opts));
   }
 
   const bin = entries.find(e => e.isDirectory() && e.name.toLowerCase() === 'bin');
   if (bin) {
-    const binExes = exesInDir(path.join(installDir, bin.name));
+    const binExes = exesInDir(path.join(installDir, bin.name), opts);
     if (binExes.length) return binExes;
   }
 
-  const local = exesInDir(installDir);
+  const local = exesInDir(installDir, opts);
   if (local.length) return local;
 
   for (const sub of entries.filter(e => e.isDirectory() && !IGNORED_SUBDIRS.has(e.name.toLowerCase()))) {
-    const found = findExes(path.join(installDir, sub.name), depth + 1);
+    const found = findExes(path.join(installDir, sub.name), depth + 1, opts);
     if (found.length) return found;
   }
   return [];
@@ -82,6 +104,30 @@ function unblockDirectory(dir, { platform = process.platform, log = () => {} } =
   };
   walk(dir);
   log(`[unblock] Removed Zone.Identifier from ${count} files in ${dir}`);
+  return count;
+}
+
+// Linux: a build unpacked from a zip made on Windows has lost its programs'
+// run permission. Gives it back to every Linux program under dir (and .sh
+// scripts), as Quiver does. No-op off Linux. Returns how many it changed.
+function makeRunnable(dir, { platform = process.platform, log = () => {} } = {}) {
+  if (platform !== 'linux' || !dir) return 0;
+  let count = 0;
+  const fix = (file) => {
+    try {
+      const mode = fs.statSync(file).mode;
+      if ((mode & 0o111) === 0 && (isLinuxProgram(file) || /\.sh$/i.test(file))) { fs.chmodSync(file, (mode & 0o777) | 0o755); count++; }
+    } catch { /* gone or not ours */ }
+  };
+  const walk = (d) => {
+    for (const e of readdir(d) || []) {
+      const full = path.join(d, e.name);
+      if (e.isDirectory()) walk(full);
+      else if (e.isFile()) fix(full);
+    }
+  };
+  if (fs.existsSync(dir) && fs.statSync(dir).isFile()) fix(dir); else walk(dir);
+  if (count) log(`[runnable] Allowed ${count} programs to run in ${dir}`);
   return count;
 }
 
@@ -175,6 +221,6 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap, { nested = 1 }
 }
 
 module.exports = {
-  IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, readReadme,
+  IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, makeRunnable, isLinuxProgram, readReadme,
   looseKey, matchInstallFolders,
 };

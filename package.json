@@ -53,6 +53,7 @@
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
       "icon": "assets/icons/y4bo.png",
       "category": "Game",
+      "extraResources": [{ "from": "vendor/7zip", "to": "7zip" }],
       "artifactName": "y4bo-x86_64.${ext}"
     },
     "detectUpdateChannel": false,

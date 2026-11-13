@@ -16,6 +16,7 @@ const { createLibrary }  = require('./library');
 const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
 const { createInstalls, GITHUB_API, GITLAB_API } = require('./installs');
+const { findSevenZip } = require('./sevenzip');
 const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
@@ -73,6 +74,8 @@ function createBackend({
   playniteExportDelayMs = 250,
   host = {},
   platform = process.platform,
+  // The packaged app's own 7-Zip (resources/7zip/7zzs), used on Linux
+  bundledSevenZip = null,
   sleep,
   log = (msg) => console.log(msg),
 }) {
@@ -131,7 +134,8 @@ function createBackend({
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, art: readArt(appDir, log), log: netlog.log });
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
-  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi });
+  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi,
+    sevenZip: findSevenZip({ platform, bundled: bundledSevenZip }) });
   const catalogs = createCatalogs({
     dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
     curatedUrl: curatedPortsUrl, curatedFile: path.join(appDir, 'catalog', 'curated-ports.json'),

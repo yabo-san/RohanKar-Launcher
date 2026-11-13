@@ -105,7 +105,7 @@ async function launchPackaged(userData) {
 
 test.skip(!process.env.E2E_APP, 'E2E_APP is not set');
 
-test('packaged app: opens the new UI, shows default sources, installs a stub item', async () => {
+test('packaged app: opens the new UI, shows default sources, installs a stub .zip and .7z', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-smoke-'));
   const userData    = path.join(root, 'userData');
   const downloadDir = path.join(root, 'downloads');
@@ -137,6 +137,14 @@ test('packaged app: opens the new UI, shows default sources, installs a stub ite
     const readme = path.join(root, 'games', 'rk-e2e-halo-ce', 'readme.txt');
     await expect.poll(() => fs.existsSync(readme), { timeout: 30_000 }).toBe(true);
     await expect.poll(() => fs.existsSync(path.join(downloadDir, 'rk-e2e-halo-ce', 'rk-e2e-halo-ce.zip')), { timeout: 10_000 }).toBe(false);
+
+    // A .7z needs 7-Zip: Program Files' on Windows, the app's own on Linux
+    await page.keyboard.press('Escape');
+    await page.locator('#body .game-card', { hasText: 'Age of Empires II' }).click();
+    await page.locator('#btn-download').click();
+    const readme7z = path.join(root, 'games', 'rk-e2e-age-of-empires-2', 'readme.txt');
+    await expect.poll(() => fs.existsSync(readme7z), { timeout: 30_000 }).toBe(true);
+    expect(fs.readFileSync(readme7z, 'utf8')).toBe(fs.readFileSync(readme, 'utf8'));
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });

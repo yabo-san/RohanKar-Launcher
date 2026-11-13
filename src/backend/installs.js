@@ -15,13 +15,14 @@ const { installableFiles, ARCHIVE_FILE } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const { checkPin } = require('./user-sources');
+const { findSevenZip, WINDOWS_7ZIP } = require('./sevenzip');
 
-const SEVEN_ZIP = 'C:\\Program Files\\7-Zip\\7z.exe';
+const SEVEN_ZIP = WINDOWS_7ZIP;
 const GITHUB_API = 'https://api.github.com';
 const GITLAB_API = 'https://gitlab.com/api/v4';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = SEVEN_ZIP, githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = findSevenZip({ platform }), githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -109,11 +110,12 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const r = await extractTo(filePath, destDir);
     if (!r.ok) return r;
     disk.unblockDirectory(destDir, { platform, log });
+    disk.makeRunnable(destDir, { platform, log });
     removeDownload(filePath, r.copiedTo);
     return { ok: true, installDir: destDir, parentInstallDir: parentDir };
   }
 
-  // Unpacks an archive into destDir: 7-Zip when installed (zip/7z/rar),
+  // Unpacks an archive into destDir: 7-Zip when there is one (zip/7z/rar),
   // extract-zip for .zip otherwise, the system's tar for a tarball (a Linux
   // build); any other file is copied in as it is.
   // Resolves { ok } ({ ok, copiedTo } for a copied file) or { ok: false, error }.
@@ -127,7 +129,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
         });
       });
     }
-    if (/\.(zip|7z|rar)$/.test(lower) && fs.existsSync(sevenZip)) {
+    if (/\.(zip|7z|rar)$/.test(lower) && sevenZip && fs.existsSync(sevenZip)) {
       return new Promise((resolve) => {
         execFile(sevenZip, ['x', filePath, `-o${destDir}`, '-y'], (err) => {
           resolve(err ? { ok: false, error: err.message } : { ok: true });
@@ -141,6 +143,10 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       } catch (e) {
         return { ok: false, error: e.message };
       }
+    }
+    // On Linux a .7z or .rar copied in as it is would look installed and never run
+    if (platform === 'linux' && /\.(7z|rar)$/.test(lower)) {
+      return { ok: false, error: `Couldn't unpack ${path.basename(filePath)}: 7-Zip isn't available. Install 7-Zip (7zz) or use the AppImage, which brings its own.` };
     }
     // Not an archive: kept as it is, the launcher is just its download client
     try {
@@ -201,7 +207,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
     // The item is registered against the parent folder: findExes walks into
     // a collection's _GAME_ folders from there
-    const exes = disk.findExes(x.parentInstallDir);
+    const exes = disk.findExes(x.parentInstallDir, 0, { platform });
     const exePath = exes.length === 1 ? exes[0] : null;
     library.recordInstall(job.itemId, x.parentInstallDir, exePath);
     update(job, { status: 'done', installDir: x.parentInstallDir, exePath });
@@ -349,7 +355,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     // Record it against the catalog item, keeping its library row
     removeDownload(bin.filePath, copiedTo);
     disk.unblockDirectory(dest, { platform, log });
-    const exes = disk.findExes(dest);
+    disk.makeRunnable(dest, { platform, log });
+    const exes = disk.findExes(dest, 0, { platform });
     const exePath = exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     // The release tag, so a newer release can be offered as an update
@@ -415,7 +422,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       if (found.some(f => f.identifier === m.identifier)) continue;
       const existing = library.get(m.identifier);
       if (existing?.install_dir && fs.existsSync(existing.install_dir)) continue;
-      const exes = disk.findExes(m.folderPath);
+      const exes = disk.findExes(m.folderPath, 0, { platform });
       const exePath = exes.length === 1 ? exes[0] : null;
       library.adoptInstall(m.identifier, m.folderPath, exePath);
       log(`[scan] Found pre-existing install (${m.matchedBy}): ${m.identifier} → ${m.folderPath}`);

@@ -138,6 +138,10 @@ jobs:
       - name: Rebuild native modules
         run: npx electron-builder install-app-deps
 
+      # 7-Zip's own static build, pinned by sha256, ships inside the app
+      - name: Fetch 7-Zip for Linux
+        run: node scripts/fetch-7zip.js
+
       - name: Build Linux AppImage
         run: npx electron-builder --linux --publish never
 
