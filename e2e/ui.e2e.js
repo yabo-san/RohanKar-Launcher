@@ -615,8 +615,15 @@ test('Settings: paste a config to add packs; About has no personal social links'
   const modal = page.locator('#modal');
   await expect(modal.locator('.modal-title')).toHaveText('Paste a config');
   await modal.locator('#modal-input').fill(JSON.stringify({ y4bo: 1, packs: [{ uploader: '@friend', label: 'Friend' }] }));
+  // Every toast shown, in order: the packs reload right after, and @friend's
+  // 404 toast can replace "Added ..." before a check of #toast sees it
+  await page.evaluate(() => {
+    globalThis.__toasts = [];
+    new MutationObserver(() => globalThis.__toasts.push(document.getElementById('toast').textContent))
+      .observe(document.getElementById('toast'), { childList: true, characterData: true, subtree: true });
+  });
   await modal.locator('.md-btn-primary').click();
-  await expect(page.locator('#toast')).toContainText('Added 1 pack, 0 repos, 0 hidden uploads.');
+  await expect.poll(() => page.evaluate(() => globalThis.__toasts)).toContain('Added 1 pack, 0 repos, 0 hidden uploads.');
   await expect(page.locator('#nav-uploaders .navitem', { hasText: 'Friend' })).toBeVisible();
   const config = await page.evaluate(() => api.getConfig());
   expect(config.packs.map(p => p.uploader)).toContain('@friend');
