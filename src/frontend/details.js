@@ -81,7 +81,8 @@ function versionRows(versions, { selected = null, library = {} } = {}) {
     uploader: v._sourceLabel || v._uploader || '',
     date: isoDay(v.addeddate),
     downloads: Number(v.downloads) || 0,
-    installed: !!library[v.identifier]?.install_dir,
+    // An upload installed as an update over another version counts as installed
+    installed: !!library[v.identifier]?.install_dir || !!(v._installedIn && library[v._installedIn]?.install_dir),
     newer: newer.has(v.identifier),
     user: !!v._user,
     on: v.identifier === selected,

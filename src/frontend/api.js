@@ -194,9 +194,10 @@ const api = (() => {
     // job says which step (binary, data) onProgress and onExtracting are for.
     // acceptHashChange: the user accepted a changed file from their own source
     // (a job that stopped with hashChange)
-    install: async ({ identifier, fileName, acceptHashChange, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
+    // into: the library id of an installed copy this upload updates
+    install: async ({ identifier, fileName, into, acceptHashChange, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
       watchInstalls();
-      const r = await call('POST', '/installs', { id: identifier, ...(fileName ? { files: [fileName] } : {}), ...(acceptHashChange ? { acceptHashChange: true } : {}) });
+      const r = await call('POST', '/installs', { id: identifier, ...(fileName ? { files: [fileName] } : {}), ...(into ? { into } : {}), ...(acceptHashChange ? { acceptHashChange: true } : {}) });
       if (!r.ok) return { status: 'error', error: r.body?.detail || `HTTP ${r.status}` };
       const job = r.body.installs[0];
       onStart(job);

@@ -32,7 +32,7 @@ test('games: add, favourite, notes, category, exe path, install, remove', (t) =>
   assert.deepEqual({ ...lib.get('b'), added_at: 0 }, {
     identifier: 'b', install_dir: null, exe_path: '/g/b.exe', category: 'rpg', playtime_secs: 0,
     added_at: 0, is_favorite: 1, notes: 'good', source: null, export_id: null, last_played_at: null,
-    title: null, tags: null, version: null,
+    title: null, tags: null, version: null, upload: null, upload_date: null,
   });
   lib.setNotes('b', '');
   lib.setExePath('b', '');

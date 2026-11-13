@@ -102,8 +102,9 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // Extracts into <install folder>/<identifier>, or for one game of a
   // collection into <identifier>/_GAME_<subFolder>, which findExes groups by.
   // 7-Zip when installed (zip/7z/rar), extract-zip for .zip otherwise.
-  async function extract({ filePath, identifier, subFolder }) {
-    const parentDir = path.join(installDir(), disk.sanitizeFolderName(identifier));
+  // into: an existing install folder to unpack over instead (an update).
+  async function extract({ filePath, identifier, subFolder, into = null }) {
+    const parentDir = into || path.join(installDir(), disk.sanitizeFolderName(identifier));
     const destDir = subFolder ? path.join(parentDir, '_GAME_' + disk.sanitizeFolderName(subFolder)) : parentDir;
     fs.mkdirSync(destDir, { recursive: true });
 
@@ -164,6 +165,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   const view = (job) => ({
     id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
+    ...(job.into ? { into: job.into.identifier } : {}),
     ...(job.hashChange ? { hashChange: job.hashChange } : {}),
     startedAt: job.startedAt, finishedAt: job.finishedAt,
   });
@@ -202,23 +204,36 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
 
     update(job, { status: 'extracting', percent: 100 });
-    const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder });
+    const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder, into: job.into?.installDir });
     if (!x.ok) return update(job, { status: 'error', error: x.error });
 
     // The item is registered against the parent folder: findExes walks into
     // a collection's _GAME_ folders from there
     const exes = disk.findExes(x.parentInstallDir, 0, { platform });
     const exePath = exes.length === 1 ? exes[0] : null;
-    library.recordInstall(job.itemId, x.parentInstallDir, exePath);
+    if (job.into) {
+      library.recordUpdate(job.into.identifier, { upload: job.itemId, uploadDate: job.meta.uploadDate, title: job.meta.title, exePath });
+    } else {
+      library.recordInstall(job.itemId, x.parentInstallDir, exePath, job.meta);
+    }
     update(job, { status: 'done', installDir: x.parentInstallDir, exePath });
   }
 
   // Starts one job per file. files: names from the item's file list; when
   // omitted the item must have exactly one installable file. check: for an
   // upload from an additional source, { files: [{ name, sha1? }] } (items.userCheck);
-  // acceptHashChange re-pins a file that changed. Resolves
+  // acceptHashChange re-pins a file that changed. meta: { title, uploadDate }
+  // saved with the install. into: the library identifier of an install this
+  // upload updates (a reupload of the same game): its files go over that
+  // folder and the entry keeps its identifier. Resolves
   // { ok, jobs } or { ok: false, error, detail, choices? }.
-  async function start({ itemId, files, check = null, acceptHashChange = false }) {
+  async function start({ itemId, files, check = null, acceptHashChange = false, meta = {}, into = null }) {
+    let target = null;
+    if (into) {
+      const row = library.get(into);
+      if (!row?.install_dir || !fs.existsSync(row.install_dir)) return { ok: false, error: 'not_installed', detail: `${into} isn't installed, so there's nothing to update.` };
+      target = { identifier: into, installDir: row.install_dir };
+    }
     const list = await archive.fileList(itemId);
     if (!list.ok) return { ok: false, error: 'file_list_failed', detail: list.error };
     const installable = installableFiles(list.files);
@@ -240,11 +255,12 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
     const started = [];
     for (const f of chosen) {
-      const running = [...jobs.values()].find(j => j.itemId === itemId && j.file === f.name && isRunning(j));
+      const running = [...jobs.values()].find(j => (j.itemId === itemId || (target && j.into?.identifier === into)) && j.file === f.name && isRunning(j));
       if (running) { started.push(view(running)); continue; }
       const job = {
         id: crypto.randomUUID(), itemId, file: f.name, status: 'downloading', percent: 0, error: null,
         installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null, check, acceptHashChange,
+        meta: { title: meta.title || null, uploadDate: meta.uploadDate || null }, into: target,
       };
       jobs.set(job.id, job);
       emit('install', view(job));
@@ -418,13 +434,14 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const found = [];
     const dirs = [...new Set([scanDir, ...(scanDirs || [])].filter(Boolean).map(d => path.resolve(d)))];
     const matches = dirs.flatMap(d => disk.matchInstallFolders(d, knownIdentifiers, titleMap));
+    const titleOf = new Map(Object.entries(titleMap || {}).map(([t, id]) => [id, t]));
     for (const m of matches) {
       if (found.some(f => f.identifier === m.identifier)) continue;
       const existing = library.get(m.identifier);
       if (existing?.install_dir && fs.existsSync(existing.install_dir)) continue;
       const exes = disk.findExes(m.folderPath, 0, { platform });
       const exePath = exes.length === 1 ? exes[0] : null;
-      library.adoptInstall(m.identifier, m.folderPath, exePath);
+      library.adoptInstall(m.identifier, m.folderPath, exePath, { title: titleOf.get(m.identifier) || null });
       log(`[scan] Found pre-existing install (${m.matchedBy}): ${m.identifier} → ${m.folderPath}`);
       found.push({ identifier: m.identifier, installDir: m.folderPath, exePath, matchedBy: m.matchedBy });
     }

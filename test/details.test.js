@@ -52,6 +52,9 @@ test('versionRows: newest first, numbered, installed, newer and selected marked'
   ]);
   // Not installed: a newer upload is nothing to point at
   assert.equal(versionRows(versions, {}).some(r => r.newer), false);
+  // Installed as an update over the old copy: the new upload counts as installed
+  const updated = versionRows([versions[0], { ...versions[1], _installedIn: 'old' }], { library: { old: { install_dir: '/g/old' } } });
+  assert.deepEqual(updated.map(r => r.installed), [true, true]);
 });
 
 test('moreFrom: same uploader, most downloaded first, the current title left out', () => {
