@@ -189,6 +189,26 @@ test('start: an item with no archive or exe downloads its own files as they are'
   assert.deepEqual(fs.readdirSync(dir).sort(), ['a.pkg', 'b.pkg']);
 });
 
+test('start: one file of an item finishing leaves the folder its other file is downloading into', async (t) => {
+  const { fake, installs, dir } = await setup(t, {
+    files: { two: [{ name: 'a.pkg', source: 'original' }, { name: 'b.pkg', source: 'original' }] },
+    zips: { 'two/a.pkg': Buffer.from('A') },
+  });
+  let release;
+  const held = new Promise(r => { release = r; });
+  // b.pkg's response waits until a.pkg is installed and its download removed
+  fake.routes['/download/two/b.pkg'] = async (req, res) => { await held; res.writeHead(200, { 'content-length': 1 }); res.end('B'); };
+  const [a, b] = (await installs.start({ itemId: 'two', files: ['a.pkg', 'b.pkg'] })).jobs;
+  await installs.wait(a.id);
+  assert.equal(installs.get(a.id).status, 'done');
+  assert.ok(fs.existsSync(path.join(dir, 'dl', 'two')), 'the folder b.pkg downloads into stays');
+  release();
+  await installs.wait(b.id);
+  assert.equal(installs.get(b.id).status, 'done');
+  assert.deepEqual(fs.readdirSync(installs.get(b.id).installDir).sort(), ['a.pkg', 'b.pkg']);
+  assert.ok(!fs.existsSync(path.join(dir, 'dl', 'two')), 'the last one removes it');
+});
+
 test('start: a running job is reused; cancel stops it', async (t) => {
   const { fake, installs } = await setup(t);
   fake.routes['/download/slow/slow.zip'] = () => {};

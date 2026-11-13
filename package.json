@@ -50,7 +50,10 @@
       "icon": "assets/icons/y4bo.png"
     },
     "linux": {
-      "icon": "assets/icons/y4bo.png"
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "icon": "assets/icons/y4bo.png",
+      "category": "Game",
+      "artifactName": "y4bo-x86_64.${ext}"
     },
     "detectUpdateChannel": false,
     "publish": {
