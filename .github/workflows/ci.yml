@@ -207,6 +207,43 @@ jobs:
             playwright-report/
             test-results/
 
+  # The same smoke test against the unpacked Linux build (Steam Deck and other
+  # Linux PCs), under a virtual display. Not a required check.
+  electron-linux:
+    name: build-linux
+    needs: changes
+    if: ${{ needs.changes.outputs.electron == 'true' }}
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build unpacked app
+        run: npx electron-builder --linux --dir --publish never
+
+      - name: Smoke test the built app
+        env:
+          E2E_APP: ${{ github.workspace }}/dist/linux-unpacked/y4bo-launcher
+        run: xvfb-run -a npx playwright test
+
+      - name: Upload smoke test report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report-linux
+          path: |
+            playwright-report/
+            test-results/
+
   trivy:
     needs: changes
     if: ${{ needs.changes.outputs.any == 'true' }}

@@ -105,7 +105,7 @@ async function launchPackaged(userData) {
 
 test.skip(!process.env.E2E_APP, 'E2E_APP is not set');
 
-test('packaged app: opens the new UI, shows default sources, downloads a stub item', async () => {
+test('packaged app: opens the new UI, shows default sources, installs a stub item', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'rk-smoke-'));
   const userData    = path.join(root, 'userData');
   const downloadDir = path.join(root, 'downloads');
@@ -132,9 +132,11 @@ test('packaged app: opens the new UI, shows default sources, downloads a stub it
 
     await page.locator('#body .game-card', { hasText: 'Halo: Combat Evolved' }).click();
     await page.locator('#btn-download').click();
-    const zip = path.join(downloadDir, 'rk-e2e-halo-ce', 'rk-e2e-halo-ce.zip');
-    await expect.poll(() => fs.existsSync(zip) && fs.statSync(zip).size, { timeout: 30_000 })
-      .toBe(fs.statSync(path.join(__dirname, 'fixtures', 'tiny.zip')).size);
+    // The archive is unpacked into the install folder, then deleted: checking
+    // the unpacked file doesn't race that delete
+    const readme = path.join(root, 'games', 'rk-e2e-halo-ce', 'readme.txt');
+    await expect.poll(() => fs.existsSync(readme), { timeout: 30_000 }).toBe(true);
+    await expect.poll(() => fs.existsSync(path.join(downloadDir, 'rk-e2e-halo-ce', 'rk-e2e-halo-ce.zip')), { timeout: 10_000 }).toBe(false);
   } finally {
     await app.close();
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 500 });

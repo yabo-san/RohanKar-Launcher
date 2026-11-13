@@ -23,7 +23,7 @@ The container runs everything a PR check runs:
 | `mise run test` | Unit and API tests with the 80% coverage gate |
 | `mise run e2e` | The frontend in headless Chromium against the standalone backend, archive.org served from `e2e/fixtures` |
 | `mise run build-dir` | An unpacked Linux build in `dist/linux-unpacked` |
-| `mise run smoke` | `build-dir`, then the packaged smoke test that CI runs on the Windows build, under xvfb |
+| `mise run smoke` | `build-dir`, then the packaged smoke test that CI runs on the Windows and Linux builds, under xvfb |
 | `trivy fs --scanners vuln --severity HIGH,CRITICAL .` | The dependency scan |
 
 To work on the app without Electron:
@@ -91,8 +91,8 @@ are done by hand:
 
 1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
    open on `main`. Merging it tags the version, builds the Windows installer
-   onto a draft release, runs the packaged smoke test against it, and
-   publishes it as the latest GitHub release. It then opens a PR against
+   and the Linux AppImage onto a draft release, runs the packaged smoke test
+   against each, and publishes it as the latest GitHub release. It then opens a PR against
    `gh-pages` that moves `beta/latest.yml` to the new version; merge that beta
    PR. A build that fails the smoke test stays a draft and no beta PR opens.
 2. **Merge a promotion PR.** When a beta has proven itself, open a PR against
