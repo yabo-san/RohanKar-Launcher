@@ -1,6 +1,6 @@
 {
   "name": "y4bo-launcher",
-  "version": "1.6.0-fork.25",
+  "version": "1.6.0-fork.26",
   "description": "y4bo game launcher",
   "author": "Kilted-Kraken",
   "main": "src/electron/main.js",
@@ -50,10 +50,22 @@
       "icon": "assets/icons/y4bo.png"
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "assets/icons/y4bo.png",
       "category": "Game",
-      "extraResources": [{ "from": "vendor/7zip", "to": "7zip" }],
+      "extraResources": [
+        {
+          "from": "vendor/7zip",
+          "to": "7zip"
+        }
+      ],
       "artifactName": "y4bo-x86_64.${ext}"
     },
     "detectUpdateChannel": false,
