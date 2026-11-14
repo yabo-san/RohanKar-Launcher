@@ -55,9 +55,10 @@ The finished work orders are in git history. Where anything disagrees with this 
   The Thunderstore mod manager (r2modman) is just another tile in `curated-ports.json`.
 - Search UIs for /idgames, Quaddicted or similar. Doom and Quake are separate tiles.
 - Announcements, manual apps, Android.
-- A second interface. The classic UI is gone; there is one UI, `src/frontend/new/`. Gamepad
-  navigation, collections editing and notes went with it (collections still export as Playnite
-  tags, from what library.db holds).
+- A second interface. The classic UI is gone; there is one UI, `src/frontend/new/`. Collections
+  editing and notes went with it (collections still export as Playnite tags, from what library.db
+  holds). Gamepad navigation is back on the one UI (`src/frontend/gamepad.js` decides,
+  `new/pad.js` acts through focus, clicks and keys), not as a separate big-screen mode.
 - Quiver compatibility: no full-Quiver-catalog toggle, no Quiver library import (both removed).
   The shelf file keeps Quiver's catalog shape only because installed copies of the app read it.
 - A Home page, a separate "add to library" step, or a Playnite export button (the export file is

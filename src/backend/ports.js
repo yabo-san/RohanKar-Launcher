@@ -164,6 +164,12 @@ function onSteamDeck({ env = process.env, osRelease = () => { try { return fs.re
   return /^ID=["']?steamos["']?$/m.test(osRelease());
 }
 
+// Steam's Game Mode (the Deck's default session, or Big Picture on a gamescope
+// session): the window should fill the screen and text boxes need Steam's keyboard
+function steamGameMode(env = process.env) {
+  return String(env.SteamGamepadUI || '').trim() === '1' || /\bgamescope\b/i.test(env.XDG_CURRENT_DESKTOP || '');
+}
+
 function sha1File(file) {
   return new Promise((resolve, reject) => {
     const h = crypto.createHash('sha1');
@@ -205,5 +211,5 @@ function portTraits(entry = {}) {
   };
 }
 
-module.exports = { pickRelease, pickAsset, platformOf, onSteamDeck, patternFor, releaseFiles, toRegExp, sha1File, inside, releaseRoot, portTraits,
+module.exports = { pickRelease, pickAsset, platformOf, onSteamDeck, steamGameMode, patternFor, releaseFiles, toRegExp, sha1File, inside, releaseRoot, portTraits,
   releasesFromGitlab, gitlabReleasesUrl, sniffArchiveExt, isArchive, ARCHIVE_EXT, TAR_EXT };
