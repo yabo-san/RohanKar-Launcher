@@ -8,7 +8,7 @@
 const fs   = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 
 const { createSettings } = require('./settings');
 const { createNetLog }   = require('./netlog');
@@ -17,6 +17,7 @@ const { createArchive }  = require('./archive');
 const { createCovers }   = require('./covers');
 const { createInstalls, GITHUB_API, GITLAB_API } = require('./installs');
 const { findSevenZip } = require('./sevenzip');
+const proton = require('./proton');
 const { createCatalogs, CURATED_PORTS_URL } = require('./catalogs');
 const { createItems }    = require('./items');
 const { createUserSources, createPins } = require('./user-sources');
@@ -52,6 +53,14 @@ function defaultHost(platform = process.platform) {
       execFile(opener, [p], (err) => resolve(err ? err.message : ''));
     }),
     revealPath: (p) => { execFile(opener, [p]); },
+    // Starts a game on its own, outside the app's process group, so it keeps
+    // running when the app closes. Resolves '' once started, or the error
+    run: ({ cmd, args, env, cwd }) => new Promise((resolve) => {
+      let child;
+      try { child = spawn(cmd, args, { cwd, env, detached: true, stdio: 'ignore' }); } catch (e) { return resolve(e.message); }
+      child.once('error', (e) => resolve(e.message));
+      child.once('spawn', () => { child.unref(); resolve(''); });
+    }),
     trashItem:      unsupported('Moving files to the trash'),
     chooseFolder:   unsupported('Choosing a folder'),
     openExternal:   unsupported('Opening a browser'),
@@ -76,6 +85,8 @@ function createBackend({
   platform = process.platform,
   // The packaged app's own 7-Zip (resources/7zip/7zzs), used on Linux
   bundledSevenZip = null,
+  // Where Steam and Proton are looked for on Linux
+  homeDir = require('os').homedir(),
   sleep,
   log = (msg) => console.log(msg),
 }) {
@@ -145,12 +156,24 @@ function createBackend({
 
   // ─── Actions that combine a module with the OS ────────────────────────────
 
+  // On Linux a Linux build runs directly and a Windows one through Proton
+  // (proton.js), in its own prefix under <data>/proton/<id>
+  async function launchLinux(identifier, exePath) {
+    disk.makeRunnable(exePath, { platform, log });
+    const prefix = path.join(dataDir, 'proton', disk.sanitizeFolderName(identifier));
+    const c = proton.launchCommand(exePath, { prefix, home: homeDir });
+    if (c.error) return c.error;
+    if (c.runner !== 'native') fs.mkdirSync(prefix, { recursive: true });
+    log(`[launch] ${c.runner}${c.proton ? ` (${c.proton})` : ''}: ${exePath}`);
+    return os.run(c);
+  }
+
   async function launch(identifier, exePath) {
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Executable not found: ' + exePath };
     try {
       // Unblock on every launch: covers games installed before unblocking existed
       disk.unblockDirectory(library.get(identifier)?.install_dir || path.dirname(exePath), { platform, log });
-      const errMsg = await os.openPath(exePath);
+      const errMsg = platform === 'linux' ? await launchLinux(identifier, exePath) : await os.openPath(exePath);
       if (errMsg) return { ok: false, error: errMsg };
       library.markPlayed(identifier);
       return { ok: true };
