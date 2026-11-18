@@ -150,6 +150,8 @@ async function testBackend(t, { state, curated = false, ...opts } = {}) {
     gitlabApi: fake.base,
     // Windows' asset picks, whatever system the tests run on
     platform: 'win32',
+    // Not Steam's Game Mode, whatever session the tests run in
+    gameMode: false,
     // No curated shelf unless a test asks for one, so counts stay the fixtures'
     curatedPortsUrl: curated ? `${fake.base}/curated-ports.json` : null,
     sleep: async () => {},

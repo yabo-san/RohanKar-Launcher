@@ -87,6 +87,8 @@ const api = (() => {
     windowMaximize: () => call('POST', '/os/window', { action: 'maximize' }),
     windowClose:    () => call('POST', '/os/window', { action: 'close' }),
     openExternal:   (href) => call('POST', '/os/open-external', { url: href }),
+    // Steam's on-screen keyboard, in Game Mode (elsewhere it does nothing)
+    showKeyboard:   () => call('POST', '/os/keyboard'),
     chooseFolder:   async () => (await call('POST', '/os/choose-folder')).body?.path || null,
     // Adopt installs already in a folder (the settings install folder when dir is empty)
     scanInstalls:   async (dir) => { const r = await call('POST', '/library/scan', dir ? { dir } : {}); return r.ok ? r.body : failure(r); },

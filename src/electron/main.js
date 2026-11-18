@@ -19,6 +19,7 @@ const path   = require('path');
 const fs     = require('fs');
 const https  = require('https');
 const { parseCli } = require('../backend/cli');
+const { steamGameMode } = require('../backend/ports');
 const { resolveUserData } = require('./user-data');
 
 // Identity across the rename to y4bo (package.json can't hold comments):
@@ -143,6 +144,8 @@ async function createWindow({ url, token }) {
     width:  1280,
     height: 800,
     frame:  false,
+    // Steam's Game Mode has no window frame to drag or resize: fill the screen
+    fullscreen: steamGameMode(),
     icon:   path.join(__dirname, '../../assets/icons', process.platform === 'win32' ? 'y4bo.ico' : 'y4bo.png'),
     webPreferences: {
       preload:          path.join(__dirname, 'preload.js'),

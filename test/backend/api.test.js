@@ -17,7 +17,7 @@ test('token: required on every request, as a Bearer header or ?token=', async (t
   assert.equal((await call('GET', '/health', undefined, { token: 'wrong' })).status, 401);
   assert.equal((await call('GET', '/health', undefined, { token: 'test-token-but-longer' })).status, 401);
   const health = (await call('GET', '/health')).body;
-  assert.deepEqual(health, { ok: true, api: 'v1', version: require('../../package.json').version });
+  assert.deepEqual(health, { ok: true, api: 'v1', version: require('../../package.json').version, gameMode: false });
   assert.equal((await fetch(`${info.url}/health?token=test-token`)).status, 200);
   assert.match(info.url, /^http:\/\/127\.0\.0\.1:\d+\/v1$/);
 });
@@ -401,6 +401,18 @@ test('os: window, open-external, add-to-steam, updater go to the host; 501 stand
   assert.deepEqual((await call('GET', '/os/open-item')).body, { identifier: null });
   assert.deepEqual(opened, ['rk-e2e-halo-ce']);
   assert.deepEqual(calls, [['window', 'maximize'], ['open', 'https://archive.org/donate'], ['steam', 'Halo'], ['update']]);
+});
+
+test('os: keyboard opens Steam\'s on-screen keyboard in Game Mode, and nothing elsewhere', async (t) => {
+  const opened = [];
+  const host = { openExternal: async (u) => opened.push(u) };
+  const desk = await testApi(t, { host });
+  assert.deepEqual((await desk.call('POST', '/os/keyboard')).body, { ok: false });
+  assert.deepEqual(opened, []);
+  const deck = await testApi(t, { host, gameMode: true });
+  assert.equal((await deck.call('GET', '/health')).body.gameMode, true);
+  assert.deepEqual((await deck.call('POST', '/os/keyboard')).body, { ok: true });
+  assert.deepEqual(opened, ['steam://open/keyboard']);
 });
 
 test('os: standalone answers 501 for window, browser, Steam and updater', async (t) => {

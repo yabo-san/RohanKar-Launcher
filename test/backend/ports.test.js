@@ -77,6 +77,14 @@ test('onSteamDeck: SteamOS, or Steam saying so', () => {
   assert.equal(typeof ports.onSteamDeck(), 'boolean');
 });
 
+test('steamGameMode: Steam\'s gamepad UI or a gamescope session, not the desktop', () => {
+  assert.equal(ports.steamGameMode({ SteamGamepadUI: '1' }), true);
+  assert.equal(ports.steamGameMode({ XDG_CURRENT_DESKTOP: 'gamescope' }), true);
+  assert.equal(ports.steamGameMode({ XDG_CURRENT_DESKTOP: 'KDE', SteamDeck: '1' }), false, 'Desktop Mode on a Deck');
+  assert.equal(ports.steamGameMode({}), false);
+  assert.equal(typeof ports.steamGameMode(), 'boolean');
+});
+
 test('releasesFromGitlab: GitLab\'s releases in GitHub\'s shape, asset links only', () => {
   const gitlab = require('../fixtures/gitlab/starfox64recomp-releases.json');
   const [r] = ports.releasesFromGitlab(gitlab);

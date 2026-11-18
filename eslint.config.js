@@ -38,13 +38,18 @@ module.exports = [
     },
   },
   {
+    // ../gamepad.js and ../api.js, which new/index.html loads before pad.js
+    files: ['src/frontend/new/pad.js'],
+    languageOptions: { globals: { api: 'readonly', createPadReader: 'readonly', nextIndex: 'readonly' } },
+  },
+  {
     // The web preview's API stand-in, a plain script loaded before api.js
     files: ['scripts/preview/preview.js'],
     languageOptions: { sourceType: 'script', globals: globals.browser },
   },
   {
     // module.exports is guarded by typeof, for the node:test suite
-    files: ['src/frontend/sources.js', 'src/frontend/details.js'],
+    files: ['src/frontend/sources.js', 'src/frontend/details.js', 'src/frontend/gamepad.js'],
     languageOptions: { globals: { module: 'writable' } },
   },
   {

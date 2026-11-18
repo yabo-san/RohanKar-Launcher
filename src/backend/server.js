@@ -92,7 +92,7 @@ function createApi(backend) {
     }
   };
 
-  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion } }));
+  route('GET', '/health', () => ({ body: { ok: true, api: API_VERSION, version: backend.appVersion, gameMode: !!backend.gameMode } }));
 
   // ─── Items ────────────────────────────────────────────────────────────────
 
@@ -389,6 +389,13 @@ function createApi(backend) {
     const url = requireString(requireObject(body).url, 'url');
     if (!/^https?:\/\//i.test(url)) throw new HttpError(400, 'bad_request', 'url must be http(s)');
     await os(() => backend.os.openExternal(url));
+    return { body: { ok: true } };
+  });
+
+  // Steam's Game Mode shows no on-screen keyboard for a text box by itself
+  route('POST', '/os/keyboard', async () => {
+    if (!backend.gameMode) return { body: { ok: false } };
+    await os(() => backend.os.openExternal('steam://open/keyboard'));
     return { body: { ok: true } };
   });
 
