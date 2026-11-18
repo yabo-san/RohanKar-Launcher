@@ -297,12 +297,13 @@ function createApi(backend) {
 
   // ─── Installs ─────────────────────────────────────────────────────────────
 
-  const INSTALL_ERRORS = { choose_files: 409, unknown_file: 400, no_installable_file: 422, file_list_failed: 502 };
+  const INSTALL_ERRORS = { not_installed: 409, choose_files: 409, unknown_file: 400, no_installable_file: 422, file_list_failed: 502 };
 
   // acceptHashChange: the user saw a file from their own source change and
-  // accepted it (the install error carried hashChange)
+  // accepted it (the install error carried hashChange). into: the library id
+  // of an installed copy this upload updates (a reupload of the same game)
   route('POST', '/installs', async ({ body }) => {
-    const { id, files, acceptHashChange = false } = requireObject(body);
+    const { id, files, acceptHashChange = false, into = null } = requireObject(body);
     requireString(id, 'id');
     if (typeof acceptHashChange !== 'boolean') throw new HttpError(400, 'bad_request', 'acceptHashChange must be true or false');
     if (id.startsWith('quiver:')) {
@@ -315,8 +316,9 @@ function createApi(backend) {
     if (files !== undefined && !(Array.isArray(files) && files.every(f => typeof f === 'string'))) {
       throw new HttpError(400, 'bad_request', 'files must be an array of file names');
     }
+    if (into !== null) requireString(into, 'into');
     await items.load().catch(() => null);
-    const r = await installs.start({ itemId: id, files, check: items.userCheck(id), acceptHashChange });
+    const r = await installs.start({ itemId: id, files, check: items.userCheck(id), acceptHashChange, meta: items.installMeta(id), into });
     if (!r.ok) throw new HttpError(INSTALL_ERRORS[r.error] || 500, r.error, r.detail, r.choices ? { choices: r.choices } : {});
     return { status: 202, body: { installs: r.jobs } };
   });

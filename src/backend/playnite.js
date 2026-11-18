@@ -75,7 +75,9 @@ function buildExport({
     // Map.set on an existing key keeps its place, so the export order stays the library's
     byId.set(id, { row: r, game: {
       id,
-      name:            item?.title || before.get(id)?.name || r.identifier,
+      // The saved name before the last export's: an export written while
+      // nothing was loaded may hold the bare identifier
+      name:            item?.title || r.title || before.get(id)?.name || r.identifier,
       source,
       platform,
       installed:       !!r.install_dir,

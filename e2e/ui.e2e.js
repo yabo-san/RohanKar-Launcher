@@ -223,7 +223,7 @@ test("An installed upload with a newer one on archive.org gets the Newer release
   const note = page.locator('#detail .newer-note');
   await expect(note).toContainText('A newer upload of this game is on archive.org');
   await expect(page.locator('#detail [data-version="rk-e2e-zoo-tycoon-pstriple"] .tag.update')).toHaveText('NEWER');
-  await note.locator('button').click();
+  await note.getByRole('button', { name: 'See it' }).click();
   await expect(page.locator('#detail #btn-download')).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(card.locator('.tag.update')).toHaveText('NEWER RELEASE');
@@ -607,6 +607,30 @@ test('A new y4bo release shows a bar with its notes and a link to get it', async
   await opened;
   await bar.locator('[data-action="update-dismiss"]').click();
   await expect(bar).toBeHidden();
+});
+
+test('Update puts the newer upload over the installed copy: same folder, same entry, no second game', async () => {
+  const before = (await page.evaluate(() => api.getLibrary()))['rk-e2e-zoo-tycoon'];
+  expect(before.install_dir).toBeTruthy();
+  await page.locator('#q').fill('Zoo Tycoon');
+  await page.locator('.game-card', { hasText: 'Zoo Tycoon' }).first().click();
+  await page.locator('#detail [data-version="rk-e2e-zoo-tycoon"]').click();
+  const note = page.locator('#detail .newer-note');
+  await note.getByRole('button', { name: 'Update' }).click();
+  await expect(page.locator('#toast')).toContainText('is updated', { timeout: 30_000 });
+  await expect(page.locator('#detail .newer-note')).toHaveCount(0);
+  const lib = await page.evaluate(() => api.getLibrary());
+  expect(lib['rk-e2e-zoo-tycoon'].install_dir).toBe(before.install_dir);
+  expect(lib['rk-e2e-zoo-tycoon'].upload).toBe('rk-e2e-zoo-tycoon-pstriple');
+  expect(lib['rk-e2e-zoo-tycoon-pstriple']?.install_dir ?? null).toBe(null);
+  await expect(page.locator('#detail .album-foot')).toContainText('Updated with');
+  // The newer upload's own row says it's installed and leads to the copy
+  await page.locator('#detail [data-version="rk-e2e-zoo-tycoon-pstriple"]').click();
+  await expect(page.locator('#detail [data-version="rk-e2e-zoo-tycoon-pstriple"] .tag.installed')).toHaveText('INSTALLED');
+  await page.locator('#detail .album-pill', { hasText: 'Go to installed copy' }).click();
+  await expect(page.locator('#detail #btn-play')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
 });
 
 test('Settings: paste a config to add packs; About has no personal social links', async () => {

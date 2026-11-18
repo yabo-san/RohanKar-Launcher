@@ -13,7 +13,9 @@ test('items: shipped sources grouped by title, overrides applied, library joined
   const { items, errors } = await backend.items.list();
   assert.deepEqual(errors, []);
   assert.equal(items.length, 6);
-  assert.deepEqual(events, ['items']);
+  // The install from before titles were saved gets its name, once
+  assert.deepEqual(events, ['library', 'items']);
+  assert.equal(backend.library.get('rk-e2e-zoo-tycoon-pstriple').title, 'Zoo Tycoon [v1.0]');
 
   const zoo = items.find(i => i.id === 'rk-e2e-zoo-tycoon');
   assert.deepEqual(zoo.versions.map(v => v.source.label), ['rohanjackson071', 'hailstormttv']);

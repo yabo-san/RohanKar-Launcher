@@ -11,6 +11,12 @@
  *
  * An upload whose overrides.json entry has hidden: true is left out of every
  * list (wall, shelves, search) unless it's installed.
+ *
+ * An installed upload no loaded source has (pulled from archive.org) stays,
+ * as a local copy under the name saved at install: in the card of a loaded
+ * game with the same title, where a reupload is its newer version, else on a
+ * card of its own. A version an update was installed over carries `current`,
+ * and the upload it holds carries `installedIn` (updates.js).
  */
 const { sourcesFromSettings, getTitle, titleKey, normalizeUploader, sourceKeys, titleAllowed, joinTerms, itemIdFrom } = require('./sources');
 const { platformOf } = require('./playnite');
@@ -43,6 +49,7 @@ function resolveSource(src, curated) {
 }
 const NO_USER = { entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
 const USER_LABEL = 'Your sources';
+const LOCAL_LABEL = 'Installed copy';
 
 function createItems({ archive, settings, catalogs, library, getOverrides, userSources = NO_USER, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {
   let loaded = null;   // { groups, errors, conflicts, key, loadedAt }
@@ -131,9 +138,22 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     if (loaded && !refresh && loaded.key === userKey()) return Promise.resolve(loaded);
     const key = userKey();
     loading ??= loadArchive()
-      .then(r => { loaded = { ...r, key, loadedAt: Date.now() }; emit('items', { count: r.groups.length, errors: r.errors }); return loaded; })
+      .then(r => {
+        loaded = { ...r, key, loadedAt: Date.now() };
+        nameInstalls(r.groups);
+        emit('items', { count: r.groups.length, errors: r.errors });
+        return loaded;
+      })
       .finally(() => { loading = null; });
     return loading;
+  }
+
+  // Installs from before titles were saved get theirs from the loaded uploads,
+  // so they keep a name if the upload is pulled later
+  function nameInstalls(groups) {
+    const known = {};
+    for (const d of groups.flat()) known[d.identifier] = { title: getTitle(d), uploadDate: d.addeddate || null };
+    try { library.backfill?.(known); } catch (e) { log(`[items] naming installs failed: ${e.message}`); }
   }
 
   // An upload's platform from its archive.org subjects ("ps2", "nintendo 64"),
@@ -158,11 +178,19 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     originalTitle: doc.title ?? null,
     override:    doc._override || null,
     user:        !!doc._source.user,
+    ...(doc._local ? { local: true } : {}),
   });
 
   // A group as an item; `library` is the row of the installed version if any, else the first's
-  function archiveItem(docs, lib) {
-    const versions = docs.map(version);
+  // heldBy: upload identifier -> the library row an update installed it into
+  function archiveItem(docs, lib, heldBy = new Map()) {
+    const versions = docs.map(d => {
+      const v = version(d);
+      const row = lib[v.id];
+      if (row?.install_dir && row.upload) v.current = { id: row.upload, addeddate: row.upload_date || null };
+      if (heldBy.has(v.id)) v.installedIn = heldBy.get(v.id);
+      return v;
+    });
     const installed = versions.find(v => lib[v.id]?.install_dir);
     const first = versions[0];
     return {
@@ -194,6 +222,23 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     return out;
   }
 
+  // shown plus a doc for every installed archive.org row no loaded upload has
+  function withLocalCopies(groups, shown, lib) {
+    const loadedIds = new Set(groups.flat().map(d => d.identifier));
+    const out = shown.map(g => [...g]);
+    for (const row of Object.values(lib)) {
+      if (!row.install_dir || row.source === 'manual' || row.identifier.startsWith('quiver:') || loadedIds.has(row.identifier)) continue;
+      const doc = {
+        identifier: row.identifier, title: row.title || row.identifier, addeddate: row.upload_date || null,
+        _source: { uploader: null, label: LOCAL_LABEL }, _local: true,
+      };
+      const key = row.title ? titleKey(doc) : null;
+      const group = key && out.find(g => !g[0]._local && titleKey(g[0]) === key);
+      if (group) group.push(doc); else out.push([doc]);
+    }
+    return out;
+  }
+
   // filters: source (uploader, label or catalog id), shelf, search (title
   // substring, case-insensitive), installed (true/false), inLibrary (true/false)
   async function list(filters = {}) {
@@ -206,8 +251,10 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     const shown = groups
       .map(g => g.filter(d => !(d._override?.hidden || d._excluded || excluded.has(d.identifier.toLowerCase())) || lib[d.identifier]?.install_dir))
       .filter(g => g.length);
+    const heldBy = new Map();
+    for (const r of Object.values(lib)) if (r.install_dir && r.upload) heldBy.set(r.upload, r.identifier);
     let items = [
-      ...shown.map(g => archiveItem(g, lib)),
+      ...withLocalCopies(groups, shown, lib).map(g => archiveItem(g, lib, heldBy)),
       ...catalogs.items().map(it => catalogItem(it, lib)),
     ];
     if (filters.source) {
@@ -245,10 +292,17 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     return { files: doc._userEntry?.files || [] };
   }
 
+  // What an install saves with the entry: the game's name and when the upload
+  // was added, from the loaded upload (empty when it isn't loaded)
+  function installMeta(identifier) {
+    const doc = loadedVersions().find(d => d.identifier === identifier);
+    return doc ? { title: getTitle(doc), uploadDate: doc.addeddate || null } : {};
+  }
+
   // user.json archive entries a curated uploader already has, as of the last load
   const conflicts = () => loaded?.conflicts || [];
 
-  return { load, list, get, loadedVersions, userCheck, conflicts };
+  return { load, list, get, loadedVersions, userCheck, installMeta, conflicts };
 }
 
 module.exports = { createItems };

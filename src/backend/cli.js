@@ -56,7 +56,7 @@ async function runCli({ command, value }, backend, { print = (line) => process.s
   // install: archive.org items only; ports and manual entries install from the window
   const identifier = row?.identifier || value;
   if (identifier.startsWith('quiver:') || row?.source === 'manual') return { open: identifier };
-  const r = await backend.installs.start({ itemId: identifier });
+  const r = await backend.installs.start({ itemId: identifier, meta: backend.items.installMeta(identifier) });
   if (!r.ok) return r.error === 'choose_files' ? { open: identifier } : done(1, { id: value, ...r });
   await Promise.all(r.jobs.map(j => backend.installs.wait(j.id)));
   const jobs = r.jobs.map(j => backend.installs.get(j.id));

@@ -3,16 +3,22 @@
  * "Newer release": an installed upload whose title has a newer upload on
  * archive.org (a later addeddate among the item's versions). Nothing updates
  * by itself; the launcher and the Playnite export only say so.
+ *
+ * A version that had an update installed over it carries `current`: the
+ * upload it now holds ({ id, addeddate }). Newer means newer than that.
  */
 
-// The newest version of item added after versionId, or null
+// The newest version of item added after versionId (or after what it now
+// holds), or null
 function newerVersion(item, versionId) {
   const versions = item?.versions || [];
   const mine = versions.find(v => v.id === versionId);
-  if (!mine?.addeddate) return null;
+  const since = mine?.current?.addeddate || mine?.addeddate;
+  if (!since) return null;
+  const held = new Set([mine.id, mine.current?.id].filter(Boolean));
   let best = null;
   for (const v of versions) {
-    if (v.id !== mine.id && v.addeddate && v.addeddate > mine.addeddate && (!best || v.addeddate > best.addeddate)) best = v;
+    if (!held.has(v.id) && !v.local && v.addeddate && v.addeddate > since && (!best || v.addeddate > best.addeddate)) best = v;
   }
   return best ? best.id : null;
 }

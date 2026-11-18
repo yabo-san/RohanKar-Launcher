@@ -22,9 +22,11 @@ const GAME_COLUMNS = {
   source:        'TEXT',
   export_id:     'TEXT',     // stable Playnite id for manual entries (a UUID)
   last_played_at: 'INTEGER',
-  title:         'TEXT',     // name of an entry no item describes (manual, imported)
+  title:         'TEXT',     // the game's name, saved at install, so an upload pulled from archive.org keeps it
   tags:          'TEXT',     // JSON array of strings
   version:       'TEXT',     // installed release tag, when known
+  upload:        'TEXT',     // the archive.org upload whose files are installed, when an update put a reupload in
+  upload_date:   'TEXT',     // that upload's addeddate (or the identifier's own), to tell a newer one
 };
 
 function migrate(db, log) {
@@ -159,26 +161,64 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   }
 
   // Replaces the row, as the install-game IPC always has, keeping only the
-  // ids Playnite knows it by and when it was last played
-  function recordInstall(identifier, installDir, exePath) {
+  // ids Playnite knows it by, when it was last played and its saved name.
+  // title and uploadDate come from the upload, so the entry keeps its name
+  // and age after the upload is pulled from archive.org.
+  function recordInstall(identifier, installDir, exePath, { title = null, uploadDate = null } = {}) {
     if (!db) return { ok: false };
     const prev = db.prepare('SELECT export_id, last_played_at, title, tags FROM games WHERE identifier = ?').get(identifier);
     db.prepare(`
-      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at, title, tags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at, title, tags, upload_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(identifier, installDir, exePath || null, Date.now(), prev?.export_id ?? null, prev?.last_played_at ?? null,
-      prev?.title ?? null, prev?.tags ?? null);
+      title || prev?.title || null, prev?.tags ?? null, uploadDate || null);
     changed(identifier);
     return { ok: true };
   }
 
-  // Registers an install found on disk, keeping the rest of the row
-  function adoptInstall(identifier, installDir, exePath) {
+  // A newer upload of the same game installed over this entry: the folder,
+  // the identifier (the Playnite id) and everything else stay; the row
+  // remembers which upload it now holds. exePath replaces one that's gone.
+  function recordUpdate(identifier, { upload, uploadDate = null, title = null, exePath = null }) {
     if (!db) return { ok: false };
-    ensureRow(identifier);
-    db.prepare('UPDATE games SET install_dir = ?, exe_path = ? WHERE identifier = ?').run(installDir, exePath || null, identifier);
+    const row = db.prepare('SELECT exe_path FROM games WHERE identifier = ?').get(identifier);
+    if (!row) return { ok: false };
+    const exe = row.exe_path && fs.existsSync(row.exe_path) ? row.exe_path : (exePath || row.exe_path);
+    db.prepare('UPDATE games SET upload = ?, upload_date = ?, title = COALESCE(?, title), exe_path = ? WHERE identifier = ?')
+      .run(upload === identifier ? null : upload, uploadDate || null, title || null, exe || null, identifier);
     changed(identifier);
     return { ok: true };
+  }
+
+  // Registers an install found on disk, keeping the rest of the row; a title
+  // fills in a row that has none
+  function adoptInstall(identifier, installDir, exePath, { title = null } = {}) {
+    if (!db) return { ok: false };
+    ensureRow(identifier);
+    db.prepare('UPDATE games SET install_dir = ?, exe_path = ?, title = COALESCE(title, ?) WHERE identifier = ?')
+      .run(installDir, exePath || null, title || null, identifier);
+    changed(identifier);
+    return { ok: true };
+  }
+
+  // Names installs made before titles were saved: { identifier: { title, uploadDate } }
+  // for uploads that are loaded. Fills only what's empty; one change event.
+  function backfill(known) {
+    if (!db) return { filled: 0 };
+    const rows = db.prepare('SELECT identifier, title, upload, upload_date FROM games WHERE install_dir IS NOT NULL AND (title IS NULL OR upload_date IS NULL)').all();
+    const set = db.prepare('UPDATE games SET title = COALESCE(title, ?), upload_date = COALESCE(upload_date, ?) WHERE identifier = ?');
+    let filled = 0;
+    transaction(db, () => {
+      for (const r of rows) {
+        const k = known[r.upload || r.identifier];
+        if (!k || !(k.title || k.uploadDate)) continue;
+        if ((r.title || !k.title) && (r.upload_date || !k.uploadDate)) continue;
+        set.run(k.title || null, k.uploadDate || null, r.identifier);
+        filled++;
+      }
+    });
+    if (filled) onChange({});
+    return { filled };
   }
 
   // Fields an import carries over: title, tags (an array), version. Leaves
@@ -197,7 +237,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   // Uninstalled: the entry stays in the library (favourite, collections, playtime)
   function clearInstall(identifier) {
     if (!db) return { ok: false };
-    db.prepare('UPDATE games SET install_dir = NULL, exe_path = NULL WHERE identifier = ?').run(identifier);
+    db.prepare('UPDATE games SET install_dir = NULL, exe_path = NULL, upload = NULL, upload_date = NULL WHERE identifier = ?').run(identifier);
     changed(identifier);
     return { ok: true };
   }
@@ -235,7 +275,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     let cleared = 0;
     for (const row of rows) {
       if (!fs.existsSync(row.install_dir)) {
-        db.prepare('UPDATE games SET install_dir = NULL, exe_path = NULL WHERE identifier = ?').run(row.identifier);
+        db.prepare('UPDATE games SET install_dir = NULL, exe_path = NULL, upload = NULL, upload_date = NULL WHERE identifier = ?').run(row.identifier);
         log(`[validate] Cleared missing install: ${row.identifier}`);
         cleared++;
       }
@@ -297,7 +337,7 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
 
   return {
     get available() { return !!db; },
-    all, get, add, setCategory, setFavorite, setNotes, setDetails, setExePath, recordInstall, adoptInstall, remove,
+    all, get, add, setCategory, setFavorite, setNotes, setDetails, setExePath, recordInstall, recordUpdate, adoptInstall, backfill, remove,
     clearInstall, markPlayed, exportId,
     clearMissingInstalls,
     collections, createCollection, renameCollection, setCollectionColor, deleteCollection,
