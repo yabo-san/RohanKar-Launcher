@@ -87,6 +87,8 @@ const api = (() => {
     windowMaximize: () => call('POST', '/os/window', { action: 'maximize' }),
     windowClose:    () => call('POST', '/os/window', { action: 'close' }),
     openExternal:   (href) => call('POST', '/os/open-external', { url: href }),
+    // Steam's on-screen keyboard, in Game Mode (elsewhere it does nothing)
+    showKeyboard:   () => call('POST', '/os/keyboard'),
     chooseFolder:   async () => (await call('POST', '/os/choose-folder')).body?.path || null,
     // Adopt installs already in a folder (the settings install folder when dir is empty)
     scanInstalls:   async (dir) => { const r = await call('POST', '/library/scan', dir ? { dir } : {}); return r.ok ? r.body : failure(r); },
@@ -194,9 +196,10 @@ const api = (() => {
     // job says which step (binary, data) onProgress and onExtracting are for.
     // acceptHashChange: the user accepted a changed file from their own source
     // (a job that stopped with hashChange)
-    install: async ({ identifier, fileName, acceptHashChange, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
+    // into: the library id of an installed copy this upload updates
+    install: async ({ identifier, fileName, into, acceptHashChange, onStart = () => {}, onProgress = () => {}, onExtracting = () => {} }) => {
       watchInstalls();
-      const r = await call('POST', '/installs', { id: identifier, ...(fileName ? { files: [fileName] } : {}), ...(acceptHashChange ? { acceptHashChange: true } : {}) });
+      const r = await call('POST', '/installs', { id: identifier, ...(fileName ? { files: [fileName] } : {}), ...(into ? { into } : {}), ...(acceptHashChange ? { acceptHashChange: true } : {}) });
       if (!r.ok) return { status: 'error', error: r.body?.detail || `HTTP ${r.status}` };
       const job = r.body.installs[0];
       onStart(job);
