@@ -16,6 +16,7 @@ const disk = require('./disk');
 const { sourcesFromSettings, itemIdFrom } = require('./sources');
 const { withNewer } = require('./updates');
 const { classifyLink } = require('./links');
+const stores = require('./stores');
 const config = require('./config');
 
 const API_VERSION = 'v1';
@@ -115,11 +116,14 @@ function createApi(backend) {
   route('GET', '/items/:id', async ({ params }) => ({ body: withNewer(await findItem(params.id)) }));
 
   route('GET', '/items/:id/files', async ({ params }) => {
-    const r = await archive.fileList(params.id);
+    // A local store's copy answers first: an item gone from archive.org still installs
+    const copy = stores.findCopy(stores.storeDirs(settings.load()), params.id);
+    const r = copy ? { ok: true, files: copy.files } : await archive.fileList(params.id);
     if (!r.ok) throw new HttpError(502, 'file_list_failed', r.error);
     const folders = [...new Set(r.files.flatMap(f => String(f.name || '').split('/').slice(0, -1)
       .map((_, i, parts) => parts.slice(0, i + 1).join('/'))))].sort();
-    return { body: { files: r.files, folders, installable: installableFiles(r.files) } };
+    const installable = installableFiles(r.files);
+    return { body: { files: r.files, folders, installable: copy && !installable.length ? r.files : installable, ...(copy ? { store: copy.dir } : {}) } };
   });
 
   route('GET', '/items/:id/reviews', async ({ params }) => ({ body: { reviews: await archive.reviews(params.id) } }));
@@ -200,6 +204,10 @@ function createApi(backend) {
     hidden: settings.load().excludeItems || [],
   });
   route('GET', '/config', async () => ({ body: config.buildConfig(await currentConfig()) }));
+  // The uploader list alone, in settings.json's shape (switched-off ones too): what --export-sources writes
+  route('GET', '/config/sources', async () => ({
+    body: { sources: (await currentConfig()).sources.map(s => ({ uploader: s.uploader, label: s.label || null, enabled: s.enabled !== false })) },
+  }));
   // { text } (pasted) or a config object; merges, and answers what it added
   route('PUT', '/config', async ({ body }) => {
     const b = requireObject(body);
@@ -261,6 +269,12 @@ function createApi(backend) {
     return { status: 204 };
   });
 
+  // Back up to local store: the item's files into <first store>/<identifier>/
+  route('POST', '/library/:id/backup', async ({ params }) => {
+    const r = await installs.backup(params.id);
+    if (!r.ok) throw new HttpError(r.error === 'no_store' ? 409 : 502, r.error, r.detail);
+    return { body: r };
+  });
   route('GET', '/library/:id/exes', ({ params }) => ({ body: { exes: disk.findExes(installedRow(params.id).install_dir) } }));
   route('GET', '/library/:id/readme', ({ params }) => {
     const r = disk.readReadme(installedRow(params.id).install_dir);
@@ -344,6 +358,15 @@ function createApi(backend) {
   route('GET', '/settings', () => ({ body: settings.load() }));
   route('PUT', '/settings', ({ body }) => {
     const s = requireObject(body);
+    if ('localStores' in s) {
+      const list = s.localStores;
+      if (!Array.isArray(list) || list.some(x => typeof x !== 'string')) throw new HttpError(400, 'bad_request', 'localStores must be a list of folders');
+      const dirs = list.map(x => x.trim()).filter(Boolean);
+      const bad = dirs.find(d => !path.isAbsolute(d) && !/^[a-z]:[\\/]/i.test(d) && !/^\\\\/.test(d));
+      if (bad) throw new HttpError(400, 'bad_request', `A local store must be a full path: ${bad}`);
+      s.localStores = [...new Set(dirs)];
+    }
+    if ('keepInStore' in s && typeof s.keepInStore !== 'boolean') throw new HttpError(400, 'bad_request', 'keepInStore must be true or false');
     if ('morePorts' in s && typeof s.morePorts !== 'boolean') {
       throw new HttpError(400, 'bad_request', 'morePorts must be true or false');
     }

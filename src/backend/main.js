@@ -79,8 +79,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
   backend.getOverrides();
   backend.getDefaultSources();
   backend.library.clearMissingInstalls();
-  // Installs with no executable: the one a gamevault-exec file names, if any
-  backend.library.fillExes(disk.gamevaultExe);
+  // Installs with no executable get one (gamevault-exec's, else the best guess)
+  backend.library.fillExes((dir, row) => disk.pickExe(dir, row.title));
   // playnite-export.json is rewritten on every library change; this covers a first run
   backend.exportPlaynite(undefined, { loadItems: false }).catch(() => {});
 

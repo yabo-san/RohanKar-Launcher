@@ -27,6 +27,7 @@ const GAME_COLUMNS = {
   version:       'TEXT',     // installed release tag, when known
   upload:        'TEXT',     // the archive.org upload whose files are installed, when an update put a reupload in
   upload_date:   'TEXT',     // that upload's addeddate (or the identifier's own), to tell a newer one
+  source_label:  'TEXT',     // that source's label then, so a removed source still has a name
   uploader:      'TEXT',     // the archive.org source it was installed from, as in settings' sources ('upstream': a folder the upstream launcher made)
 };
 
@@ -165,14 +166,15 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   // ids Playnite knows it by, when it was last played and its saved name.
   // title and uploadDate come from the upload, so the entry keeps its name
   // and age after the upload is pulled from archive.org.
-  function recordInstall(identifier, installDir, exePath, { title = null, uploadDate = null, uploader = null } = {}) {
+  function recordInstall(identifier, installDir, exePath, { title = null, uploadDate = null, uploader = null, sourceLabel = null } = {}) {
     if (!db) return { ok: false };
-    const prev = db.prepare('SELECT export_id, last_played_at, title, tags, uploader FROM games WHERE identifier = ?').get(identifier);
+    const prev = db.prepare('SELECT export_id, last_played_at, title, tags, uploader, source_label FROM games WHERE identifier = ?').get(identifier);
     db.prepare(`
-      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at, title, tags, upload_date, uploader)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO games (identifier, install_dir, exe_path, added_at, export_id, last_played_at, title, tags, upload_date, uploader, source_label)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(identifier, installDir, exePath || null, Date.now(), prev?.export_id ?? null, prev?.last_played_at ?? null,
-      title || prev?.title || null, prev?.tags ?? null, uploadDate || null, uploader || prev?.uploader || null);
+      title || prev?.title || null, prev?.tags ?? null, uploadDate || null, uploader || prev?.uploader || null,
+      sourceLabel || prev?.source_label || null);
     changed(identifier);
     return { ok: true };
   }
@@ -193,11 +195,11 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
 
   // Registers an install found on disk, keeping the rest of the row; a title
   // fills in a row that has none
-  function adoptInstall(identifier, installDir, exePath, { title = null, uploader = null } = {}) {
+  function adoptInstall(identifier, installDir, exePath, { title = null, uploader = null, sourceLabel = null } = {}) {
     if (!db) return { ok: false };
     ensureRow(identifier);
-    db.prepare('UPDATE games SET install_dir = ?, exe_path = ?, title = COALESCE(title, ?), uploader = COALESCE(uploader, ?) WHERE identifier = ?')
-      .run(installDir, exePath || null, title || null, uploader || null, identifier);
+    db.prepare('UPDATE games SET install_dir = ?, exe_path = ?, title = COALESCE(title, ?), uploader = COALESCE(uploader, ?), source_label = COALESCE(source_label, ?) WHERE identifier = ?')
+      .run(installDir, exePath || null, title || null, uploader || null, sourceLabel || null, identifier);
     changed(identifier);
     return { ok: true };
   }
@@ -207,16 +209,16 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
   // Fills only what's empty; one change event.
   function backfill(known) {
     if (!db) return { filled: 0 };
-    const rows = db.prepare('SELECT identifier, title, upload, upload_date, uploader FROM games WHERE install_dir IS NOT NULL AND (title IS NULL OR upload_date IS NULL OR uploader IS NULL)').all();
-    const set = db.prepare('UPDATE games SET title = COALESCE(title, ?), upload_date = COALESCE(upload_date, ?), uploader = COALESCE(uploader, ?) WHERE identifier = ?');
+    const rows = db.prepare('SELECT identifier, title, upload, upload_date, uploader, source_label FROM games WHERE install_dir IS NOT NULL AND (title IS NULL OR upload_date IS NULL OR uploader IS NULL OR source_label IS NULL)').all();
+    const set = db.prepare('UPDATE games SET title = COALESCE(title, ?), upload_date = COALESCE(upload_date, ?), uploader = COALESCE(uploader, ?), source_label = COALESCE(source_label, ?) WHERE identifier = ?');
     let filled = 0;
     transaction(db, () => {
       for (const r of rows) {
         const k = known[r.upload || r.identifier];
         if (!k) continue;
-        const adds = (!r.title && k.title) || (!r.upload_date && k.uploadDate) || (!r.uploader && k.uploader);
+        const adds = (!r.title && k.title) || (!r.upload_date && k.uploadDate) || (!r.uploader && k.uploader) || (!r.source_label && k.sourceLabel);
         if (!adds) continue;
-        set.run(k.title || null, k.uploadDate || null, k.uploader || null, r.identifier);
+        set.run(k.title || null, k.uploadDate || null, k.uploader || null, k.sourceLabel || null, r.identifier);
         filled++;
       }
     });
@@ -224,17 +226,17 @@ function createLibrary({ dbPath, legacyJsonPath = null, open = openDatabase, onC
     return { filled };
   }
 
-  // Installed rows with no executable get the one their folder's
-  // gamevault-exec names (exeFor(dir) -> path or null). One change event.
+  // Installed rows with no executable get one: exeFor(dir, row) -> path or
+  // null (disk.pickExe: gamevault-exec's, else the best guess). One change event.
   function fillExes(exeFor) {
     if (!db) return { filled: 0 };
-    const rows = db.prepare('SELECT identifier, install_dir FROM games WHERE install_dir IS NOT NULL AND exe_path IS NULL').all();
+    const rows = db.prepare('SELECT identifier, install_dir, title FROM games WHERE install_dir IS NOT NULL AND exe_path IS NULL').all();
     let filled = 0;
     for (const r of rows) {
-      const exe = exeFor(r.install_dir);
+      const exe = exeFor(r.install_dir, r);
       if (!exe) continue;
       db.prepare('UPDATE games SET exe_path = ? WHERE identifier = ?').run(exe, r.identifier);
-      log(`[validate] Executable from gamevault-exec: ${r.identifier} → ${exe}`);
+      log(`[validate] Executable picked: ${r.identifier} → ${exe}`);
       filled++;
     }
     if (filled) onChange({});

@@ -172,14 +172,13 @@ const PD_REAL = () => makeZip({
   'pd-x86_64-windows/SDL2.dll': 'DLL', 'pd-x86_64-windows/data/put_your_rom_here.txt': 'here',
 });
 
-test('a release wrapped in one folder is unwrapped; with several exes none is picked', async (t) => {
+test('a release wrapped in one folder is unwrapped; with several exes the plainest is picked', async (t) => {
   const { dir, installs, item } = await setup(t, { bin: PD_REAL() });
   const r = installs.startPort({ item });
   await installs.wait(r.jobs[0].id);
   const job = installs.get(r.jobs[0].id);
   const dest = path.join(dir, 'games', 'PerfectDark-PerfectDarkPCPort');
-  assert.deepEqual([job.status, job.error, job.exePath], ['done', null, null]);
-  assert.ok(fs.existsSync(path.join(dest, 'pd.x86_64.exe')));
+  assert.deepEqual([job.status, job.error, job.exePath], ['done', null, path.join(dest, 'pd.x86_64.exe')]);
   assert.ok(fs.existsSync(path.join(dest, 'data', 'put_your_rom_here.txt')));
   assert.ok(!fs.existsSync(path.join(dest, 'pd-x86_64-windows')), 'no wrapper folder left');
   assert.ok(!fs.existsSync(path.join(dir, 'dl', 'PerfectDark-PerfectDarkPCPort')), 'download and staging are cleaned up');

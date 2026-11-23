@@ -51,8 +51,17 @@ The finished work orders are in git history. Where anything disagrees with this 
   loaded pack has the upload (taken down, uploader switched off or removed) it stays installed,
   listed and in the export, tagged `removed-upstream` or `source-disabled`. Removing a source
   never uninstalls, hides or deletes anything; re-adding it links the same rows back.
-- Find installs here also adopts folders the upstream launcher made, `(182)Silent Hill 3`, under
-  that number (Playnite's old GameId), with the exe its `gamevault-exec` names.
+- Find installs here also adopts folders the upstream launcher made: `(182)Silent Hill 3` under
+  that number (Playnite's old GameId), and a GameVault layout without a number (a `gamevault-exec`
+  file plus a `Files` folder, here or one version folder down) under `legacy:<title>`. The exe is
+  the one `gamevault-exec` names, else the likeliest in the folder; an installed game is never
+  exported without one. The gamevault-* files are never changed or deleted.
+- Local stores (settings `localStores`): folders that hold downloads as `<identifier>/<original
+  file>`, like a NAS share. An install reads a store before archive.org, so a game that is gone
+  upstream still installs; `keepInStore` keeps every download there, and "Back up to local store"
+  copies one in. The Playnite export (schema 2, docs/PLAYNITE-EXPORT.md) carries each game's
+  state, upstreamState, sourceState, sourceLabel, itemId, legacyId, localStorePath and
+  alternatives. The backend logs to `<data dir>/logs/main.log`, rotated.
 - A reupload of an installed game is its update: Update unpacks it over the same folder and keeps
   the same library entry and Playnite id; the row's `upload` says which upload it now holds.
 - Never change the default install folder: Playnite and existing installs depend on it.

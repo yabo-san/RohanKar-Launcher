@@ -149,12 +149,39 @@ function gamevaultExe(installDir) {
   try { return fs.statSync(full).isFile() ? full : null; } catch { return null; }
 }
 
-// The executable to record for a folder: gamevault-exec's, else the only one found
-function pickExe(installDir) {
+// Executables that are never the game: installers, uninstallers, redists, crash reporters
+const NOT_THE_GAME = /^(unins\d*|setup|install(er)?|vc_?redist.*|vcredist.*|dxsetup|dxwebsetup|directx.*|dotnet.*|ue[34]prereq.*|crash.*|.*crashhandler.*|.*crashreport.*|.*helper|.*updater|.*config(urator)?|.*settings|launcher_?config|7z.*|unitycrashhandler.*|quicksfv|easyanticheat.*)\.exe$/i;
+
+// The game's executable among a folder's: gamevault-exec's when it names
+// one, else the only one found, else (so an installed game is never without
+// one) the best guess: not an installer or helper, named most like the
+// title, then the largest. Null only when the folder has no .exe at all.
+function pickExe(installDir, title = null, { platform = process.platform } = {}) {
   const named = gamevaultExe(installDir);
   if (named) return named;
-  const exes = findExes(installDir);
-  return exes.length === 1 ? exes[0] : null;
+  const exes = findExes(installDir, 0, { platform });
+  if (exes.length <= 1) return exes[0] || null;
+  return guessExe(exes, title || path.basename(installDir).replace(/^\(\d+\)\s*/, ''));
+}
+
+function guessExe(exes, title) {
+  const games = exes.filter(e => !NOT_THE_GAME.test(path.basename(e).replace(/(\.exe)?$/i, '.exe')));
+  const pool = games.length ? games : exes;
+  const want = looseKey(title || '');
+  const size = (f) => { try { return fs.statSync(f).size; } catch { return 0; } };
+  const score = (e) => {
+    const k = looseKey(path.basename(e).replace(/\.(exe|x86_64|sh)$/i, ''));
+    if (!want || !k) return 0;
+    if (k === want) return 3;
+    return want.startsWith(k) || k.startsWith(want) ? 2 : want.includes(k) || k.includes(want) ? 1 : 0;
+  };
+  // Ties: the largest, then the plainest name (pd.x86_64.exe over pd.jpn.x86_64.exe)
+  return pool.slice().sort((a, b) => score(b) - score(a) || size(b) - size(a) || path.basename(a).length - path.basename(b).length)[0];
+}
+
+// A GameVault-layout install: a gamevault-exec file and a Files folder
+function isGamevaultLayout(dir) {
+  try { return fs.statSync(path.join(dir, 'gamevault-exec')).isFile() && fs.statSync(path.join(dir, 'Files')).isDirectory(); } catch { return false; }
 }
 
 // A folder the upstream RohanKar launcher installed, "(182)Silent Hill 3":
@@ -255,5 +282,5 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap, { nested = 1 }
 
 module.exports = {
   IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, makeRunnable, isLinuxProgram, readReadme,
-  looseKey, matchInstallFolders, gamevaultExe, pickExe, upstreamFolder,
+  looseKey, matchInstallFolders, gamevaultExe, pickExe, guessExe, isGamevaultLayout, upstreamFolder,
 };

@@ -11,11 +11,13 @@ const fs   = require('fs');
 const path = require('path');
 const { updateAvailable } = require('./updates');
 
-const SCHEMA_VERSION = 1;
+// 2: per game sourceLabel, itemId, legacyId, state, upstreamState,
+// sourceState, localStorePath and alternatives (docs/PLAYNITE-EXPORT.md)
+const SCHEMA_VERSION = 2;
 // Tags on an installed archive.org game: where it came from, and why no
 // loaded pack has it any more (items.js localReason). source-unavailable (a
 // failed load) isn't a state worth a tag: the last export's tags stay.
-const STATE_TAGS = ['removed-upstream', 'source-disabled', 'provenance-unknown'];
+const STATE_TAGS = ['removed-upstream', 'source-disabled', 'source-removed', 'provenance-unknown'];
 const isSourceTag = (t) => typeof t === 'string' && (t.startsWith('source:') || STATE_TAGS.includes(t));
 const PLATFORMS = ['PC', 'Nintendo', 'PlayStation', 'Xbox', 'Other'];
 
@@ -60,9 +62,44 @@ const outranks = (a, b) => {
 // tagsFor(identifier): collection names; art(identifier, row): { cover, hero } paths on disk;
 // exportIdFor(identifier): the stored UUID of a manual entry; previous: the last export,
 // whose names and sources stand in for items that aren't loaded
+// Where an entry stands (schema 2). r: its library row; item: the loaded item
+// holding it, if any; previous: its record in the last export, which stands
+// in when nothing is loaded or its source failed to load; storePath: its
+// download's folder in a local store
+function standing(r, item, previous, { isArchive, storePath }) {
+  if (!isArchive) {
+    return {
+      sourceLabel: item?.source?.name || item?.source?.label || previous?.sourceLabel || null, itemId: r.identifier, legacyId: null,
+      state: r.install_dir ? 'installed' : item ? 'downloadable' : 'local-only',
+      upstreamState: item ? 'available' : 'unknown', sourceState: item ? 'active' : 'unknown',
+      localStorePath: null, alternatives: [],
+    };
+  }
+  const found = item?.versions?.find(x => x.id === r.identifier);
+  const v = found?.localReason === 'source-unavailable' ? null : found;
+  const live = !!v && !v.local;
+  const reason = v?.localReason;
+  const legacyId = r.uploader === 'upstream' && /^\d+$/.test(r.identifier) ? r.identifier : null;
+  const SOURCE_STATES = { 'source-disabled': 'disabled', 'source-removed': 'removed' };
+  return {
+    sourceLabel: (live ? v.source?.label : v?.origin?.label) || r.source_label || previous?.sourceLabel || null,
+    itemId: r.uploader === 'upstream' ? null : (r.upload || r.identifier),
+    legacyId,
+    state: r.install_dir ? 'installed' : storePath ? 'in-local-store' : live ? 'downloadable' : 'local-only',
+    upstreamState: live ? 'available' : reason === 'removed-upstream' ? 'removed' : (!v && previous?.upstreamState) || 'unknown',
+    // Taken down while its pack is still on: the source itself is fine
+    sourceState: live || (reason === 'removed-upstream' && v.origin) ? 'active' : SOURCE_STATES[reason] || (!v && previous?.sourceState) || 'unknown',
+    localStorePath: storePath || null,
+    // The same game from other uploads that are up now
+    alternatives: (item?.versions || []).filter(x => x.id !== r.identifier && x.id !== r.upload && !x.local)
+      .map(x => ({ sourceLabel: x.source?.label || null, itemId: x.id })),
+  };
+}
+
+// storePathOf(identifier): its download's folder in a local store, or null
 function buildExport({
   rows, items = {}, tagsFor = () => [], art = () => ({}), exportIdFor = () => null,
-  previous = null, launcherVersion = null, now = Date.now(),
+  previous = null, launcherVersion = null, now = Date.now(), storePathOf = () => null,
 }) {
   const before = new Map((previous?.games || []).map(g => [g.id, g]));
   const byId = new Map(); // export id -> { row, game }
@@ -113,6 +150,7 @@ function buildExport({
       lastPlayed:      iso(r.last_played_at),
       playtimeSeconds: r.playtime_secs || 0,
       favorite:        !!r.is_favorite,
+      ...standing(r, item, before.get(id), { isArchive, storePath: isArchive ? storePathOf(r.identifier) : null }),
     } });
   }
   const games = [...byId.values()].map(e => e.game);

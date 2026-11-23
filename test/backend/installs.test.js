@@ -146,7 +146,8 @@ test('start: several archives need a choice; each extracts into its own folder',
   assert.ok(fs.existsSync(path.join(dir, 'games', 'coll', '_GAME_NiGHTS')));
   const row = library.get('coll');
   assert.equal(row.install_dir, path.join(dir, 'games', 'coll'));
-  assert.equal(row.exe_path, null, 'two games, two exes: the user picks at launch');
+  // Two games, two exes: one is set, so the export always has one; Play's picker lists both
+  assert.ok(row.exe_path.endsWith('game.exe'));
 });
 
 test('start: errors from the file list, download and extraction are reported', async (t) => {

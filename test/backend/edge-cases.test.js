@@ -182,7 +182,7 @@ test('Find installs here adopts "(182)Silent Hill 3" though no pack has it, with
   const { backend } = await testBackend(t);
   const root = tmpDir(t);
   const sh3dir = upstreamInstall(root, '(182)Silent Hill 3', 'Files\\sh3.exe\r\n');
-  const sh2dir = upstreamInstall(root, '(181)Silent Hill 2', '');
+  const sh2dir = upstreamInstall(root, '(181)Silent Hill 2', 'InstalledGameVersion=');
   // Still upstream: matched to its upload by title, as before
   fs.mkdirSync(path.join(root, '(7)Halo Combat Evolved'));
   fs.writeFileSync(path.join(root, '(7)Halo Combat Evolved', 'halo.exe'), 'MZ');
@@ -196,8 +196,10 @@ test('Find installs here adopts "(182)Silent Hill 3" though no pack has it, with
     [['181', 'upstream-folder'], ['182', 'upstream-folder'], ['rk-e2e-halo-ce', 'loose']]);
   const row = backend.library.get('182');
   assert.deepEqual([row.title, row.install_dir, row.exe_path], ['Silent Hill 3', sh3dir, path.join(sh3dir, 'Files', 'sh3.exe')]);
-  // An empty gamevault-exec and two exes: no guess, the user picks
-  assert.deepEqual([backend.library.get('181').title, backend.library.get('181').install_dir, backend.library.get('181').exe_path], ['Silent Hill 2', sh2dir, null]);
+  // gamevault-exec naming no exe (GameVault wrote "InstalledGameVersion="), two exes:
+  // the best guess, setup.exe left out, so the export never has a null exe
+  assert.deepEqual([backend.library.get('181').title, backend.library.get('181').install_dir, backend.library.get('181').exe_path],
+    ['Silent Hill 2', sh2dir, path.join(sh2dir, 'Files', 'sh3.exe')]);
   assert.equal(backend.library.get('9'), null);
 
   // A card under its name, marked as not in any pack
@@ -232,7 +234,8 @@ test('gamevault-exec: relative, absolute, quoted or JSON; missing or wrong is nu
   const root = tmpDir(t);
   const dir = upstreamInstall(root, '(1)G');
   assert.equal(gamevaultExe(dir), null);
-  assert.equal(pickExe(dir), null, 'two exes and no file: no pick');
+  // Two exes and no gamevault-exec: the guess skips the installer
+  assert.equal(pickExe(dir), path.join(dir, 'Files', 'sh3.exe'));
   for (const [text, ok] of [
     ['"Files/sh3.exe"', true], [path.join(dir, 'Files', 'sh3.exe'), true], ['{"exe":"Files/sh3.exe"}', true],
     ['Files/nope.exe', false], ['Files', false], ['{}', false],

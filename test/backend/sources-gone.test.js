@@ -6,7 +6,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs   = require('fs');
 const path = require('path');
-const { testApi } = require('./helpers');
+const { testApi, makeZip } = require('./helpers');
 const { runCli } = require('../../src/backend/cli');
 
 const A = 'fake-a@example.com';
@@ -89,7 +89,7 @@ test('3. source removed, rescanned and re-added: installs kept, no duplicates, b
   const scan = await ctx.backend.scanInstalls(path.dirname(dirs[0]));
   assert.deepEqual(scan.found, [], 'nothing re-adopted twice');
   const games = await assertKept(ctx, INSTALLED);
-  assert.deepEqual(games['a-one'].tags, ['source:fake-a', 'source-disabled']);
+  assert.deepEqual(games['a-one'].tags, ['source:pack-a', 'source-removed']);
   assert.deepEqual(INSTALLED.map(id => ctx.backend.library.get(id).install_dir), dirs);
 
   // Re-added: the same rows link back, browse has its uploads again
@@ -155,4 +155,92 @@ test('an install with no exe gets the one gamevault-exec names', async (t) => {
   assert.deepEqual(ctx.backend.library.fillExes(require('../../src/backend/disk').gamevaultExe), { filled: 1 });
   assert.equal(ctx.backend.library.get('a-one').exe_path, path.join(dir, 'Game', 'game.exe'));
   assert.deepEqual(ctx.backend.library.fillExes(() => null), { filled: 0 });
+});
+
+test('local store: install from it with no network, and a stored-only item is listed and installable', async (t) => {
+  const ctx = await setup(t);
+  const store = path.join(ctx.dataDir, 'nas');
+  // The store has an item that isn't in the library and whose upload is gone
+  const pdir = path.join(store, 'prototype-2_20260115');
+  fs.mkdirSync(pdir, { recursive: true });
+  fs.writeFileSync(path.join(pdir, 'PROTOTYPE 2.zip'), makeZip({ 'Game/game.exe': 'MZ' }));
+  ctx.backend.settings.save({ localStores: [store] });
+
+  // Listed as in-the-store, under the download's name, in no pack's browse
+  const list = await ctx.items();
+  const v = ctx.versionOf(list, 'prototype-2_20260115');
+  assert.deepEqual([v.local, v.localReason, v.localStorePath], [true, 'store-only', pdir]);
+  assert.equal(list.find(i => i.id === 'prototype-2_20260115').title, 'PROTOTYPE 2');
+
+  // Installs from the store with no archive.org request
+  ctx.fake.requests.length = 0;
+  const r = await ctx.call('POST', '/installs', { id: 'prototype-2_20260115' });
+  await ctx.backend.installs.wait(r.body.installs[0].id);
+  assert.equal(ctx.backend.installs.get(r.body.installs[0].id).status, 'done');
+  assert.ok(!ctx.fake.requests.some(u => u.includes('prototype-2')), 'no network for a stored item');
+  assert.ok(ctx.backend.library.get('prototype-2_20260115').install_dir);
+  // The store keeps its copy
+  assert.ok(fs.existsSync(path.join(pdir, 'PROTOTYPE 2.zip')));
+});
+
+test('an upload with a store copy installs from the store, not archive.org', async (t) => {
+  const ctx = await setup(t);
+  const store = path.join(ctx.dataDir, 'nas');
+  const dir = path.join(store, 'a-junk');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'a-junk.zip'), makeZip({ 'Game/game.exe': 'MZ' }));
+  ctx.backend.settings.save({ localStores: [store] });
+  ctx.fake.requests.length = 0;
+  const r = await ctx.call('POST', '/installs', { id: 'a-junk' });
+  await ctx.backend.installs.wait(r.body.installs[0].id);
+  assert.equal(ctx.backend.installs.get(r.body.installs[0].id).status, 'done');
+  assert.ok(!ctx.fake.requests.some(u => u.includes('download/a-junk')), 'no download for a stored item');
+});
+
+test('back up to local store, and keep every download there', async (t) => {
+  const ctx = await setup(t);
+  const store = path.join(ctx.dataDir, 'nas');
+  fs.mkdirSync(store, { recursive: true });
+  assert.equal((await ctx.call('POST', '/library/a-one/backup')).status, 409, 'no store set yet');
+
+  ctx.backend.settings.save({ localStores: [store] });
+  const r = await ctx.call('POST', '/library/a-one/backup');
+  assert.equal(r.status, 200);
+  assert.equal(r.body.dir, path.join(store, 'a-one'));
+  assert.ok(fs.readdirSync(path.join(store, 'a-one')).length, 'the download is in the store');
+  // Again: the copy is already there
+  assert.equal((await ctx.call('POST', '/library/a-one/backup')).body.existing, true);
+
+  // keepInStore: a fresh install leaves its download in the store
+  ctx.backend.settings.save({ keepInStore: true });
+  const inst = await ctx.call('POST', '/installs', { id: 'a-junk' });
+  await ctx.backend.installs.wait(inst.body.installs[0].id);
+  assert.ok(fs.existsSync(path.join(store, 'a-junk')), 'the download was kept');
+});
+
+test('the export carries the schema-2 standing fields', async (t) => {
+  const ctx = await setup(t);
+  const store = path.join(ctx.dataDir, 'nas');
+  fs.mkdirSync(path.join(store, 'stored-gone'), { recursive: true });
+  fs.writeFileSync(path.join(store, 'stored-gone', 'g.zip'), makeZip({ 'Game/game.exe': 'MZ' }));
+  ctx.backend.settings.save({ localStores: [store] });
+  // a-two taken down upstream (pack still on); b-shared is an alternative to a-three
+  ctx.fake.search[A] = ctx.fake.search[A].filter(d => d.identifier !== 'a-two');
+  await ctx.items();
+
+  const games = await ctx.exported();
+  assert.deepEqual(
+    [games['a-one'].state, games['a-one'].upstreamState, games['a-one'].sourceState, games['a-one'].sourceLabel, games['a-one'].itemId],
+    ['installed', 'available', 'active', 'pack-a', 'a-one']);
+  assert.deepEqual([games['a-two'].state, games['a-two'].upstreamState, games['a-two'].sourceState], ['installed', 'removed', 'active']);
+  assert.deepEqual(games['a-three'].alternatives, [{ sourceLabel: 'pack-b', itemId: 'b-shared' }]);
+  // In the store, not in the library, no live item
+  assert.deepEqual([games['stored-gone'].state, games['stored-gone'].localStorePath], ['in-local-store', path.join(store, 'stored-gone')]);
+});
+
+test('an uploader disabled while a game is installed: sourceState disabled, not removed', async (t) => {
+  const ctx = await setup(t);
+  ctx.backend.settings.save({ sources: [{ uploader: A, label: 'pack-a', enabled: false }, { uploader: B, label: 'pack-b', enabled: true }] });
+  await ctx.items();
+  assert.equal((await ctx.exported())['a-one'].sourceState, 'disabled');
 });
