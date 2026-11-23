@@ -9,22 +9,79 @@
 const fs     = require('fs');
 const path   = require('path');
 const crypto = require('crypto');
-const { execFile } = require('child_process');
+const { spawn } = require('child_process');
+const { pipeline } = require('stream');
 const { getFollow, getText } = require('./net');
 const { installableFiles, ARCHIVE_FILE } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const { checkPin } = require('./user-sources');
 const { findSevenZip, WINDOWS_7ZIP } = require('./sevenzip');
+const { createJournal, STAGING_PREFIX, INTERRUPTED } = require('./install-journal');
 
 const SEVEN_ZIP = WINDOWS_7ZIP;
 const GITHUB_API = 'https://api.github.com';
 const GITLAB_API = 'https://gitlab.com/api/v4';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = findSevenZip({ platform }), githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
+// Runs an unpacker with no stdin (so a password prompt fails instead of
+// waiting forever) and without buffering its output (a big archive's file
+// list used to overflow execFile's buffer). Resolves { ok } or
+// { ok: false, code, output } with the output's last few KB; 'Cancelled'
+// when signal aborts it.
+function runTool(cmd, args, { signal, onOutput = () => {} } = {}) {
+  return new Promise((resolve) => {
+    let tail = '';
+    let child;
+    try {
+      child = spawn(cmd, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...(signal ? { signal } : {}) });
+    } catch (e) {
+      return resolve({ ok: false, error: e.message });
+    }
+    const keep = (d) => { const text = d.toString(); tail = (tail + text).slice(-4000); onOutput(text); };
+    child.stdout.on('data', keep);
+    child.stderr.on('data', keep);
+    child.on('error', (e) => resolve({ ok: false, error: e.name === 'AbortError' ? 'Cancelled' : e.message }));
+    child.on('close', (code) => resolve(code === 0 ? { ok: true } : { ok: false, code, output: tail }));
+  });
+}
+
+// 7-Zip's failure in words: what it means for the user, not an exit code
+function sevenZipError(name, { code, output = '', error }) {
+  if (error) return error === 'Cancelled' ? error : `Couldn't run 7-Zip to unpack ${name}: ${error}`;
+  if (/wrong password|encrypted/i.test(output)) return `${name} is password protected, so it can't be unpacked.`;
+  if (/not enough space|no space left|disk full/i.test(output)) return `There isn't enough free disk space to unpack ${name}.`;
+  if (/can ?not open .*as archive|unexpected end|data error|crc failed|headers error|is not archive/i.test(output)) {
+    return `${name} looks damaged or incomplete. Install again to download it fresh.`;
+  }
+  const last = output.split(/[\r\n\b]+/).map(l => l.trim()).filter(Boolean).pop();
+  return `7-Zip couldn't unpack ${name} (exit code ${code})${last ? `: ${last}` : ''}`;
+}
+
+// A percent from 7-Zip's -bsp1 progress output (" 42% 12 - file"), or null
+function lastPercent(text) {
+  const all = [...String(text).matchAll(/(\d{1,3})%/g)].map(m => Number(m[1])).filter(n => n <= 100);
+  return all.length ? all.at(-1) : null;
+}
+
+// Moves a finished unpack into place: a rename when the folder is new, else
+// its files go over the existing folder (an update, or a reinstall)
+async function place(from, to) {
+  if (!fs.existsSync(to)) {
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    try { fs.renameSync(from, to); return; } catch { /* another drive, or held open: copy instead */ }
+  }
+  await fs.promises.cp(from, to, { recursive: true, force: true });
+  await fs.promises.rm(from, { recursive: true, force: true });
+}
+
+// journalFile: where unfinished installs are written down, so the next start
+// can remove what an install killed midway left behind (install-journal.js).
+// stallMs: how long a download may go without receiving anything.
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = findSevenZip({ platform }), githubApi = GITHUB_API, gitlabApi = GITLAB_API, journalFile = null, stallMs = 60000 }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
+  const journal = createJournal(journalFile, { log, busy: (dir) => [...activeDownloads.values()].some(d => d.dir === dir) });
 
   const downloadDir = () => settings.load().downloadPath || gamesDir;
   const installDir  = () => settings.load().installPath  || gamesDir;
@@ -42,12 +99,17 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     try { fs.rmdirSync(dir); } catch { /* not empty */ }
   }
 
-  // Downloads url into <download folder>/<identifier>/<fileName>. Resolves
-  // { ok, filePath } or { ok: false, error }; cancel(key) resolves it as 'Cancelled'.
-  function download({ key, identifier, url, fileName, onProgress = () => {} }) {
+  // Downloads url into <download folder>/<identifier>/<fileName>, writing
+  // <fileName>.part until the last byte is in, so a cut-off download never
+  // looks finished. Resolves { ok, filePath } or { ok: false, error } (the
+  // .part file removed); cancel(key) resolves it as 'Cancelled'.
+  // onFile(path, kind): each file it creates, for the journal.
+  function download({ key, identifier, url, fileName, onProgress = () => {}, onFile = () => {} }) {
     const destDir = path.join(downloadDir(), disk.sanitizeFolderName(identifier));
     fs.mkdirSync(destDir, { recursive: true });
     const destFile = path.join(destDir, path.basename(fileName));
+    const partFile = destFile + '.part';
+    onFile(partFile, 'part');
 
     return new Promise((resolve) => {
       let settled = false;
@@ -56,13 +118,18 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
         if (settled) return;
         settled = true;
         activeDownloads.delete(key);
-        resolve(r);
+        if (r.ok) return resolve(r);
+        // The .part goes once the file is closed (Windows won't delete an open file)
+        const drop = () => fs.rm(partFile, { force: true }, () => resolve(r));
+        if (file && !file.closed) { file.once('close', drop); file.destroy(); } else drop();
       };
 
       // Registered before any request, so cancel works during redirects too
       const handle = getFollow(url, {
-        kind: 'download', log: netLog,
-        onError: (e) => settle({ ok: false, error: e.message }),
+        // A download that gets no data for stallMs fails instead of waiting forever
+        kind: 'download', log: netLog, timeoutMs: stallMs,
+        onError: (e) => settle({ ok: false, error: file && /timed out/i.test(e.message)
+          ? 'The download stalled: nothing arrived for a while. Check your connection and try again.' : e.message }),
         onResponse: (res) => {
           if (res.statusCode !== 200) {
             res.resume();
@@ -70,15 +137,24 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
           }
           const total = parseInt(res.headers['content-length'] || '0', 10);
           let received = 0;
-          file = fs.createWriteStream(destFile);
+          file = fs.createWriteStream(partFile);
           res.on('data', (chunk) => {
             if (settled) return;
             received += chunk.length;
-            if (total > 0) onProgress(Math.round(received / total * 100));
+            if (total > 0) onProgress(Math.min(100, Math.round(received / total * 100)));
           });
-          res.pipe(file);
-          file.on('finish', () => { file.close(); settle({ ok: true, filePath: destFile }); });
-          file.on('error', (err) => { fs.unlink(destFile, () => {}); settle({ ok: false, error: err.message }); });
+          // pipeline reports a connection cut midway, which a bare pipe() never did
+          pipeline(res, file, (err) => {
+            if (settled) return;
+            const pct = total > 0 ? Math.floor(received / total * 100) : null;
+            if (err && err.code !== 'ERR_STREAM_PREMATURE_CLOSE' && !/aborted|ECONNRESET/i.test(`${err.code} ${err.message}`)) return settle({ ok: false, error: err.message });
+            if (err || (total > 0 && received < total)) {
+              return settle({ ok: false, error: `The download was cut off${pct !== null ? ` at ${pct}%` : ''}. Try again.` });
+            }
+            try { fs.renameSync(partFile, destFile); } catch (e) { return settle({ ok: false, error: e.message }); }
+            onFile(destFile, 'download');
+            settle({ ok: true, filePath: destFile });
+          });
         },
       });
 
@@ -87,7 +163,6 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
         cancel: () => {
           handle.aborted = true;
           try { handle.req?.destroy(); } catch { /* already gone */ }
-          try { file?.close(); } catch { /* not open */ }
           settle({ ok: false, error: 'Cancelled' });
         },
       });
@@ -101,57 +176,110 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   // Extracts into <install folder>/<identifier>, or for one game of a
   // collection into <identifier>/_GAME_<subFolder>, which findExes groups by.
-  // 7-Zip when installed (zip/7z/rar), extract-zip for .zip otherwise.
+  // The archive unpacks into a hidden folder beside it first and is moved
+  // into place only once it is whole, so a failed, cancelled or killed unpack
+  // never leaves a half-unpacked game where the game goes.
   // into: an existing install folder to unpack over instead (an update).
-  async function extract({ filePath, identifier, subFolder, into = null }) {
+  // onProgress(percent) while it unpacks; signal cancels it; onFile(path, kind)
+  // as download(). Resolves { ok, installDir, parentInstallDir } or { ok: false, error }.
+  async function extract({ filePath, identifier, subFolder, into = null, onProgress = () => {}, signal = null, onFile = () => {}, onPlacing = () => {} }) {
     const parentDir = into || path.join(installDir(), disk.sanitizeFolderName(identifier));
     const destDir = subFolder ? path.join(parentDir, '_GAME_' + disk.sanitizeFolderName(subFolder)) : parentDir;
-    fs.mkdirSync(destDir, { recursive: true });
+    const done = (copiedTo = null) => {
+      removeDownload(filePath, copiedTo);
+      return { ok: true, installDir: destDir, parentInstallDir: parentDir };
+    };
+    if (!fs.existsSync(filePath)) return { ok: false, error: `${path.basename(filePath)} is missing` };
 
-    const r = await extractTo(filePath, destDir);
-    if (!r.ok) return r;
-    disk.unblockDirectory(destDir, { platform, log });
-    disk.makeRunnable(destDir, { platform, log });
-    removeDownload(filePath, r.copiedTo);
-    return { ok: true, installDir: destDir, parentInstallDir: parentDir };
+    // Not an archive: the file itself is the install, moved in as it is
+    if (!isUnpackable(filePath)) {
+      const copiedTo = path.join(destDir, path.basename(filePath));
+      if (path.resolve(copiedTo) === path.resolve(filePath)) return done(copiedTo);
+      try {
+        fs.mkdirSync(destDir, { recursive: true });
+        onPlacing();
+        try { fs.renameSync(filePath, copiedTo); } catch { await fs.promises.copyFile(filePath, copiedTo); }
+      } catch (e) {
+        return { ok: false, error: e.message };
+      }
+      return done();
+    }
+
+    const staging = path.join(path.dirname(destDir), `${STAGING_PREFIX}${crypto.randomUUID()}`);
+    onFile(staging, 'staging');
+    try {
+      const r = await extractTo(filePath, staging, { onProgress, signal });
+      if (!r.ok) return r;
+      if (signal?.aborted) return { ok: false, error: 'Cancelled' };
+      await disk.unblockDirectory(staging, { platform, log });
+      await disk.makeRunnable(staging, { platform, log });
+      onPlacing();
+      await place(staging, destDir);
+    } catch (e) {
+      return { ok: false, error: e.message };
+    } finally {
+      await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => {});
+    }
+    return done();
+  }
+
+  // What extractTo unpacks rather than copies, on this system
+  function isUnpackable(filePath) {
+    const lower = filePath.toLowerCase();
+    if (ports.TAR_EXT.test(lower) || lower.endsWith('.zip')) return true;
+    return /\.(7z|rar)$/.test(lower) && (platform === 'linux' || !!(sevenZip && fs.existsSync(sevenZip)));
   }
 
   // Unpacks an archive into destDir: 7-Zip when there is one (zip/7z/rar),
   // extract-zip for .zip otherwise, the system's tar for a tarball (a Linux
-  // build); any other file is copied in as it is.
+  // build); any other file is copied in as it is. onProgress(percent) while
+  // 7-Zip or extract-zip unpacks; signal stops it ('Cancelled').
   // Resolves { ok } ({ ok, copiedTo } for a copied file) or { ok: false, error }.
-  async function extractTo(filePath, destDir) {
+  async function extractTo(filePath, destDir, { onProgress = () => {}, signal = null } = {}) {
     fs.mkdirSync(destDir, { recursive: true });
     const lower = filePath.toLowerCase();
+    const name = path.basename(filePath);
     if (ports.TAR_EXT.test(lower)) {
-      return new Promise((resolve) => {
-        execFile('tar', ['-xf', filePath, '-C', destDir], (err) => {
-          resolve(err ? { ok: false, error: err.message } : { ok: true });
-        });
-      });
+      const r = await runTool('tar', ['-xf', filePath, '-C', destDir], { signal });
+      return r.ok ? r : { ok: false, error: r.error || `Couldn't unpack ${name}: ${r.output.trim().split('\n').pop() || `tar exit code ${r.code}`}` };
     }
     if (/\.(zip|7z|rar)$/.test(lower) && sevenZip && fs.existsSync(sevenZip)) {
-      return new Promise((resolve) => {
-        execFile(sevenZip, ['x', filePath, `-o${destDir}`, '-y'], (err) => {
-          resolve(err ? { ok: false, error: err.message } : { ok: true });
-        });
+      let last = -1;
+      // -bsp1: progress percent on stdout; -bso0: no file list; -p: no password prompt
+      const r = await runTool(sevenZip, ['x', filePath, `-o${destDir}`, '-y', '-bsp1', '-bso0', '-p'], {
+        signal,
+        onOutput: (text) => {
+          const pct = lastPercent(text);
+          if (pct !== null && pct !== last) { last = pct; onProgress(pct); }
+        },
       });
+      return r.ok ? r : { ok: false, error: sevenZipError(name, r) };
     }
     if (lower.endsWith('.zip')) {
       try {
-        await require('extract-zip')(filePath, { dir: path.resolve(destDir) });
+        let n = 0, last = -1;
+        await require('extract-zip')(filePath, {
+          dir: path.resolve(destDir),
+          onEntry: (entry, zip) => {
+            if (signal?.aborted) throw new Error('Cancelled');
+            const pct = Math.floor(++n / Math.max(1, zip.entryCount) * 100);
+            if (pct !== last) { last = pct; onProgress(pct); }
+          },
+        });
         return { ok: true };
       } catch (e) {
-        return { ok: false, error: e.message };
+        if (e.message === 'Cancelled') return { ok: false, error: 'Cancelled' };
+        return { ok: false, error: /end of central directory|invalid|corrupt|unexpected/i.test(e.message)
+          ? `${name} looks damaged or incomplete. Install again to download it fresh. (${e.message})` : e.message };
       }
     }
     // On Linux a .7z or .rar copied in as it is would look installed and never run
     if (platform === 'linux' && /\.(7z|rar)$/.test(lower)) {
-      return { ok: false, error: `Couldn't unpack ${path.basename(filePath)}: 7-Zip isn't available. Install 7-Zip (7zz) or use the Flatpak, which brings its own.` };
+      return { ok: false, error: `Couldn't unpack ${name}: 7-Zip isn't available. Install 7-Zip (7zz) or use the Flatpak, which brings its own.` };
     }
     // Not an archive: kept as it is, the launcher is just its download client
     try {
-      const copiedTo = path.join(destDir, path.basename(filePath));
+      const copiedTo = path.join(destDir, name);
       if (path.resolve(copiedTo) !== path.resolve(filePath)) fs.copyFileSync(filePath, copiedTo);
       return { ok: true, copiedTo };
     } catch (e) {
@@ -161,12 +289,15 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   // ─── Jobs (POST /installs) ────────────────────────────────────────────────
 
-  // step: 'binary' while a port installs, null for archive.org items
+  // step: 'binary' while a port installs, null for archive.org items.
+  // percent: of the download while downloading, of the unpack while extracting.
+  // interrupted: a job from before the last restart that never finished.
   const view = (job) => ({
     id: job.id, itemId: job.itemId, file: job.file, status: job.status, step: job.step ?? null, percent: job.percent,
     error: job.error, installDir: job.installDir, exePath: job.exePath,
     ...(job.into ? { into: job.into.identifier } : {}),
     ...(job.hashChange ? { hashChange: job.hashChange } : {}),
+    ...(job.interrupted ? { interrupted: true, title: job.title, kind: job.kind } : {}),
     startedAt: job.startedAt, finishedAt: job.finishedAt,
   });
 
@@ -177,6 +308,33 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   }
 
   const isRunning = (j) => ['downloading', 'extracting', 'verifying'].includes(j.status);
+
+  // Installs a previous run of the app never finished: their leftovers go
+  // now, and they are listed as failed so the app can offer them again
+  for (const r of journal.recover()) {
+    jobs.set(r.id, {
+      id: r.id, itemId: r.itemId, file: r.file, title: r.title, kind: r.kind, status: 'error', step: null, percent: 0,
+      error: INTERRUPTED, interrupted: true, installDir: null, exePath: null, startedAt: r.startedAt, finishedAt: Date.now(),
+    });
+  }
+
+  // A job's journal entry, and what its steps need to report into it
+  function track(job, kind, title) {
+    job.abort = new AbortController();
+    journal.begin({ id: job.id, itemId: job.itemId, file: job.file, title, kind });
+    return (p, k) => journal.track(job.id, p, k);
+  }
+  // Runs a job's steps; whatever they leave behind goes unless it finished
+  async function runTracked(job, steps) {
+    try {
+      await steps();
+    } catch (e) {
+      if (job.status !== 'cancelled') update(job, { status: 'error', error: e.message });
+    } finally {
+      if (isRunning(job)) update(job, { status: 'error', error: job.error || 'The install stopped unexpectedly.' });
+      journal.end(job.id, { ok: job.status === 'done' });
+    }
+  }
 
   // A downloaded file from an additional source: its sha1 against the user's,
   // else against the pin from its first install. true, or fails the job.
@@ -192,9 +350,10 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   }
 
   async function runJob(job, subFolder) {
+    const onFile = track(job, 'game', job.meta.title);
+    const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
     const r = await download({
-      key: job.id, identifier: job.itemId, url: archive.downloadUrl(job.itemId, job.file), fileName: job.file,
-      onProgress: (percent) => { if (percent !== job.percent) update(job, { percent }); },
+      key: job.id, identifier: job.itemId, url: archive.downloadUrl(job.itemId, job.file), fileName: job.file, onProgress: progress, onFile,
     });
     if (job.status === 'cancelled') return;
     if (!r.ok) return update(job, { status: 'error', error: r.error });
@@ -203,8 +362,12 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       if (!(await checkUserFile(job, { pinKey: `archive:${job.itemId}`, name: job.file, filePath: r.filePath, expected }))) return;
     }
 
-    update(job, { status: 'extracting', percent: 100 });
-    const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder, into: job.into?.installDir });
+    update(job, { status: 'extracting', percent: 0 });
+    const x = await extract({
+      filePath: r.filePath, identifier: job.itemId, subFolder, into: job.into?.installDir,
+      onProgress: progress, signal: job.abort.signal, onFile, onPlacing: () => { job.placing = true; },
+    });
+    if (job.status === 'cancelled') return;
     if (!x.ok) return update(job, { status: 'error', error: x.error });
 
     // The item is registered against the parent folder: findExes walks into
@@ -216,7 +379,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     } else {
       library.recordInstall(job.itemId, x.parentInstallDir, exePath, job.meta);
     }
-    update(job, { status: 'done', installDir: x.parentInstallDir, exePath });
+    update(job, { status: 'done', percent: 100, installDir: x.parentInstallDir, exePath });
   }
 
   // Starts one job per file. files: names from the item's file list; when
@@ -267,7 +430,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       // A collection (several archives) extracts each game into its own folder;
       // plain files all land in the item's folder
       const subFolder = installable.length > 1 && ARCHIVE_FILE.test(f.name) ? f.name.replace(/\.[^.]+$/, '') : null;
-      job.done = runJob(job, subFolder).catch(e => update(job, { status: 'error', error: e.message }));
+      job.done = runTracked(job, () => runJob(job, subFolder));
       started.push(view(job));
     }
     return { ok: true, jobs: started };
@@ -289,7 +452,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     };
     jobs.set(job.id, job);
     emit('install', view(job));
-    job.done = runPortJob(job, item).catch(e => update(job, { status: 'error', error: e.message }));
+    job.done = runTracked(job, () => runPortJob(job, item));
     return { ok: true, jobs: [view(job)] };
   }
 
@@ -327,41 +490,55 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     const entry = item.entry || {};
     const folderName = disk.sanitizeFolderName(entry.folderName || item.repository.replace('/', '.'));
     const dest = path.join(installDir(), folderName);
+    const onFile = track(job, 'port', item.title || item.name || null);
     const progress = (percent) => { if (percent !== job.percent) update(job, { percent }); };
     const fail = (error) => update(job, { status: 'error', error });
-    fs.mkdirSync(dest, { recursive: true });
 
     update(job, { status: 'downloading', step: 'binary', percent: 0 });
     const { release, source } = await latestRelease(item);
+    if (job.status === 'cancelled') return;
     const pick = ports.pickAsset(release.assets, { pattern: entry.assetPattern, filter: entry.releaseAssetFilter, platform, deck });
     if (!pick.asset) throw new Error(`${pick.error} of ${item.repository} (${release.tag_name}): ${pick.names.join(', ') || 'no assets'}`);
     update(job, { file: pick.asset.name });
-    const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress });
+    const bin = await download({ key: job.id, identifier: folderName, url: pick.asset.browser_download_url, fileName: pick.asset.name, onProgress: progress, onFile });
     if (job.status === 'cancelled') return;
     if (!bin.ok) return fail(bin.error);
     // A GitLab package link's name has no extension: name it after what it holds
     if (!ports.isArchive(bin.filePath) && !/\.exe$/i.test(bin.filePath)) {
       const ext = ports.sniffArchiveExt(bin.filePath);
-      if (ext) { fs.renameSync(bin.filePath, bin.filePath + ext); bin.filePath += ext; }
+      if (ext) { fs.renameSync(bin.filePath, bin.filePath + ext); bin.filePath += ext; onFile(bin.filePath, 'download'); }
     }
     if (item.userSource) {
       const ok = await checkUserFile(job, { pinKey: `${source}:${item.repository.toLowerCase()}@${release.tag_name}`, name: pick.asset.name, filePath: bin.filePath, expected: entry.sha1 || null });
       if (!ok) return;
     }
-    update(job, { status: 'extracting', percent: 100 });
+    update(job, { status: 'extracting', percent: 0 });
     let copiedTo = null;
     if (ports.isArchive(bin.filePath)) {
       // Unpacked beside the download first: a release that is one folder
-      // (pd-x86_64-windows/) lays down that folder's contents
-      const staging = path.join(path.dirname(bin.filePath), `.unpack-${job.id}`);
-      fs.rmSync(staging, { recursive: true, force: true });
-      const x = await extractTo(bin.filePath, staging);
-      if (!x.ok) { fs.rmSync(staging, { recursive: true, force: true }); return fail(x.error); }
-      fs.cpSync(ports.releaseRoot(staging), dest, { recursive: true, force: true });
-      fs.rmSync(staging, { recursive: true, force: true });
+      // (pd-x86_64-windows/) lays down that folder's contents. Only a whole
+      // unpack reaches the port's folder.
+      const staging = path.join(path.dirname(bin.filePath), `${STAGING_PREFIX}${job.id}`);
+      onFile(staging, 'staging');
+      try {
+        await fs.promises.rm(staging, { recursive: true, force: true });
+        const x = await extractTo(bin.filePath, staging, { onProgress: progress, signal: job.abort.signal });
+        if (job.status === 'cancelled') return;
+        if (!x.ok) return fail(x.error);
+        await disk.unblockDirectory(staging, { platform, log });
+        await disk.makeRunnable(staging, { platform, log });
+        job.placing = true;
+        await place(ports.releaseRoot(staging), dest);
+      } finally {
+        await fs.promises.rm(staging, { recursive: true, force: true }).catch(() => {});
+      }
     } else {
+      job.placing = true;
+      fs.mkdirSync(dest, { recursive: true });
       copiedTo = path.join(dest, path.basename(bin.filePath));
-      if (path.resolve(copiedTo) !== path.resolve(bin.filePath)) fs.copyFileSync(bin.filePath, copiedTo);
+      if (path.resolve(copiedTo) !== path.resolve(bin.filePath)) await fs.promises.copyFile(bin.filePath, copiedTo);
+      await disk.unblockDirectory(dest, { platform, log });
+      await disk.makeRunnable(dest, { platform, log });
     }
     for (const f of [].concat(entry.filesToAdd || [])) {
       const target = ports.inside(dest, f);
@@ -370,15 +547,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
     // Record it against the catalog item, keeping its library row
     removeDownload(bin.filePath, copiedTo);
-    disk.unblockDirectory(dest, { platform, log });
-    disk.makeRunnable(dest, { platform, log });
     const exes = disk.findExes(dest, 0, { platform });
     const exePath = exes.length === 1 ? exes[0] : null;
     library.adoptInstall(item.id, dest, exePath);
     // The release tag, so a newer release can be offered as an update
     library.setDetails(item.id, { version: release.tag_name });
     releaseChecks.delete(item.id);
-    update(job, { status: 'done', step: null, installDir: dest, exePath });
+    update(job, { status: 'done', step: null, percent: 100, installDir: dest, exePath });
   }
 
   // ─── Newer releases and the file picker ──────────────────────────────────
@@ -415,12 +590,17 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   const list = () => [...jobs.values()].map(view);
   const wait = (id) => jobs.get(id)?.done;
 
+  // Stops a job while it downloads or unpacks; what it made so far goes.
+  // Once the unpacked files are being moved into place it runs to the end.
+  // An interrupted job from the last run is dismissed: the app has offered it.
   function cancel(id) {
     const job = jobs.get(id);
     if (!job) return null;
-    if (job.status === 'downloading') {
+    if (job.interrupted) { jobs.delete(id); return view(job); }
+    if (['downloading', 'extracting'].includes(job.status) && !job.placing) {
       update(job, { status: 'cancelled', step: null, error: 'Cancelled' });
       cancelDownload(id);
+      job.abort?.abort();
     }
     return view(job);
   }

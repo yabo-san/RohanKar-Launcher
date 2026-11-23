@@ -151,7 +151,7 @@ function createBackend({
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
   const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi,
-    sevenZip: findSevenZip({ platform, bundled: bundledSevenZip }) });
+    sevenZip: findSevenZip({ platform, bundled: bundledSevenZip }), journalFile: path.join(dataDir, 'installs-pending.json') });
   const catalogs = createCatalogs({
     dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
     curatedUrl: curatedPortsUrl, curatedFile: path.join(appDir, 'catalog', 'curated-ports.json'),
@@ -164,7 +164,7 @@ function createBackend({
   // On Linux a Linux build runs directly and a Windows one through Proton
   // (proton.js), in its own prefix under <data>/proton/<id>
   async function launchLinux(identifier, exePath) {
-    disk.makeRunnable(exePath, { platform, log });
+    await disk.makeRunnable(exePath, { platform, log });
     const prefix = path.join(dataDir, 'proton', disk.sanitizeFolderName(identifier));
     let c = proton.launchCommand(exePath, { prefix, home: homeDir });
     if (c.error) return c.error;
@@ -178,7 +178,7 @@ function createBackend({
     if (!exePath || !fs.existsSync(exePath)) return { ok: false, error: 'Executable not found: ' + exePath };
     try {
       // Unblock on every launch: covers games installed before unblocking existed
-      disk.unblockDirectory(library.get(identifier)?.install_dir || path.dirname(exePath), { platform, log });
+      await disk.unblockDirectory(library.get(identifier)?.install_dir || path.dirname(exePath), { platform, log });
       const errMsg = platform === 'linux' ? await launchLinux(identifier, exePath) : await os.openPath(exePath);
       if (errMsg) return { ok: false, error: errMsg };
       library.markPlayed(identifier);

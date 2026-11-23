@@ -108,6 +108,7 @@ test('extract: uses 7-Zip when it is installed', { skip: process.platform === 'w
   const fake7z = path.join(tmpDir(t), '7z');
   fs.writeFileSync(fake7z, '#!/bin/sh\ncase "$2" in *fail.7z) exit 2;; esac\nmkdir -p "${3#-o}" && touch "${3#-o}/from7z.exe"\n', { mode: 0o755 });
   const { dir, installs } = await setup(t, {}, {}, { sevenZip: fake7z });
+  for (const f of ['game.7z', 'fail.7z']) fs.writeFileSync(path.join(dir, f), '7z');
   const ok = await installs.extract({ filePath: path.join(dir, 'game.7z'), identifier: 'z' });
   assert.equal(ok.ok, true);
   assert.ok(fs.existsSync(path.join(dir, 'games', 'z', 'from7z.exe')));
@@ -221,7 +222,8 @@ test('start on Linux: a .7z unpacks with the 7-Zip found, its programs made runn
   await installs.wait(job.id);
   const done = installs.get(job.id);
   assert.deepEqual([done.status, done.error], ['done', null]);
-  assert.match(fs.readFileSync(path.join(tools, 'args'), 'utf8'), /^x .*seven\.7z -o.*seven -y/);
+  // Unpacked into a hidden folder beside the game's, with no password prompt and progress on
+  assert.match(fs.readFileSync(path.join(tools, 'args'), 'utf8'), /^x .*seven\.7z -o.*[/\\]\.y4bo-unpack-[\w-]+ -y -bsp1 -bso0 -p$/m);
   assert.equal(done.exePath, path.join(done.installDir, 'game.x86_64'));
   assert.equal(fs.statSync(done.exePath).mode & 0o111, 0o111, 'runnable');
 

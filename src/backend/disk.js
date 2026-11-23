@@ -88,45 +88,46 @@ function findExes(installDir, depth = 0, { platform = process.platform } = {}) {
   return [];
 }
 
+// Every file under dir, a folder at a time, without holding up the backend
+// (a big game has tens of thousands of files)
+async function* walkFiles(dir) {
+  let entries;
+  try { entries = await fs.promises.readdir(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) yield* walkFiles(full);
+    else if (e.isFile()) yield full;
+  }
+}
+
 // Deletes the Zone.Identifier stream from every file under dir: what
-// right-click → Unblock does. No-op off Windows.
-function unblockDirectory(dir, { platform = process.platform, log = () => {} } = {}) {
+// right-click → Unblock does. No-op off Windows. Resolves with the count.
+async function unblockDirectory(dir, { platform = process.platform, log = () => {} } = {}) {
   if (platform !== 'win32' || !dir) return 0;
   let count = 0;
-  const walk = (d) => {
-    for (const e of readdir(d) || []) {
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.isFile()) {
-        try { fs.rmSync(full + ':Zone.Identifier'); count++; } catch { /* no stream */ }
-      }
-    }
-  };
-  walk(dir);
+  for await (const file of walkFiles(dir)) {
+    try { await fs.promises.rm(file + ':Zone.Identifier'); count++; } catch { /* no stream */ }
+  }
   log(`[unblock] Removed Zone.Identifier from ${count} files in ${dir}`);
   return count;
 }
 
 // Linux: a build unpacked from a zip made on Windows has lost its programs'
 // run permission. Gives it back to every Linux program under dir (and .sh
-// scripts), as Quiver does. No-op off Linux. Returns how many it changed.
-function makeRunnable(dir, { platform = process.platform, log = () => {} } = {}) {
+// scripts), as Quiver does. No-op off Linux. Resolves with how many it changed.
+async function makeRunnable(dir, { platform = process.platform, log = () => {} } = {}) {
   if (platform !== 'linux' || !dir) return 0;
   let count = 0;
-  const fix = (file) => {
+  const fix = async (file) => {
     try {
-      const mode = fs.statSync(file).mode;
-      if ((mode & 0o111) === 0 && (isLinuxProgram(file) || /\.sh$/i.test(file))) { fs.chmodSync(file, (mode & 0o777) | 0o755); count++; }
+      const mode = (await fs.promises.stat(file)).mode;
+      if ((mode & 0o111) === 0 && (isLinuxProgram(file) || /\.sh$/i.test(file))) { await fs.promises.chmod(file, (mode & 0o777) | 0o755); count++; }
     } catch { /* gone or not ours */ }
   };
-  const walk = (d) => {
-    for (const e of readdir(d) || []) {
-      const full = path.join(d, e.name);
-      if (e.isDirectory()) walk(full);
-      else if (e.isFile()) fix(full);
-    }
-  };
-  if (fs.existsSync(dir) && fs.statSync(dir).isFile()) fix(dir); else walk(dir);
+  let isFile = false;
+  try { isFile = (await fs.promises.stat(dir)).isFile(); } catch { /* missing */ }
+  if (isFile) await fix(dir);
+  else for await (const file of walkFiles(dir)) await fix(file);
   if (count) log(`[runnable] Allowed ${count} programs to run in ${dir}`);
   return count;
 }

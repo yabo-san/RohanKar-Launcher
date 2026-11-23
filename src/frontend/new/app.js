@@ -1121,8 +1121,8 @@ function gameDetail(d) {
   const newerOf = lib?.install_dir && v._newer ? versions.find(x => x.identifier === v._newer) || null : null;
   let actions;
   if (dl) {
-    actions = pill(dl.status === 'extracting' ? 'Extracting…' : `Downloading… ${dl.percent || 0}%`, 'disabled', { primary: true })
-      + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
+    actions = pill(busyLabel(dl), 'disabled', { primary: true })
+      + (CANCELLABLE.has(dl.status) ? pill('Cancel', 'data-action="cancel"') : '');
   } else if (!lib?.install_dir && state.library[v._installedIn]?.install_dir) {
     // Installed as an update over another version: that copy is the one to play
     actions = pill('Go to installed copy', `data-version="${esc(v._installedIn)}"`, { primary: true, icon: 'play' });
@@ -1196,13 +1196,20 @@ async function showReadme(identifier, name) {
   return modal({ title: r.fileName || 'Readme', body: `<pre class="readme">${esc(r.text)}</pre>`, html: true, primary: 'Close', secondary: null });
 }
 
+// What an install is doing, for its button: downloading and unpacking both show how far along
+const CANCELLABLE = new Set(['downloading', 'extracting']);
+function busyLabel(dl) {
+  const pct = dl.percent || 0;
+  if (dl.status === 'verifying') return 'Checking game data…';
+  return dl.status === 'extracting' ? `Unpacking… ${pct}%` : `Downloading… ${pct}%`;
+}
+
 // Install, progress and the installed actions for a port (library row keyed by its catalog id)
 const PORT_STEPS = { binary: 'the release build' };
 function portActions(p) {
   const dl = state.downloads.get(p.id);
   if (dl) {
-    const what = dl.status === 'verifying' ? 'Checking game data…' : dl.status === 'extracting' ? 'Unpacking…' : 'Downloading…';
-    return pill(what, 'disabled', { primary: true }) + (dl.status === 'downloading' ? pill('Cancel', 'data-action="cancel"') : '');
+    return pill(busyLabel(dl), 'disabled', { primary: true }) + (CANCELLABLE.has(dl.status) ? pill('Cancel', 'data-action="cancel"') : '');
   }
   if (state.library[p.id]?.install_dir) {
     return pill('Play', 'id="btn-play" data-action="play"', { primary: true, icon: 'play' }) + pill('Open folder', 'data-action="open-folder"');
@@ -1313,7 +1320,12 @@ async function installGame(v, { acceptHashChange = false, into = null } = {}) {
       acceptHashChange,
       onStart:      (j) => { dl.jobId = j.id; },
       onProgress:   (percent) => showProgress(identifier, percent),
-      onExtracting: () => { dl.status = 'extracting'; dl.percent = 100; render(); },
+      // The unpack reports its own percent; only the switch from downloading re-renders the page
+      onExtracting: (j) => {
+        const switched = dl.status !== j.status;
+        Object.assign(dl, { status: j.status, percent: j.percent || 0 });
+        if (switched) render(); else showProgress(identifier, dl.percent);
+      },
     });
     if (job.status !== 'done') break;
   }
@@ -1343,7 +1355,7 @@ async function installPort(p, { acceptHashChange = false } = {}) {
     acceptHashChange,
     onStart:      (j) => { dl.jobId = j.id; },
     onProgress:   (percent, j) => { Object.assign(dl, { percent, status: 'downloading', step: j.step }); renderDetail(); renderNowbar(); },
-    onExtracting: (j) => { Object.assign(dl, { percent: 100, status: j.status, step: j.step }); renderDetail(); renderNowbar(); },
+    onExtracting: (j) => { Object.assign(dl, { percent: j.percent || 0, status: j.status, step: j.step }); renderDetail(); renderNowbar(); },
   });
   state.downloads.delete(p.id);
   await reloadLibrary();
@@ -2046,7 +2058,7 @@ function downloadsPopHtml() {
     || getTitle(state.games.find(g => (g._versions || [g]).some(v => v.identifier === l.identifier)) || { title: l.title || l.identifier });
   let html = '<div class="pop-h">Downloads</div>';
   html += active.length ? active.map(d => `<button class="mi pop-dl" data-open="${esc(d.open[0])}" data-id="${esc(d.open[1])}">
-      <span class="pop-name">${esc(d.name)}</span><span class="pop-pct">${d.status === 'downloading' ? `${d.percent || 0}%` : 'Installing…'}</span>
+      <span class="pop-name">${esc(d.name)}</span><span class="pop-pct">${nowLabel(d)}</span>
       <span class="nb-bar"><i style="width:${d.percent || 0}%"></i></span></button>`).join('')
     : '<div class="pop-empty">Nothing downloading.</div>';
   if (recent.length) {
@@ -2185,21 +2197,44 @@ function renderNowbar() {
   const pct = dl.percent || 0;
   el.innerHTML = `<button class="nowbar-in" data-open="${esc(dl.open[0])}" data-id="${esc(dl.open[1])}">
     <i class="ico" data-ico="download"></i><span class="nb-name">${esc(dl.name)}</span>
-    <span class="nb-pct">${dl.status === 'downloading' ? `${pct}%` : 'Installing…'}</span>
+    <span class="nb-pct">${nowLabel(dl)}</span>
     <span class="nb-bar"><i style="width:${pct}%"></i></span></button>`;
 }
 
+// The download bar's and the pop-up's words: a percent while downloading, Unpacking and a percent after
+const nowLabel = (d) => (d.status === 'downloading' ? `${d.percent || 0}%` : d.status === 'extracting' ? `Unpacking ${d.percent || 0}%` : 'Installing…');
+
+// A new percent without re-rendering the page: the bar, its label and the busy button
 function showProgress(identifier, percent) {
   const d = state.downloads.get(identifier);
-  if (!d || d.status !== 'downloading') return;
+  if (!d || !CANCELLABLE.has(d.status)) return;
   d.percent = percent;
   renderNowbar();
   const bar = document.querySelector('#detail .progress i');
   if (bar && state.detail?.version?.identifier === identifier) {
     bar.style.width = `${percent}%`;
-    document.querySelector('#detail .progress-label').textContent = `${percent}%`;
+    document.querySelector('#detail .progress-label').textContent = d.status === 'extracting' ? `Unpacking ${percent}%` : `${percent}%`;
     const busy = document.querySelector('#detail .album-pill.primary:disabled');
-    if (busy) busy.textContent = `Downloading… ${percent}%`;
+    if (busy) busy.textContent = busyLabel(d);
+  }
+}
+
+// Installs the app was closed in the middle of, last time: the backend has
+// removed their partial files; each gets one offer to install it again
+async function offerInterrupted() {
+  const jobs = (await api.listInstalls()).filter(j => j.interrupted);
+  for (const j of jobs) {
+    await api.cancelInstall({ jobId: j.id });   // offered once, also after a reload
+    const port = j.kind === 'port' ? state.ports?.items.find(i => i.id === j.itemId) : null;
+    const game = !port && detailFor('game', j.itemId);
+    const name = port?.name || (game && getTitle(game.version)) || j.title || j.itemId;
+    const again = await modal({
+      title: "An install didn't finish",
+      body: `y4bo closed while ${name} was installing. The partly downloaded files were removed and nothing was marked installed.`,
+      primary: port || game ? 'Install again' : 'OK', secondary: port || game ? 'Not now' : null,
+    });
+    if (again && port) installPort(port);
+    else if (again && game) installGame(game.version);
   }
 }
 
@@ -2248,6 +2283,7 @@ applyFolded();
   api.onUpdaterStatus(showUpdate);
   api.onOpenItem(({ identifier }) => { pendingOpen = identifier; showPendingItem(); });
   // The two halves load side by side: GitHub for the shelves, archive.org for the wall
-  loadPorts().then(showPendingItem);
-  loadWall().then(showPendingItem);
+  const ports = loadPorts().then(showPendingItem);
+  const wall = loadWall().then(showPendingItem);
+  Promise.all([ports, wall]).then(offerInterrupted).catch(() => {});
 })();
