@@ -4,11 +4,14 @@
  * another machine or hand to a friend, and paste back in.
  *
  *   { "y4bo": 1,
- *     "packs":  [{ "uploader": "@handle or an archive.org link", "label": "..." }],
+ *     "packs":  [{ "uploader": "@handle or an archive.org link", "label": "...", "enabled": false? }],
  *     "repos":  [{ "repository": "owner/repo", "repositorySource": "gitlab"?, "assetPattern": "..."? }],
  *     "hidden": ["archive.org identifier", ...] }
  *
- * Pasting merges: nothing already there is removed or changed.
+ * Pasting merges: nothing already there is removed or changed. A pack
+ * marked enabled: false is added switched off. settings.json's own shape,
+ * { "sources": [{ uploader, label, enabled }] }, pastes too: that is what
+ * --export-sources writes, to back the uploader list up.
  */
 const { itemIdFrom } = require('./sources');
 
@@ -16,12 +19,13 @@ const VERSION = 1;
 const REPO_KEYS = ['repository', 'repositorySource', 'name', 'folderName', 'releaseAssetFilter', 'assetPattern'];
 const same = (a, b) => String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
 
-// The config of what's set up now: the enabled packs, the repos added in the app, the hidden uploads
+// The config of what's set up now: the packs (switched-off ones marked), the
+// repos added in the app, the hidden uploads
 function buildConfig({ sources = [], repos = [], hidden = [] }) {
   return {
     y4bo: VERSION,
-    packs: sources.filter(s => s && s.uploader && s.enabled !== false)
-      .map(s => ({ uploader: s.uploader, ...(s.label ? { label: s.label } : {}) })),
+    packs: sources.filter(s => s && s.uploader)
+      .map(s => ({ uploader: s.uploader, ...(s.label ? { label: s.label } : {}), ...(s.enabled === false ? { enabled: false } : {}) })),
     repos: repos.filter(r => r && r.repository)
       .map(r => Object.fromEntries(REPO_KEYS.filter(k => r[k] != null).map(k => [k, r[k]]))),
     hidden: [...new Set(hidden.filter(x => typeof x === 'string' && x))],
@@ -33,6 +37,10 @@ function readConfig(input) {
   let c = input;
   if (typeof c === 'string') {
     try { c = JSON.parse(c); } catch { return { ok: false, error: "That isn't a y4bo config: it isn't JSON." }; }
+  }
+  // settings.json's sources list, as --export-sources writes it
+  if (c && typeof c === 'object' && !Array.isArray(c) && c.y4bo === undefined && Array.isArray(c.sources)) {
+    c = { y4bo: VERSION, packs: c.sources };
   }
   if (!c || typeof c !== 'object' || Array.isArray(c) || c.y4bo === undefined) return { ok: false, error: "That isn't a y4bo config." };
   if (c.y4bo !== VERSION) return { ok: false, error: `This config is version ${c.y4bo}; this app reads version ${VERSION}.` };
@@ -49,7 +57,11 @@ function readConfig(input) {
     ok: true,
     config: {
       y4bo: VERSION,
-      packs: packs.map(p => ({ uploader: p.uploader.trim(), ...(typeof p.label === 'string' && p.label.trim() ? { label: p.label.trim() } : {}) })),
+      packs: packs.map(p => ({
+        uploader: p.uploader.trim(),
+        ...(typeof p.label === 'string' && p.label.trim() ? { label: p.label.trim() } : {}),
+        ...(p.enabled === false ? { enabled: false } : {}),
+      })),
       repos: repos.map(r => Object.fromEntries(REPO_KEYS.filter(k => r[k] != null).map(k => [k, typeof r[k] === 'string' ? r[k].trim() : r[k]]))),
       hidden: hidden.map(itemIdFrom),
     },
@@ -57,15 +69,16 @@ function readConfig(input) {
 }
 
 // The settings and repos after pasting config into what's there now. Packs
-// already present (enabled or not) are switched on; repos already added are
+// already present (enabled or not) are switched on, unless the config has
+// them switched off, which leaves them as they are; repos already added are
 // left as they are. { sources, excludeItems, repos: [new ones], added: { packs, repos, hidden } }
 function mergeConfig({ sources = [], repos = [], hidden = [] }, config) {
   const nextSources = sources.slice();
   let packs = 0;
   for (const p of config.packs) {
     const i = nextSources.findIndex(s => same(s.uploader, p.uploader));
-    if (i === -1) { nextSources.push({ uploader: p.uploader, label: p.label || null, enabled: true }); packs++; }
-    else if (nextSources[i].enabled === false) { nextSources[i] = { ...nextSources[i], enabled: true }; packs++; }
+    if (i === -1) { nextSources.push({ uploader: p.uploader, label: p.label || null, enabled: p.enabled !== false }); packs++; }
+    else if (nextSources[i].enabled === false && p.enabled !== false) { nextSources[i] = { ...nextSources[i], enabled: true }; packs++; }
   }
   const newRepos = config.repos.filter((r, i, all) => !repos.some(x => same(x.repository, r.repository))
     && all.findIndex(y => same(y.repository, r.repository)) === i);

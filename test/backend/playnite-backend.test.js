@@ -139,7 +139,8 @@ test('exportPlaynite: names from loaded items, tags from collections, falls back
   assert.deepEqual(r, { file: path.join(dataDir, 'playnite-export.json'), count: 1 });
   const [halo] = JSON.parse(fs.readFileSync(r.file, 'utf8')).games;
   assert.equal(halo.name, 'Halo: Combat Evolved');
-  assert.deepEqual(halo.tags, ['Shooters']);
+  // Collections, then where it came from
+  assert.deepEqual(halo.tags, ['Shooters', 'source:rohanjackson071']);
   assert.ok(halo.coverPath.endsWith('rk-e2e-halo-ce.jpg'));
 
   backend.settings.save({ sources: [{ uploader: 'nobody@x' }] });

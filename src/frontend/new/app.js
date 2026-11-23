@@ -202,6 +202,8 @@ function versionFromItem(v) {
     _newer:       v.newer || null,
     _user:        !!v.user,
     _local:       !!v.local,                // installed, but no loaded pack has the upload any more
+    _localReason: v.localReason || null,    // why: removed-upstream, source-disabled, source-unavailable, provenance-unknown
+    _origin:      v.origin || null,         // { uploader, label } it was installed from
     _installedIn: v.installedIn || null,    // the installed copy an update put this upload into
   };
 }
@@ -1112,6 +1114,17 @@ function versionsTable(d) {
   </div><div class="track-sum">${rows.length === 1 ? '1 version' : `${rows.length} versions`}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
 }
 
+// Why an installed copy is in no pack, in a sentence. Nothing removes or redownloads it.
+function localNote(v) {
+  const from = v._origin?.label;
+  switch (v._localReason) {
+    case 'removed-upstream': return `Removed upstream: archive.org no longer has this upload${from ? ` from ${from}` : ''}. It stays installed and playable.`;
+    case 'source-disabled': return `Source disabled: ${from || 'its uploader'} is switched off or removed in your packs. It stays installed and playable.`;
+    case 'source-unavailable': return `${from || 'Its uploader'} didn't load this time. It stays installed and playable.`;
+    default: return "This copy isn't in any of your packs. It stays installed and playable.";
+  }
+}
+
 function gameDetail(d) {
   const g = d.game, v = d.version;
   const title = getTitle(v);
@@ -1144,12 +1157,12 @@ function gameDetail(d) {
     wash: `background:${tint(title)}`,
     sub: v._uploader
       ? `<button class="album-sub by" data-view="uploader" data-arg="${esc(v._uploader)}">${esc(v._sourceLabel || v._uploader)}</button>`
-      : `<div class="album-sub by">archive.org</div>`,
+      : `<div class="album-sub by">${esc(v._origin?.label || 'archive.org')}</div>`,
     meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
     actions,
     extra: `${badges ? `<div class="badges">${badges}</div>` : ''}${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
-      ${v._local ? `<div class="newer-note">This copy isn't in any of your packs any more: archive.org may have pulled it. It stays installed and playable.</div>` : ''}
+      ${v._local ? `<div class="newer-note">${esc(localNote(v))}</div>` : ''}
       ${newerOf && !dl ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn primary" data-action="update-upload" data-update="${esc(newerOf.identifier)}">Update</button>
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button>
@@ -1157,7 +1170,8 @@ function gameDetail(d) {
     desc,
   }) + versionsTable(d) + '<section class="section album-reviews" id="reviews" hidden></section>' + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
-    `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
+    // A copy no pack has may not be on archive.org (or be an upstream id): no link
+    v._local ? `<dt>Item</dt><dd>${esc(v.identifier)}</dd>` : `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
     `<dt>Problem?</dt><dd><a data-href="${esc(issueUrl({ version: state.appVersion, item: { kind: 'game', title: getTitle(v), id: v.identifier, source: v._uploader } }))}">Report an issue</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
@@ -1608,7 +1622,7 @@ const itemInstalled = (x, ctx) => (ctx.kind === 'port' ? !!state.library[x.id]?.
 const gameTarget = (g) => installedVersion(g) || g;
 const targetOf = (x, ctx) => (ctx.kind === 'port' ? portTarget(x) : gameTarget(x));
 const idle = (x, ctx) => !itemDl(x, ctx);
-const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : `https://archive.org/details/${gameTarget(x).identifier}`);
+const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : gameTarget(x)._local ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
 
 const ROW_ACTIONS = [
   // play: get it, run it, find it on disk
@@ -1658,6 +1672,7 @@ const ROW_ACTIONS = [
   { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
     run: (p) => api.openExternal(p.repositoryUrl) },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
+    when: (g) => !gameTarget(g)._local,
     run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
     run: async (x, ctx) => {

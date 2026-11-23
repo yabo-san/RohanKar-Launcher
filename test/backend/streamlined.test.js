@@ -50,7 +50,8 @@ test('config: build, read and merge', () => {
     repos: [{ repository: 'me/port', repositorySource: null, assetPattern: '^x$', extra: 1 }],
     hidden: ['a', 'a', 'b'],
   });
-  assert.deepEqual(built, { y4bo: 1, packs: [{ uploader: '@rohan', label: 'Rohan' }], repos: [{ repository: 'me/port', assetPattern: '^x$' }], hidden: ['a', 'b'] });
+  // A switched-off pack is in the backup, still off
+  assert.deepEqual(built, { y4bo: 1, packs: [{ uploader: '@rohan', label: 'Rohan' }, { uploader: '@off', enabled: false }], repos: [{ repository: 'me/port', assetPattern: '^x$' }], hidden: ['a', 'b'] });
 
   assert.deepEqual(config.readConfig(JSON.stringify(built)), { ok: true, config: built });
   assert.equal(config.readConfig('nope').ok, false);
@@ -68,6 +69,12 @@ test('config: build, read and merge', () => {
   );
   assert.deepEqual(m.sources, [{ uploader: '@Rohan', enabled: true }, { uploader: '@off', enabled: true }, { uploader: '@new', label: 'New', enabled: true }]);
   assert.deepEqual(m.repos, [{ repository: 'x/y' }]);
+
+  // settings.json's sources list pastes too; an off pack is added off and never switches one off
+  const fromSettings = config.readConfig(JSON.stringify({ sources: [{ uploader: '@a', label: 'A', enabled: true }, { uploader: '@b', enabled: false }] }));
+  assert.deepEqual(fromSettings.config.packs, [{ uploader: '@a', label: 'A' }, { uploader: '@b', enabled: false }]);
+  const m2 = config.mergeConfig({ sources: [{ uploader: '@a', enabled: true }] }, { ...fromSettings.config, packs: [{ uploader: '@a', enabled: false }, { uploader: '@b', enabled: false }] });
+  assert.deepEqual(m2.sources, [{ uploader: '@a', enabled: true }, { uploader: '@b', label: null, enabled: false }]);
   assert.deepEqual(m.excludeItems, ['a', 'b']);
   assert.deepEqual(m.added, { packs: 2, repos: 1, hidden: 1 });
 });

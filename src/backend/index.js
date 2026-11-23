@@ -237,7 +237,8 @@ function createBackend({
   // Matches folders in dir (or the install, download and default games
   // folders) against every archive.org upload loaded
   async function scanInstalls(dir) {
-    await items.load();
+    // Offline, folders the upstream launcher made are still adopted
+    await items.load().catch(e => log(`[scan] uploads not loaded: ${e.message}`));
     const versions = items.loadedVersions();
     const titleMap = {};
     for (const v of versions) {
@@ -246,7 +247,11 @@ function createBackend({
     }
     const s = settings.load();
     const scanDirs = dir ? [dir] : [s.installPath, s.downloadPath, gamesDir];
-    return installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap });
+    const uploaders = new Map(versions.map(v => [v.identifier, v._source?.uploader || null]));
+    const r = installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap, uploaderOf: (id) => uploaders.get(id) });
+    // Installs with no executable: the one a gamevault-exec file names
+    library.fillExes(disk.gamevaultExe);
+    return r;
   }
 
   // ─── Playnite export ──────────────────────────────────────────────────────

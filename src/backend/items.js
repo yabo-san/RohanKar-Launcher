@@ -49,7 +49,14 @@ function resolveSource(src, curated) {
 }
 const NO_USER = { entries: () => ({ archive: [], github: [] }), read: () => ({ file: null, mtime: null }) };
 const USER_LABEL = 'Your sources';
-const LOCAL_LABEL = 'Installed copy';
+// Why an installed copy is in no loaded pack, and what its card says
+const LOCAL_LABELS = {
+  'removed-upstream':   'Removed upstream',      // its source loaded without it: pulled from archive.org
+  'source-disabled':    'Source disabled',       // its uploader is switched off or removed in Settings
+  'source-unavailable': 'Source unavailable',    // its uploader didn't load this time
+  'provenance-unknown': 'Installed copy',        // installed before the source was saved, and no pack has it
+};
+const lower = (s) => String(s ?? '').trim().toLowerCase();
 
 function createItems({ archive, settings, catalogs, library, getOverrides, userSources = NO_USER, getDefaultSources = async () => [], emit = () => {}, log = () => {} }) {
   let loaded = null;   // { groups, errors, conflicts, key, loadedAt }
@@ -152,7 +159,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
   // so they keep a name if the upload is pulled later
   function nameInstalls(groups) {
     const known = {};
-    for (const d of groups.flat()) known[d.identifier] = { title: getTitle(d), uploadDate: d.addeddate || null };
+    for (const d of groups.flat()) known[d.identifier] = { title: getTitle(d), uploadDate: d.addeddate || null, uploader: d._source?.uploader || null };
     try { library.backfill?.(known); } catch (e) { log(`[items] naming installs failed: ${e.message}`); }
   }
 
@@ -178,7 +185,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     originalTitle: doc.title ?? null,
     override:    doc._override || null,
     user:        !!doc._source.user,
-    ...(doc._local ? { local: true } : {}),
+    ...(doc._local ? { local: true, localReason: doc._local.reason, origin: doc._local.origin } : {}),
   });
 
   // A group as an item; `library` is the row of the installed version if any, else the first's
@@ -222,15 +229,37 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     return out;
   }
 
-  // shown plus a doc for every installed archive.org row no loaded upload has
-  function withLocalCopies(groups, shown, lib) {
+  // Why a row's upload is in no loaded group: its uploader (as saved at
+  // install) against the sources set up now and the ones that failed to load
+  async function localReasons(errors) {
+    const all = sourcesFromSettings(settings.load(), await getDefaultSources());
+    const labels = new Map(all.map(x => [lower(x.uploader), x.label || null]));
+    const enabled = new Set(all.filter(x => x.enabled !== false).map(x => lower(x.uploader)));
+    const failed = new Set(errors.map(e => lower(e.source)));
+    const labelOf = (u) => labels.get(lower(u)) || String(u).replace(/^@/, '').split('@')[0];
+    return (row) => {
+      const u = row.uploader;
+      if (u === 'upstream') return { reason: 'removed-upstream', origin: null };
+      if (!u) return { reason: 'provenance-unknown', origin: null };
+      const origin = { uploader: u, label: labelOf(u) };
+      if (failed.has(lower(u))) return { reason: 'source-unavailable', origin };
+      return { reason: enabled.has(lower(u)) ? 'removed-upstream' : 'source-disabled', origin };
+    };
+  }
+
+  // shown plus a doc for every installed archive.org row no loaded upload has.
+  // Its version's source names no uploader, so it's in no pack's list; origin
+  // keeps the one it came from. A loaded game with the same title (from any
+  // uploader) takes it in as one of its versions: the alternative to it.
+  function withLocalCopies(groups, shown, lib, reasonOf) {
     const loadedIds = new Set(groups.flat().map(d => d.identifier));
     const out = shown.map(g => [...g]);
     for (const row of Object.values(lib)) {
       if (!row.install_dir || row.source === 'manual' || row.identifier.startsWith('quiver:') || loadedIds.has(row.identifier)) continue;
+      const { reason, origin } = reasonOf(row);
       const doc = {
         identifier: row.identifier, title: row.title || row.identifier, addeddate: row.upload_date || null,
-        _source: { uploader: null, label: LOCAL_LABEL }, _local: true,
+        _source: { uploader: null, label: LOCAL_LABELS[reason] }, _local: { reason, origin },
       };
       const key = row.title ? titleKey(doc) : null;
       const group = key && out.find(g => !g[0]._local && titleKey(g[0]) === key);
@@ -254,7 +283,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
     const heldBy = new Map();
     for (const r of Object.values(lib)) if (r.install_dir && r.upload) heldBy.set(r.upload, r.identifier);
     let items = [
-      ...withLocalCopies(groups, shown, lib).map(g => archiveItem(g, lib, heldBy)),
+      ...withLocalCopies(groups, shown, lib, await localReasons(errors)).map(g => archiveItem(g, lib, heldBy)),
       ...catalogs.items().map(it => catalogItem(it, lib)),
     ];
     if (filters.source) {
@@ -296,7 +325,7 @@ function createItems({ archive, settings, catalogs, library, getOverrides, userS
   // was added, from the loaded upload (empty when it isn't loaded)
   function installMeta(identifier) {
     const doc = loadedVersions().find(d => d.identifier === identifier);
-    return doc ? { title: getTitle(doc), uploadDate: doc.addeddate || null } : {};
+    return doc ? { title: getTitle(doc), uploadDate: doc.addeddate || null, uploader: doc._source?.uploader || null } : {};
   }
 
   // user.json archive entries a curated uploader already has, as of the last load

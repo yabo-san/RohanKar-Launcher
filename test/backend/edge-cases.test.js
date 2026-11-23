@@ -165,3 +165,88 @@ test('the Playnite name falls back to the saved title before the last export', (
   assert.equal(buildExport({ rows, previous }).games[0].name, 'Silent Hill 3');
   assert.equal(buildExport({ rows: { x: { identifier: 'x' } }, previous: { games: [{ id: 'x', name: 'Old Name' }] } }).games[0].name, 'Old Name');
 });
+
+// K's real folder: D:\games\rohan\(182)Silent Hill 3, installed by the
+// upstream launcher (182 is its old catalogue id, Playnite's GameId), holding
+// Files\ and gamevault-exec, and no longer on archive.org
+function upstreamInstall(root, name, exec) {
+  const dir = path.join(root, name);
+  fs.mkdirSync(path.join(dir, 'Files'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'Files', 'sh3.exe'), 'MZ');
+  fs.writeFileSync(path.join(dir, 'Files', 'setup.exe'), 'MZ');
+  if (exec !== undefined) fs.writeFileSync(path.join(dir, 'gamevault-exec'), exec);
+  return dir;
+}
+
+test('Find installs here adopts "(182)Silent Hill 3" though no pack has it, with the exe gamevault-exec names', async (t) => {
+  const { backend } = await testBackend(t);
+  const root = tmpDir(t);
+  const sh3dir = upstreamInstall(root, '(182)Silent Hill 3', 'Files\\sh3.exe\r\n');
+  const sh2dir = upstreamInstall(root, '(181)Silent Hill 2', '');
+  // Still upstream: matched to its upload by title, as before
+  fs.mkdirSync(path.join(root, '(7)Halo Combat Evolved'));
+  fs.writeFileSync(path.join(root, '(7)Halo Combat Evolved', 'halo.exe'), 'MZ');
+  // A folder an entry already points at isn't an orphan
+  const port = path.join(root, '(9)Some Port');
+  fs.mkdirSync(port);
+  backend.library.recordInstall('quiver:local:me/port', port, null);
+
+  const r = await backend.scanInstalls(root);
+  assert.deepEqual(r.found.map(f => [f.identifier, f.matchedBy]).sort(),
+    [['181', 'upstream-folder'], ['182', 'upstream-folder'], ['rk-e2e-halo-ce', 'loose']]);
+  const row = backend.library.get('182');
+  assert.deepEqual([row.title, row.install_dir, row.exe_path], ['Silent Hill 3', sh3dir, path.join(sh3dir, 'Files', 'sh3.exe')]);
+  // An empty gamevault-exec and two exes: no guess, the user picks
+  assert.deepEqual([backend.library.get('181').title, backend.library.get('181').install_dir, backend.library.get('181').exe_path], ['Silent Hill 2', sh2dir, null]);
+  assert.equal(backend.library.get('9'), null);
+
+  // A card under its name, marked as not in any pack
+  const card = (await backend.items.list()).items.find(i => i.id === '182');
+  assert.deepEqual([card.title, card.installed, card.versions[0].local], ['Silent Hill 3', true, true]);
+
+  // The Playnite export: installed, its exe, under the id Playnite knows, tagged
+  const { file } = await backend.exportPlaynite(undefined, { loadItems: false });
+  const game = JSON.parse(fs.readFileSync(file, 'utf8')).games.find(g => g.id === '182');
+  assert.deepEqual([game.name, game.installed, game.installDir, game.exe], ['Silent Hill 3', true, sh3dir, path.join(sh3dir, 'Files', 'sh3.exe')]);
+  assert.deepEqual(game.tags, ['removed-upstream']);
+  const halo = JSON.parse(fs.readFileSync(file, 'utf8')).games.find(g => g.id === 'rk-e2e-halo-ce');
+  assert.deepEqual(halo.tags, ['source:rohanjackson071']);
+
+  // A second scan finds nothing new and moves nothing
+  assert.deepEqual((await backend.scanInstalls(root)).found, []);
+  assert.ok(fs.existsSync(sh3dir));
+});
+
+test('the scan adopts upstream folders with archive.org unreachable', async (t) => {
+  const { backend, fake } = await testBackend(t);
+  fake.routes['/advancedsearch.php'] = (req, res) => { res.writeHead(503); res.end('down'); };
+  const root = tmpDir(t);
+  upstreamInstall(root, '(182)Silent Hill 3', JSON.stringify({ executable: 'Files/sh3.exe' }));
+  const r = await backend.scanInstalls(root);
+  assert.deepEqual(r.found.map(f => f.identifier), ['182']);
+  assert.ok(backend.library.get('182').exe_path.endsWith('sh3.exe'));
+});
+
+test('gamevault-exec: relative, absolute, quoted or JSON; missing or wrong is null', (t) => {
+  const { gamevaultExe, pickExe } = require('../../src/backend/disk');
+  const root = tmpDir(t);
+  const dir = upstreamInstall(root, '(1)G');
+  assert.equal(gamevaultExe(dir), null);
+  assert.equal(pickExe(dir), null, 'two exes and no file: no pick');
+  for (const [text, ok] of [
+    ['"Files/sh3.exe"', true], [path.join(dir, 'Files', 'sh3.exe'), true], ['{"exe":"Files/sh3.exe"}', true],
+    ['Files/nope.exe', false], ['Files', false], ['{}', false],
+  ]) {
+    fs.writeFileSync(path.join(dir, 'gamevault-exec'), text);
+    assert.equal(gamevaultExe(dir), ok ? path.join(dir, 'Files', 'sh3.exe') : null, text);
+  }
+});
+
+test('source tags survive an export written with nothing loaded', () => {
+  const rows = { 182: { identifier: '182', install_dir: '/g/sh3', title: 'Silent Hill 3' } };
+  const previous = { games: [{ id: '182', name: 'Silent Hill 3', tags: ['Shooters', 'source:pack-a', 'removed-upstream'] }] };
+  assert.deepEqual(buildExport({ rows, previous }).games[0].tags, ['source:pack-a', 'removed-upstream']);
+  assert.deepEqual(buildExport({ rows }).games[0].tags, []);
+  // Uninstalled: no source tags
+  assert.deepEqual(buildExport({ rows: { 182: { identifier: '182', title: 'x' } }, previous }).games[0].tags, []);
+});

@@ -47,6 +47,12 @@ The finished work orders are in git history. Where anything disagrees with this 
 - An install saves the game's title and upload date in its row, so an upload pulled from
   archive.org keeps its name (in the app and the Playnite export) and stays as an installed copy.
   A pulled copy joins the card of a loaded upload with the same title, else gets its own card.
+- Installed games never depend on their source. A row saves its uploader at install; when no
+  loaded pack has the upload (taken down, uploader switched off or removed) it stays installed,
+  listed and in the export, tagged `removed-upstream` or `source-disabled`. Removing a source
+  never uninstalls, hides or deletes anything; re-adding it links the same rows back.
+- Find installs here also adopts folders the upstream launcher made, `(182)Silent Hill 3`, under
+  that number (Playnite's old GameId), with the exe its `gamevault-exec` names.
 - A reupload of an installed game is its update: Update unpacks it over the same folder and keeps
   the same library entry and Playnite id; the row's `upload` says which upload it now holds.
 - Never change the default install folder: Playnite and existing installs depend on it.

@@ -131,6 +131,39 @@ function makeRunnable(dir, { platform = process.platform, log = () => {} } = {})
   return count;
 }
 
+// The executable a GameVault-era install names in its gamevault-exec file:
+// a path, absolute or relative to the folder (plain text, or JSON with an
+// executable/exe/path field). Null when there's no such file or it names
+// nothing that exists.
+function gamevaultExe(installDir) {
+  let text;
+  try { text = fs.readFileSync(path.join(installDir, 'gamevault-exec'), 'utf8'); } catch { return null; }
+  let name = text.replace(/^\uFEFF/, '').trim();
+  try {
+    const j = JSON.parse(name);
+    name = typeof j === 'string' ? j : (j?.executable || j?.exe || j?.path || '');
+  } catch { /* plain text */ }
+  name = String(name).split(/\r?\n/)[0].trim().replace(/^["']|["']$/g, '');
+  if (!name) return null;
+  const full = path.isAbsolute(name) || /^[a-z]:[\\/]/i.test(name) ? name : path.join(installDir, ...name.split(/[\\/]/));
+  try { return fs.statSync(full).isFile() ? full : null; } catch { return null; }
+}
+
+// The executable to record for a folder: gamevault-exec's, else the only one found
+function pickExe(installDir) {
+  const named = gamevaultExe(installDir);
+  if (named) return named;
+  const exes = findExes(installDir);
+  return exes.length === 1 ? exes[0] : null;
+}
+
+// A folder the upstream RohanKar launcher installed, "(182)Silent Hill 3":
+// { id: '182', title: 'Silent Hill 3' }, else null
+function upstreamFolder(name) {
+  const m = /^\((\d+)\)\s*(.+)$/.exec(String(name));
+  return m && m[2].trim() ? { id: m[1], title: m[2].trim() } : null;
+}
+
 // A readme* text file in the folder's root. latin1 handles old DOS/Windows text.
 function readReadme(installDir) {
   try {
@@ -222,5 +255,5 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap, { nested = 1 }
 
 module.exports = {
   IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, makeRunnable, isLinuxProgram, readReadme,
-  looseKey, matchInstallFolders,
+  looseKey, matchInstallFolders, gamevaultExe, pickExe, upstreamFolder,
 };

@@ -12,6 +12,11 @@ const path = require('path');
 const { updateAvailable } = require('./updates');
 
 const SCHEMA_VERSION = 1;
+// Tags on an installed archive.org game: where it came from, and why no
+// loaded pack has it any more (items.js localReason). source-unavailable (a
+// failed load) isn't a state worth a tag: the last export's tags stay.
+const STATE_TAGS = ['removed-upstream', 'source-disabled', 'provenance-unknown'];
+const isSourceTag = (t) => typeof t === 'string' && (t.startsWith('source:') || STATE_TAGS.includes(t));
 const PLATFORMS = ['PC', 'Nintendo', 'PlayStation', 'Xbox', 'Other'];
 
 // A catalog's shelf or name ("Nintendo", "Switch ports", "PS2") as one of PLATFORMS
@@ -29,6 +34,17 @@ function platformOf(shelf) {
 // so the same port keeps its id if it moves to another catalog
 const isQuiverId = (id) => typeof id === 'string' && id.startsWith('quiver:');
 const quiverExportId = (identifier) => `quiver:${identifier.split(':').slice(2).join(':')}`;
+
+// The source tags of an installed archive.org row: source:<label> and its
+// state from the loaded item; with nothing loaded (or its source down), the
+// last export's
+function sourceTags(r, item, previous) {
+  if (!r.install_dir) return [];
+  const v = item?.versions?.find(x => x.id === r.identifier);
+  if (!v || v.localReason === 'source-unavailable') return (previous?.tags || []).filter(isSourceTag);
+  const label = v.local ? v.origin?.label : v.source?.label;
+  return [...(label ? [`source:${label}`] : []), ...(STATE_TAGS.includes(v.localReason) ? [v.localReason] : [])];
+}
 
 const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
 
@@ -53,7 +69,7 @@ function buildExport({
   for (const r of Object.values(rows)) {
     const item = items[r.identifier] || null;
     const src = item?.source;
-    let id, source, platform;
+    let id, source, platform, isArchive = false;
     if (r.source === 'manual') {
       id = exportIdFor(r.identifier);
       if (!id) continue;
@@ -66,7 +82,11 @@ function buildExport({
       platform = item ? platformOf(item.shelf || src.name) : before.get(id)?.platform || 'Other';
     } else {
       id = r.identifier;
-      source = src?.uploader ? `archive.org:${src.uploader}` : before.get(id)?.source || 'archive.org:';
+      isArchive = true;
+      // The uploader of the version installed, else the one saved at install
+      const v = item?.versions?.find(x => x.id === r.identifier);
+      const uploader = v?.source?.uploader || v?.origin?.uploader || (r.uploader !== 'upstream' && r.uploader) || src?.uploader;
+      source = uploader ? `archive.org:${uploader}` : before.get(id)?.source || 'archive.org:';
       platform = 'PC';
     }
     const kept = byId.get(id);
@@ -89,7 +109,7 @@ function buildExport({
       updateAvailable: updateAvailable(r, item),
       coverPath:       cover,
       heroPath:        hero,
-      tags:            tagsFor(r.identifier),
+      tags:            [...tagsFor(r.identifier), ...(isArchive ? sourceTags(r, item, before.get(id)) : [])],
       lastPlayed:      iso(r.last_played_at),
       playtimeSeconds: r.playtime_secs || 0,
       favorite:        !!r.is_favorite,
@@ -123,4 +143,4 @@ function writeExport(file, data) {
   return file;
 }
 
-module.exports = { buildExport, findRow, readExport, writeExport, platformOf, SCHEMA_VERSION, PLATFORMS };
+module.exports = { buildExport, findRow, readExport, writeExport, platformOf, SCHEMA_VERSION, PLATFORMS, STATE_TAGS };

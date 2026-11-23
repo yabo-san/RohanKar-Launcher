@@ -260,7 +260,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       const job = {
         id: crypto.randomUUID(), itemId, file: f.name, status: 'downloading', percent: 0, error: null,
         installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null, check, acceptHashChange,
-        meta: { title: meta.title || null, uploadDate: meta.uploadDate || null }, into: target,
+        meta: { title: meta.title || null, uploadDate: meta.uploadDate || null, uploader: meta.uploader || null }, into: target,
       };
       jobs.set(job.id, job);
       emit('install', view(job));
@@ -428,22 +428,38 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // ─── Adopt installs already on disk ───────────────────────────────────────
 
   // scanDirs: several folders in one pass (install, download, default); a
-  // folder found under two of them is adopted once
-  function scan({ scanDir, scanDirs, knownIdentifiers, titleMap }) {
+  // folder found under two of them is adopted once. A folder the upstream
+  // launcher installed, "(182)Silent Hill 3", that matches no loaded upload
+  // (pulled from archive.org) is adopted too, under its upstream id: that is
+  // the id Playnite already knows it by. Its card says it's not in any pack.
+  // uploaderOf(identifier): the source a matched upload came from
+  function scan({ scanDir, scanDirs, knownIdentifiers, titleMap, uploaderOf = null }) {
     if (!library.available) return { found: [] };
     const found = [];
     const dirs = [...new Set([scanDir, ...(scanDirs || [])].filter(Boolean).map(d => path.resolve(d)))];
     const matches = dirs.flatMap(d => disk.matchInstallFolders(d, knownIdentifiers, titleMap));
     const titleOf = new Map(Object.entries(titleMap || {}).map(([t, id]) => [id, t]));
-    for (const m of matches) {
-      if (found.some(f => f.identifier === m.identifier)) continue;
+    const adopt = (m, title, uploader = null) => {
+      if (found.some(f => f.identifier === m.identifier)) return;
       const existing = library.get(m.identifier);
-      if (existing?.install_dir && fs.existsSync(existing.install_dir)) continue;
-      const exes = disk.findExes(m.folderPath, 0, { platform });
-      const exePath = exes.length === 1 ? exes[0] : null;
-      library.adoptInstall(m.identifier, m.folderPath, exePath, { title: titleOf.get(m.identifier) || null });
+      if (existing?.install_dir && fs.existsSync(existing.install_dir)) return;
+      const exePath = disk.pickExe(m.folderPath);
+      library.adoptInstall(m.identifier, m.folderPath, exePath, { title, uploader });
       log(`[scan] Found pre-existing install (${m.matchedBy}): ${m.identifier} → ${m.folderPath}`);
       found.push({ identifier: m.identifier, installDir: m.folderPath, exePath, matchedBy: m.matchedBy });
+    };
+    for (const m of matches) adopt(m, titleOf.get(m.identifier) || null, uploaderOf?.(m.identifier) || null);
+
+    // Folders some entry already points at (a port's, a matched game's) aren't orphans
+    const held = new Set(Object.values(library.all()).map(r => r.install_dir && path.resolve(r.install_dir)).filter(Boolean));
+    const matched = new Set(matches.map(m => path.resolve(m.folderPath)));
+    for (const d of dirs) {
+      for (const e of (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : [])) {
+        const up = e.isDirectory() && disk.upstreamFolder(e.name);
+        const folderPath = path.join(d, e.name);
+        if (!up || matched.has(path.resolve(folderPath)) || held.has(path.resolve(folderPath))) continue;
+        adopt({ identifier: up.id, folderPath, matchedBy: 'upstream-folder' }, up.title, 'upstream');
+      }
     }
     return { found };
   }
