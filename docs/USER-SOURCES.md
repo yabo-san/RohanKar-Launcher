@@ -1,42 +1,13 @@
 # User-added sources
 
-The launcher ships with a starting list: the archive.org uploaders in `catalog/uploaders.json`
-and the built-in port shelf (`catalog/curated-ports.json`). Anyone can add their own on top, with
-no switch to turn on and no warning to click through. What you add loads next to what ships and
-looks the same.
+How what a user adds is stored and checked. Using it is just pasting a link (see the user loop in
+[AGENT-BRIEF.md](AGENT-BRIEF.md)).
 
-An upload made of zip, 7z or rar archives (what RohanKar expects) installs and plays from the
-launcher. Anything else (an .iso, a .pkg, loose files) still downloads into its folder, so the
-launcher works as a download client for any archive.org upload; Open folder gets to the files.
+When a release has several Windows files, the pick is saved as the repo's `assetPattern`, with
+version numbers made generic, so updates take the same file. The GitHub token in Settings is sent
+on GitHub API requests only and never logged.
 
-## Where you add your own
-
-Paste a link into the search box at the top of the sidebar (or anywhere in the window) and
-press Enter:
-
-| You paste | What happens |
-| --- | --- |
-| `https://archive.org/details/@handle` | The account becomes a pack: its own entry under Packs in the sidebar |
-| `https://archive.org/details/<identifier>` | It asks: get just this game (it installs), or follow the uploader as a pack |
-| `https://github.com/owner/repo` | The repo joins Ports and its latest release installs |
-| `https://gitlab.com/group/project` (subgroups too) | The same, from GitLab's releases |
-
-When a release has several Windows files (or none that look like one), the app asks which file
-to install. The pick is saved as the repo's `assetPattern`, with version numbers made generic,
-so updates take the same file. A repo whose release has nothing to install stays on Ports;
-right-click opens its page.
-
-Right-click a game and **Hide from Pack** to leave its uploads out (an installed game keeps its
-card); **Show hidden** on the pack's page brings them back. Right-click a pack in the sidebar to
-open it on archive.org or remove it, and right-click a repo you added to remove it.
-
-**Your config** in Settings copies the packs you follow, the repos you added and the uploads you
-hid as one block of JSON, and pastes one back in. Pasting only adds; nothing you have is removed.
-
-Settings also takes an optional **GitHub token**. GitHub allows 60 release checks an hour without
-one; with one, it's sent on GitHub API requests only and never logged.
-
-Under the hood, accounts and uploads are saved as `sources` in settings.json and hidden uploads as
+Accounts and uploads are saved as `sources` in settings.json and hidden uploads as
 `excludeItems`. A source can carry `titleInclude` / `titleExclude` (pipe-separated words matched
 case-insensitively against the archive.org title); a built-in entry's filters from
 `catalog/uploaders.json` always apply. An account that matches a built-in entry's email or any of
