@@ -186,7 +186,7 @@ test('standalone: a command runs instead of the server and gives its exit code',
   const lines = [];
   const out = path.join(dataDir, 'p.json');
   assert.deepEqual(await run([...base, '--export-playnite', out], {}, (l) => lines.push(l)), { exitCode: 0 });
-  assert.equal(readJson(out).schemaVersion, 1);
+  assert.equal(readJson(out).schemaVersion, 2);
   assert.deepEqual(await run([...base, '--launch', 'x'], {}, (l) => lines.push(l)), { exitCode: 3 });
   assert.deepEqual(JSON.parse(lines[1]), { ok: false, error: 'needs_window', id: 'x' });
 });

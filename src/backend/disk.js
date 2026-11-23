@@ -131,6 +131,66 @@ function makeRunnable(dir, { platform = process.platform, log = () => {} } = {})
   return count;
 }
 
+// The executable a GameVault-era install names in its gamevault-exec file:
+// a path, absolute or relative to the folder (plain text, or JSON with an
+// executable/exe/path field). Null when there's no such file or it names
+// nothing that exists.
+function gamevaultExe(installDir) {
+  let text;
+  try { text = fs.readFileSync(path.join(installDir, 'gamevault-exec'), 'utf8'); } catch { return null; }
+  let name = text.replace(/^\uFEFF/, '').trim();
+  try {
+    const j = JSON.parse(name);
+    name = typeof j === 'string' ? j : (j?.executable || j?.exe || j?.path || '');
+  } catch { /* plain text */ }
+  name = String(name).split(/\r?\n/)[0].trim().replace(/^["']|["']$/g, '');
+  if (!name) return null;
+  const full = path.isAbsolute(name) || /^[a-z]:[\\/]/i.test(name) ? name : path.join(installDir, ...name.split(/[\\/]/));
+  try { return fs.statSync(full).isFile() ? full : null; } catch { return null; }
+}
+
+// Executables that are never the game: installers, uninstallers, redists, crash reporters
+const NOT_THE_GAME = /^(unins\d*|setup|install(er)?|vc_?redist.*|vcredist.*|dxsetup|dxwebsetup|directx.*|dotnet.*|ue[34]prereq.*|crash.*|.*crashhandler.*|.*crashreport.*|.*helper|.*updater|.*config(urator)?|.*settings|launcher_?config|7z.*|unitycrashhandler.*|quicksfv|easyanticheat.*)\.exe$/i;
+
+// The game's executable among a folder's: gamevault-exec's when it names
+// one, else the only one found, else (so an installed game is never without
+// one) the best guess: not an installer or helper, named most like the
+// title, then the largest. Null only when the folder has no .exe at all.
+function pickExe(installDir, title = null, { platform = process.platform } = {}) {
+  const named = gamevaultExe(installDir);
+  if (named) return named;
+  const exes = findExes(installDir, 0, { platform });
+  if (exes.length <= 1) return exes[0] || null;
+  return guessExe(exes, title || path.basename(installDir).replace(/^\(\d+\)\s*/, ''));
+}
+
+function guessExe(exes, title) {
+  const games = exes.filter(e => !NOT_THE_GAME.test(path.basename(e).replace(/(\.exe)?$/i, '.exe')));
+  const pool = games.length ? games : exes;
+  const want = looseKey(title || '');
+  const size = (f) => { try { return fs.statSync(f).size; } catch { return 0; } };
+  const score = (e) => {
+    const k = looseKey(path.basename(e).replace(/\.(exe|x86_64|sh)$/i, ''));
+    if (!want || !k) return 0;
+    if (k === want) return 3;
+    return want.startsWith(k) || k.startsWith(want) ? 2 : want.includes(k) || k.includes(want) ? 1 : 0;
+  };
+  // Ties: the largest, then the plainest name (pd.x86_64.exe over pd.jpn.x86_64.exe)
+  return pool.slice().sort((a, b) => score(b) - score(a) || size(b) - size(a) || path.basename(a).length - path.basename(b).length)[0];
+}
+
+// A GameVault-layout install: a gamevault-exec file and a Files folder
+function isGamevaultLayout(dir) {
+  try { return fs.statSync(path.join(dir, 'gamevault-exec')).isFile() && fs.statSync(path.join(dir, 'Files')).isDirectory(); } catch { return false; }
+}
+
+// A folder the upstream RohanKar launcher installed, "(182)Silent Hill 3":
+// { id: '182', title: 'Silent Hill 3' }, else null
+function upstreamFolder(name) {
+  const m = /^\((\d+)\)\s*(.+)$/.exec(String(name));
+  return m && m[2].trim() ? { id: m[1], title: m[2].trim() } : null;
+}
+
 // A readme* text file in the folder's root. latin1 handles old DOS/Windows text.
 function readReadme(installDir) {
   try {
@@ -222,5 +282,5 @@ function matchInstallFolders(scanDir, knownIdentifiers, titleMap, { nested = 1 }
 
 module.exports = {
   IGNORED_SUBDIRS, sanitizeFolderName, sanitizeTitle, exesInDir, findExes, unblockDirectory, makeRunnable, isLinuxProgram, readReadme,
-  looseKey, matchInstallFolders,
+  looseKey, matchInstallFolders, gamevaultExe, pickExe, guessExe, isGamevaultLayout, upstreamFolder,
 };

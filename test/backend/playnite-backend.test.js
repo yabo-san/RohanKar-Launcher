@@ -38,6 +38,9 @@ test('buildExport: one record per library row, ids, sources and platforms per ki
     exe: '/g/a/bin/a.exe', args: '', workingDir: '/g/a/bin', version: null, updateAvailable: false,
     coverPath: '/c/a.jpg', heroPath: '/h/a.png', tags: ['Faves'], lastPlayed: '1970-01-01T00:00:01.000Z',
     playtimeSeconds: 60, favorite: true,
+    // Schema 2: where it stands. No versions loaded with it, so its states aren't known
+    sourceLabel: null, itemId: 'a', legacyId: null, state: 'installed', upstreamState: 'unknown', sourceState: 'unknown',
+    localStorePath: null, alternatives: [],
   });
   assert.deepEqual([q.id, q.name, q.source, q.platform, q.installed, q.workingDir],
     ['quiver:x/sm64', 'SM64 PC', 'quiver:https://c/n.json', 'Nintendo', false, null]);
@@ -139,7 +142,8 @@ test('exportPlaynite: names from loaded items, tags from collections, falls back
   assert.deepEqual(r, { file: path.join(dataDir, 'playnite-export.json'), count: 1 });
   const [halo] = JSON.parse(fs.readFileSync(r.file, 'utf8')).games;
   assert.equal(halo.name, 'Halo: Combat Evolved');
-  assert.deepEqual(halo.tags, ['Shooters']);
+  // Collections, then where it came from
+  assert.deepEqual(halo.tags, ['Shooters', 'source:rohanjackson071']);
   assert.ok(halo.coverPath.endsWith('rk-e2e-halo-ce.jpg'));
 
   backend.settings.save({ sources: [{ uploader: 'nobody@x' }] });

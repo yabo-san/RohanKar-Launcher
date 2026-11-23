@@ -202,6 +202,9 @@ function versionFromItem(v) {
     _newer:       v.newer || null,
     _user:        !!v.user,
     _local:       !!v.local,                // installed, but no loaded pack has the upload any more
+    _localReason: v.localReason || null,    // why: removed-upstream, source-disabled, source-unavailable, provenance-unknown
+    _origin:      v.origin || null,         // { uploader, label } it was installed from
+    _localStorePath: v.localStorePath || null, // its download in a local store
     _installedIn: v.installedIn || null,    // the installed copy an update put this upload into
   };
 }
@@ -896,10 +899,15 @@ function viewSettings() {
       <div class="hint">Optional. GitHub allows 60 release checks an hour without one, which a few installs and updates can use up.
         A token with no scopes is enough: GitHub, Settings, Developer settings, Personal access tokens.</div>
       <input type="password" id="setting-github-token" value="${esc(s.githubToken || '')}" placeholder="Empty: no token" spellcheck="false" autocomplete="off"></div>
+    <div class="field"><label for="setting-stores">Local stores</label>
+      <div class="hint">Folders that keep downloads as &lt;archive.org identifier&gt;&#92;&lt;original file&gt;, like a NAS share. One per line. An install reads from here before it downloads, so a game archive.org no longer has still installs.</div>
+      <textarea id="setting-stores" rows="2" spellcheck="false" placeholder="N:\\games\\pc">${esc((s.localStores || []).join('\n'))}</textarea>
+      <label class="check"><input type="checkbox" id="setting-keep-in-store" ${s.keepInStore ? 'checked' : ''}> Keep every download in the first local store</label></div>
     <div class="field actions"><button class="btn primary" id="btn-save-settings" data-action="save-settings">Save</button></div>
     <div class="field" id="your-config"><label>Your config</label>
       <div class="hint">The packs you follow, the repos you added and the uploads you hid, as text. Copy it to move to another computer or share it; paste one to add what it lists. Pasting never removes anything.</div>
-      <div class="inline"><button class="btn" data-action="config-copy">Copy</button><button class="btn" data-action="config-paste">Paste…</button></div></div>
+      <div class="inline"><button class="btn" data-action="config-copy">Copy</button><button class="btn" data-action="config-paste">Paste…</button>
+      <button class="btn" data-action="sources-copy" title="Your uploaders, switched-off ones too, as settings.json lists them. Paste… reads it back.">Copy sources</button></div></div>
     <div class="field"><label>Something wrong?</label>
       <div class="hint">Tell us on GitHub. The report opens with your app version filled in; a game's or port's page has the same link for that one.</div>
       <button class="btn" id="btn-report-issue" data-href="${esc(issueUrl({ version: state.appVersion }))}">Report an issue</button></div>
@@ -1112,6 +1120,19 @@ function versionsTable(d) {
   </div><div class="track-sum">${rows.length === 1 ? '1 version' : `${rows.length} versions`}${d.version.addeddate ? ` · Latest ${esc(rows[0].date)}` : ''}</div></section>`;
 }
 
+// Why an installed copy is in no pack, in a sentence. Nothing removes or redownloads it.
+function localNote(v) {
+  const from = v._origin?.label;
+  switch (v._localReason) {
+    case 'removed-upstream': return `Removed upstream: archive.org no longer has this upload${from ? ` from ${from}` : ''}. It stays installed and playable.`;
+    case 'source-disabled': return `Source disabled: ${from || 'its uploader'} is switched off in your packs. It stays installed and playable.`;
+    case 'source-removed': return `Source removed: ${from || 'its uploader'} is no longer in your packs. It stays installed and playable; add the pack back and it links up again.`;
+    case 'store-only': return `Only in your local store: no pack of yours has this upload now. Install reads it from ${v._localStorePath || 'the store'}, no download.`;
+    case 'source-unavailable': return `${from || 'Its uploader'} didn't load this time. It stays installed and playable.`;
+    default: return "This copy isn't in any of your packs. It stays installed and playable.";
+  }
+}
+
 function gameDetail(d) {
   const g = d.game, v = d.version;
   const title = getTitle(v);
@@ -1144,12 +1165,12 @@ function gameDetail(d) {
     wash: `background:${tint(title)}`,
     sub: v._uploader
       ? `<button class="album-sub by" data-view="uploader" data-arg="${esc(v._uploader)}">${esc(v._sourceLabel || v._uploader)}</button>`
-      : `<div class="album-sub by">archive.org</div>`,
+      : `<div class="album-sub by">${esc(v._origin?.label || 'archive.org')}</div>`,
     meta: gameMeta(v, { bytes: fileSizes.get(v.identifier) || 0 }),
     actions,
     extra: `${badges ? `<div class="badges">${badges}</div>` : ''}${dl ? `<div class="progress"><i style="width:${dl.percent || 0}%"></i></div><div class="progress-label">${dl.percent || 0}%</div>` : ''}
       ${exePicker(d)}
-      ${v._local ? `<div class="newer-note">This copy isn't in any of your packs any more: archive.org may have pulled it. It stays installed and playable.</div>` : ''}
+      ${v._local ? `<div class="newer-note">${esc(localNote(v))}</div>` : ''}
       ${newerOf && !dl ? `<div class="newer-note">A newer upload of this game is on archive.org (${esc(fmtDate(newerOf.addeddate))}).
         <button class="btn primary" data-action="update-upload" data-update="${esc(newerOf.identifier)}">Update</button>
         <button class="btn" data-version="${esc(newerOf.identifier)}">See it</button>
@@ -1157,7 +1178,8 @@ function gameDetail(d) {
     desc,
   }) + versionsTable(d) + '<section class="section album-reviews" id="reviews" hidden></section>' + albumFoot([
     `<dt>Uploader</dt><dd>${esc(v._uploader || '')}</dd>`,
-    `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
+    // A copy no pack has may not be on archive.org (or be an upstream id): no link
+    v._local ? `<dt>Item</dt><dd>${esc(v.identifier)}</dd>` : `<dt>Item</dt><dd><a data-href="https://archive.org/details/${esc(v.identifier)}">${esc(v.identifier)}</a></dd>`,
     `<dt>Problem?</dt><dd><a data-href="${esc(issueUrl({ version: state.appVersion, item: { kind: 'game', title: getTitle(v), id: v.identifier, source: v._uploader } }))}">Report an issue</a></dd>`,
     `<dt>Downloads</dt><dd>${fmtNum(v.downloads)}</dd>`,
     v.addeddate ? `<dt>Added</dt><dd>${esc(fmtDate(v.addeddate))}</dd>` : '',
@@ -1575,6 +1597,15 @@ async function copyConfig() {
   catch { modal({ title: 'Your config', body: `<pre class="readme">${esc(text)}</pre>`, html: true, primary: 'Close', secondary: null }); }
 }
 
+// The uploader list alone, in settings.json's shape, as a backup
+async function copySources() {
+  const c = await api.getSourcesBackup();
+  if (!c) return toast("Couldn't read your sources.");
+  const text = JSON.stringify(c, null, 2);
+  try { await navigator.clipboard.writeText(text); toast(`${c.sources.length} sources copied.`); }
+  catch { modal({ title: 'Your sources', body: `<pre class="readme">${esc(text)}</pre>`, html: true, primary: 'Close', secondary: null }); }
+}
+
 async function pasteConfig() {
   const { index, value } = await choose({
     title: 'Paste a config',
@@ -1608,7 +1639,7 @@ const itemInstalled = (x, ctx) => (ctx.kind === 'port' ? !!state.library[x.id]?.
 const gameTarget = (g) => installedVersion(g) || g;
 const targetOf = (x, ctx) => (ctx.kind === 'port' ? portTarget(x) : gameTarget(x));
 const idle = (x, ctx) => !itemDl(x, ctx);
-const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : `https://archive.org/details/${gameTarget(x).identifier}`);
+const linkOf = (x, ctx) => (ctx.kind === 'port' ? x.repositoryUrl : gameTarget(x)._local ? null : `https://archive.org/details/${gameTarget(x).identifier}`);
 
 const ROW_ACTIONS = [
   // play: get it, run it, find it on disk
@@ -1657,7 +1688,18 @@ const ROW_ACTIONS = [
   { id: 'shelf', label: 'Go to Ports', icon: 'wall', group: 'goto', kinds: ['port'], run: () => go('ports') },
   { id: 'repo', label: 'Go to Source Repo', icon: 'code', group: 'goto', kinds: ['port'],
     run: (p) => api.openExternal(p.repositoryUrl) },
+  { id: 'backup', label: 'Back Up to Local Store', icon: 'download', group: 'play', kinds: ['game'],
+    when: (g, ctx) => itemInstalled(g, ctx) && (state.settings.localStores || []).length > 0 && !gameTarget(g)._localStorePath && !gameTarget(g)._local,
+    run: async (g) => {
+      const v = gameTarget(g);
+      toast(`Backing up ${getTitle(v)}…`, 3000);
+      const r = await api.backupToStore({ identifier: v.identifier });
+      if (!r.ok) return toast(`Couldn't back up: ${r.error}`);
+      toast(r.existing ? `Already in ${r.dir}.` : `Backed up to ${r.dir}.`);
+      return loadWall();
+    } },
   { id: 'archive', label: 'View on archive.org', icon: 'globe', group: 'goto', kinds: ['game'],
+    when: (g) => !gameTarget(g)._local,
     run: (g) => api.openExternal(`https://archive.org/details/${gameTarget(g).identifier}`) },
   { id: 'share', label: 'Copy Link', icon: 'share', group: 'goto', when: (x, ctx) => linkOf(x, ctx),
     run: async (x, ctx) => {
@@ -1841,6 +1883,8 @@ async function saveSettingsForm() {
   const patch = {
     installPath: $('#setting-install').value.trim(),
     githubToken: $('#setting-github-token').value.trim() || null,
+    localStores: $('#setting-stores').value.split(/\r?\n/).map(x => x.trim()).filter(Boolean),
+    keepInStore: $('#setting-keep-in-store').checked,
   };
   const saved = await api.saveSettings(patch);
   if (saved && saved.ok === false) return toast(saved.body?.detail || 'Settings not saved.');
@@ -1888,6 +1932,7 @@ async function onAction(action, el) {
     case 'desc-more': return el.closest('.album-desc')?.classList.add('open');
     case 'unhide-all': return unhideAll();
     case 'config-copy': return copyConfig();
+    case 'sources-copy': return copySources();
     case 'config-paste': return pasteConfig();
     case 'news-go': return newsGo(el.dataset.key);
     case 'news-dismiss': return newsDismiss([el.dataset.key]);

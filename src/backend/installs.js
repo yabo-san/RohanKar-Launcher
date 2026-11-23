@@ -15,6 +15,7 @@ const { installableFiles, ARCHIVE_FILE } = require('./archive');
 const disk = require('./disk');
 const ports = require('./ports');
 const { checkPin } = require('./user-sources');
+const stores = require('./stores');
 const { findSevenZip, WINDOWS_7ZIP } = require('./sevenzip');
 
 const SEVEN_ZIP = WINDOWS_7ZIP;
@@ -22,7 +23,7 @@ const GITHUB_API = 'https://api.github.com';
 const GITLAB_API = 'https://gitlab.com/api/v4';
 const NO_PINS = { get: () => null, set: () => {} };
 
-function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = findSevenZip({ platform }), githubApi = GITHUB_API, gitlabApi = GITLAB_API }) {
+function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, emit = () => {}, log = () => {}, netLog = () => {}, platform = process.platform, deck = platform === 'linux' && ports.onSteamDeck(), sevenZip = findSevenZip({ platform }), githubApi = GITHUB_API, gitlabApi = GITLAB_API, storeDirs = () => [] }) {
   const activeDownloads = new Map();  // key → { cancel }
   const jobs = new Map();             // install id → job
 
@@ -44,8 +45,9 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   // Downloads url into <download folder>/<identifier>/<fileName>. Resolves
   // { ok, filePath } or { ok: false, error }; cancel(key) resolves it as 'Cancelled'.
-  function download({ key, identifier, url, fileName, onProgress = () => {} }) {
-    const destDir = path.join(downloadDir(), disk.sanitizeFolderName(identifier));
+  // dir: where to save it instead (a local store's <identifier> folder)
+  function download({ key, identifier, url, fileName, onProgress = () => {}, dir = null }) {
+    const destDir = dir || path.join(downloadDir(), disk.sanitizeFolderName(identifier));
     fs.mkdirSync(destDir, { recursive: true });
     const destFile = path.join(destDir, path.basename(fileName));
 
@@ -103,7 +105,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // collection into <identifier>/_GAME_<subFolder>, which findExes groups by.
   // 7-Zip when installed (zip/7z/rar), extract-zip for .zip otherwise.
   // into: an existing install folder to unpack over instead (an update).
-  async function extract({ filePath, identifier, subFolder, into = null }) {
+  // fromStore: filePath is a local store's copy, which stays where it is.
+  async function extract({ filePath, identifier, subFolder, into = null, fromStore = false }) {
     const parentDir = into || path.join(installDir(), disk.sanitizeFolderName(identifier));
     const destDir = subFolder ? path.join(parentDir, '_GAME_' + disk.sanitizeFolderName(subFolder)) : parentDir;
     fs.mkdirSync(destDir, { recursive: true });
@@ -112,7 +115,16 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     if (!r.ok) return r;
     disk.unblockDirectory(destDir, { platform, log });
     disk.makeRunnable(destDir, { platform, log });
-    removeDownload(filePath, r.copiedTo);
+    if (!fromStore) {
+      // settings.keepInStore: the download goes to the first local store, not away
+      if (settings.load().keepInStore === true) {
+        try {
+          const kept = stores.keep(storeDirs(), identifier, filePath);
+          if (kept) log(`[store] Kept ${path.basename(filePath)} in ${kept}`);
+        } catch (e) { log(`[store] Couldn't keep ${path.basename(filePath)}: ${e.message}`); }
+      }
+      removeDownload(filePath, r.copiedTo);
+    }
     return { ok: true, installDir: destDir, parentInstallDir: parentDir };
   }
 
@@ -192,7 +204,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   }
 
   async function runJob(job, subFolder) {
-    const r = await download({
+    // A local store's copy installs without a download
+    const r = job.storeFile ? { ok: true, filePath: job.storeFile } : await download({
       key: job.id, identifier: job.itemId, url: archive.downloadUrl(job.itemId, job.file), fileName: job.file,
       onProgress: (percent) => { if (percent !== job.percent) update(job, { percent }); },
     });
@@ -204,13 +217,13 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
 
     update(job, { status: 'extracting', percent: 100 });
-    const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder, into: job.into?.installDir });
+    const x = await extract({ filePath: r.filePath, identifier: job.itemId, subFolder, into: job.into?.installDir, fromStore: !!job.storeFile });
     if (!x.ok) return update(job, { status: 'error', error: x.error });
 
     // The item is registered against the parent folder: findExes walks into
     // a collection's _GAME_ folders from there
-    const exes = disk.findExes(x.parentInstallDir, 0, { platform });
-    const exePath = exes.length === 1 ? exes[0] : null;
+    // Never none: several get the best guess, which the exe picker can change
+    const exePath = disk.pickExe(x.parentInstallDir, job.meta.title, { platform });
     if (job.into) {
       library.recordUpdate(job.into.identifier, { upload: job.itemId, uploadDate: job.meta.uploadDate, title: job.meta.title, exePath });
     } else {
@@ -234,9 +247,12 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       if (!row?.install_dir || !fs.existsSync(row.install_dir)) return { ok: false, error: 'not_installed', detail: `${into} isn't installed, so there's nothing to update.` };
       target = { identifier: into, installDir: row.install_dir };
     }
-    const list = await archive.fileList(itemId);
+    // A local store's copy first: no archive.org call at all
+    const copy = stores.findCopy(storeDirs(), itemId);
+    if (copy) log(`[store] ${itemId} found in ${copy.dir}: installing from there`);
+    const list = copy ? { ok: true, files: copy.files } : await archive.fileList(itemId);
     if (!list.ok) return { ok: false, error: 'file_list_failed', detail: list.error };
-    const installable = installableFiles(list.files);
+    const installable = copy ? (installableFiles(copy.files).length ? installableFiles(copy.files) : copy.files) : installableFiles(list.files);
     if (!installable.length) return { ok: false, error: 'no_installable_file', detail: 'This item has no files of its own to download.' };
 
     let chosen;
@@ -260,7 +276,8 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
       const job = {
         id: crypto.randomUUID(), itemId, file: f.name, status: 'downloading', percent: 0, error: null,
         installDir: null, exePath: null, startedAt: Date.now(), finishedAt: null, check, acceptHashChange,
-        meta: { title: meta.title || null, uploadDate: meta.uploadDate || null }, into: target,
+        meta: { title: meta.title || null, uploadDate: meta.uploadDate || null, uploader: meta.uploader || null, sourceLabel: meta.sourceLabel || null }, into: target,
+        storeFile: copy ? path.join(copy.dir, f.name) : null,
       };
       jobs.set(job.id, job);
       emit('install', view(job));
@@ -372,8 +389,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     removeDownload(bin.filePath, copiedTo);
     disk.unblockDirectory(dest, { platform, log });
     disk.makeRunnable(dest, { platform, log });
-    const exes = disk.findExes(dest, 0, { platform });
-    const exePath = exes.length === 1 ? exes[0] : null;
+    const exePath = disk.pickExe(dest, item.title, { platform });
     library.adoptInstall(item.id, dest, exePath);
     // The release tag, so a newer release can be offered as an update
     library.setDetails(item.id, { version: release.tag_name });
@@ -413,6 +429,27 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
 
   const get  = (id) => (jobs.has(id) ? view(jobs.get(id)) : null);
   const list = () => [...jobs.values()].map(view);
+  // Back up to local store: an item's installable files downloaded into
+  // <first store>/<identifier>/. Resolves { ok, dir } (dir already there: the
+  // copy that was found) or { ok: false, error }.
+  async function backup(itemId) {
+    const dirs = storeDirs();
+    if (!dirs.length) return { ok: false, error: 'no_store', detail: 'Add a local store in Settings first.' };
+    const found = stores.findCopy(dirs, itemId);
+    if (found) return { ok: true, dir: found.dir, existing: true };
+    const list = await archive.fileList(itemId);
+    if (!list.ok) return { ok: false, error: 'file_list_failed', detail: list.error };
+    const files = installableFiles(list.files);
+    if (!files.length) return { ok: false, error: 'no_installable_file', detail: 'This item has no files of its own to download.' };
+    const dir = path.join(dirs[0], itemId);
+    for (const f of files) {
+      const r = await download({ key: `backup:${itemId}:${f.name}`, identifier: itemId, url: archive.downloadUrl(itemId, f.name), fileName: f.name, dir });
+      if (!r.ok) return { ok: false, error: 'download_failed', detail: r.error };
+    }
+    log(`[store] Backed up ${itemId} to ${dir}`);
+    return { ok: true, dir, existing: false };
+  }
+
   const wait = (id) => jobs.get(id)?.done;
 
   function cancel(id) {
@@ -428,27 +465,59 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
   // ─── Adopt installs already on disk ───────────────────────────────────────
 
   // scanDirs: several folders in one pass (install, download, default); a
-  // folder found under two of them is adopted once
-  function scan({ scanDir, scanDirs, knownIdentifiers, titleMap }) {
+  // folder found under two of them is adopted once. A folder the upstream
+  // launcher installed, "(182)Silent Hill 3", that matches no loaded upload
+  // (pulled from archive.org) is adopted too, under its upstream id: that is
+  // the id Playnite already knows it by. Its card says it's not in any pack.
+  // The newest version folder of a GameVault install kept as <title>\<version>\, or null
+  function gamevaultVersion(dir) {
+    let subs;
+    try { subs = fs.readdirSync(dir, { withFileTypes: true }).filter(x => x.isDirectory()).map(x => x.name); } catch { return null; }
+    const layouts = subs.filter(n => disk.isGamevaultLayout(path.join(dir, n))).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return layouts.length ? path.join(dir, layouts.at(-1)) : null;
+  }
+
+  // uploaderOf(identifier): the source a matched upload came from
+  function scan({ scanDir, scanDirs, knownIdentifiers, titleMap, uploaderOf = null }) {
     if (!library.available) return { found: [] };
     const found = [];
     const dirs = [...new Set([scanDir, ...(scanDirs || [])].filter(Boolean).map(d => path.resolve(d)))];
     const matches = dirs.flatMap(d => disk.matchInstallFolders(d, knownIdentifiers, titleMap));
     const titleOf = new Map(Object.entries(titleMap || {}).map(([t, id]) => [id, t]));
-    for (const m of matches) {
-      if (found.some(f => f.identifier === m.identifier)) continue;
+    const adopt = (m, title, src = null) => {
+      if (found.some(f => f.identifier === m.identifier)) return;
       const existing = library.get(m.identifier);
-      if (existing?.install_dir && fs.existsSync(existing.install_dir)) continue;
-      const exes = disk.findExes(m.folderPath, 0, { platform });
-      const exePath = exes.length === 1 ? exes[0] : null;
-      library.adoptInstall(m.identifier, m.folderPath, exePath, { title: titleOf.get(m.identifier) || null });
+      if (existing?.install_dir && fs.existsSync(existing.install_dir)) return;
+      const exePath = disk.pickExe(m.folderPath, title, { platform });
+      library.adoptInstall(m.identifier, m.folderPath, exePath, { title, uploader: src?.uploader || null, sourceLabel: src?.label || null });
       log(`[scan] Found pre-existing install (${m.matchedBy}): ${m.identifier} → ${m.folderPath}`);
       found.push({ identifier: m.identifier, installDir: m.folderPath, exePath, matchedBy: m.matchedBy });
+    };
+    for (const m of matches) adopt(m, titleOf.get(m.identifier) || null, uploaderOf?.(m.identifier) || null);
+
+    // Folders some entry already points at (a port's, a matched game's) aren't orphans
+    const held = new Set(Object.values(library.all()).map(r => r.install_dir && path.resolve(r.install_dir)).filter(Boolean));
+    const matched = new Set(matches.map(m => path.resolve(m.folderPath)));
+    for (const d of dirs) {
+      for (const e of (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : [])) {
+        if (!e.isDirectory()) continue;
+        const outer = path.join(d, e.name);
+        if (matched.has(path.resolve(outer)) || held.has(path.resolve(outer))) continue;
+        // GameVault's layout (gamevault-exec + Files), here or one version folder down ("Silent Hill 3\v1")
+        const folderPath = disk.isGamevaultLayout(outer) ? outer : gamevaultVersion(outer);
+        const up = disk.upstreamFolder(e.name);
+        if (!up && !folderPath) continue;
+        const at = folderPath || outer;
+        if (held.has(path.resolve(at))) continue;
+        // "(182)Title": that id, the one Playnite knows; GameVault's without one: legacy:<title>
+        const identifier = up ? up.id : `legacy:${disk.looseKey(e.name)}`;
+        adopt({ identifier, folderPath: at, matchedBy: up ? 'upstream-folder' : 'gamevault-folder' }, up ? up.title : e.name, { uploader: 'upstream' });
+      }
     }
     return { found };
   }
 
-  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan, releaseFiles, portUpdates };
+  return { download, cancelDownload, extract, extractTo, start, startPort, get, list, wait, cancel, scan, backup, releaseFiles, portUpdates };
 }
 
 module.exports = { createInstalls, SEVEN_ZIP, GITHUB_API, GITLAB_API };

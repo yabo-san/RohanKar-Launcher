@@ -26,6 +26,8 @@ const { getText } = require('./net');
 const { sourcesFromCatalog } = require('./sources');
 const playnite = require('./playnite');
 const disk = require('./disk');
+const stores = require('./stores');
+const { createFileLog } = require('./filelog');
 const ports = require('./ports');
 
 const REPO_ROOT = path.join(__dirname, '..', '..');
@@ -96,6 +98,10 @@ function createBackend({
   log = (msg) => console.log(msg),
 }) {
   fs.mkdirSync(dataDir, { recursive: true });
+  // Everything logged also goes to <data dir>/logs/main.log, rotated
+  const fileLog = createFileLog(path.join(dataDir, 'logs'));
+  const consoleLog = log;
+  log = (msg) => { consoleLog(msg); fileLog(msg); };
   const gamesDir = path.join(dataDir, 'games');
   fs.mkdirSync(gamesDir, { recursive: true });
 
@@ -150,7 +156,9 @@ function createBackend({
   const covers   = createCovers({ cacheDir: path.join(dataDir, 'thumbcache'), appDir, archive, getOverrides, art: readArt(appDir, log), log: netlog.log });
   const userSources = createUserSources({ settings, log });
   const pins     = createPins(path.join(dataDir, 'pins.json'));
-  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, netLog: netlog.log, platform, githubApi, gitlabApi,
+  // Local stores (settings.localStores): downloads kept as <identifier>/<file>
+  const storeDirs = () => stores.storeDirs(settings.load());
+  const installs = createInstalls({ settings, library, archive, gamesDir, pins, emit, log, storeDirs, netLog: netlog.log, platform, githubApi, gitlabApi,
     sevenZip: findSevenZip({ platform, bundled: bundledSevenZip }) });
   const catalogs = createCatalogs({
     dir: path.join(dataDir, 'catalogs'), settings, userSources, netLog: netlog.log, log,
@@ -240,7 +248,8 @@ function createBackend({
   // Matches folders in dir (or the install, download and default games
   // folders) against every archive.org upload loaded
   async function scanInstalls(dir) {
-    await items.load();
+    // Offline, folders the upstream launcher made are still adopted
+    await items.load().catch(e => log(`[scan] uploads not loaded: ${e.message}`));
     const versions = items.loadedVersions();
     const titleMap = {};
     for (const v of versions) {
@@ -249,7 +258,11 @@ function createBackend({
     }
     const s = settings.load();
     const scanDirs = dir ? [dir] : [s.installPath, s.downloadPath, gamesDir];
-    return installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap });
+    const uploaders = new Map(versions.map(v => [v.identifier, v._source ? { uploader: v._source.uploader, label: v._source.label || null } : null]));
+    const r = installs.scan({ scanDirs, knownIdentifiers: versions.map(v => v.identifier), titleMap, uploaderOf: (id) => uploaders.get(id) });
+    // Installs with no executable get one (gamevault-exec's, else the best guess)
+    library.fillExes((dir, row) => disk.pickExe(dir, row.title, { platform }));
+    return r;
   }
 
   // ─── Playnite export ──────────────────────────────────────────────────────
@@ -289,8 +302,14 @@ function createBackend({
         };
       }
     }
+    // Downloads a local store holds that aren't in the library go out too, not installed
+    const stored = stores.scan(storeDirs());
+    for (const [sid, copy] of stored) {
+      if (!rows[sid]) rows[sid] = { identifier: sid, install_dir: null, exe_path: null, source: null, title: copy.title, playtime_secs: 0, is_favorite: 0, last_played_at: null };
+    }
     const data = playnite.buildExport({
       rows,
+      storePathOf: (sid) => stored.get(sid)?.dir || null,
       items: byId,
       tagsFor: (id) => cols.filter(c => c.games.includes(id)).map(c => c.name),
       art: (id) => covers.localArt(id, overrides),
@@ -314,6 +333,7 @@ function createBackend({
   function runPlayniteExport() {
     exportRunning = exportRunning
       .then(() => (closed ? null : exportPlaynite(playniteFile, { loadItems: false })))
+      .then(r => { if (r) log(`[playnite] wrote ${r.count} games to ${r.file}`); return r; })
       .catch(e => log(`[playnite] export failed: ${e.message}`));
     return exportRunning;
   }

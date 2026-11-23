@@ -102,7 +102,9 @@ test('onPath: a program on PATH, or null', (t) => {
 
 // What a stand-in program writes when started: its arguments and the variables Proton reads
 const RECORDER = (out) => `#!/bin/sh\n{ echo "args=$*"; echo "data=$STEAM_COMPAT_DATA_PATH"; echo "client=$STEAM_COMPAT_CLIENT_INSTALL_PATH"; echo "cwd=$(pwd)"; } > "${out}"\n`;
-const waitFor = async (file) => { for (let i = 0; i < 100 && !fs.existsSync(file); i++) await new Promise(r => setTimeout(r, 30)); return fs.readFileSync(file, 'utf8'); };
+// The recorder's `>` creates the file before its lines are in: wait for them
+const written = (file) => { try { return fs.readFileSync(file, 'utf8').includes('cwd='); } catch { return false; } };
+const waitFor = async (file) => { for (let i = 0; i < 100 && !written(file); i++) await new Promise(r => setTimeout(r, 30)); return fs.readFileSync(file, 'utf8'); };
 
 test('Play on Linux: a Windows game runs through Steam\'s Proton in its own prefix; a Linux build runs itself', { skip: process.platform === 'win32' }, async (t) => {
   const home = tmpDir(t);

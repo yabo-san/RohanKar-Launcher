@@ -1,4 +1,5 @@
 'use strict';
+const disk = require('./disk');
 /**
  * The backend process: `node src/backend/main.js --data-dir <dir> [--port N]`
  * (tests add --archive-base, --overrides-url, --uploaders-url, --curated-ports-url,
@@ -78,6 +79,8 @@ async function run(argv = process.argv.slice(2), env = process.env, print = (lin
   backend.getOverrides();
   backend.getDefaultSources();
   backend.library.clearMissingInstalls();
+  // Installs with no executable get one (gamevault-exec's, else the best guess)
+  backend.library.fillExes((dir, row) => disk.pickExe(dir, row.title));
   // playnite-export.json is rewritten on every library change; this covers a first run
   backend.exportPlaynite(undefined, { loadItems: false }).catch(() => {});
 

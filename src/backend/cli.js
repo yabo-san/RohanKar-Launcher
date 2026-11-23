@@ -7,16 +7,21 @@
  *   --install <id>            download and install, wait, exit
  *   --uninstall <id>          move the install folder to the Recycle Bin, keep the entry
  *   --launch <id>             start the installed game and exit
+ *   --export-sources <path>   write the uploader list (settings.json's "sources", switched-off ones too) there
+ *   --import-sources <path>   add the uploaders a --export-sources file (or a pasted config) lists; removes nothing
  *
  * Each prints one JSON line with the result. Exit codes: 0 done, 1 failed,
  * 2 usage. A command that needs the window (--launch on a game that isn't
  * installed, --install on one that needs a choice or isn't an archive.org
  * item) returns { open: identifier } for the host to show that item instead.
  */
+const fs   = require('fs');
 const path = require('path');
 const { findRow } = require('./playnite');
+const config = require('./config');
+const { sourcesFromSettings } = require('./sources');
 
-const COMMANDS = ['export-playnite', 'install', 'uninstall', 'launch'];
+const COMMANDS = ['export-playnite', 'install', 'uninstall', 'launch', 'export-sources', 'import-sources'];
 
 // The first command flag and its value, or null when there is none
 function parseCli(argv) {
@@ -38,6 +43,8 @@ async function runCli({ command, value }, backend, { print = (line) => process.s
     const r = await backend.exportPlaynite(path.resolve(value));
     return done(0, { ok: true, ...r });
   }
+
+  if (command === 'export-sources' || command === 'import-sources') return sourcesCommand(command, path.resolve(value), backend, done);
 
   const row = findRow(backend.library.all(), value);
 
@@ -63,6 +70,25 @@ async function runCli({ command, value }, backend, { print = (line) => process.s
   const failed = jobs.find(j => j.status !== 'done');
   if (failed) return done(1, { id: value, ok: false, error: failed.error || failed.status });
   return done(0, { id: value, ok: true, installDir: jobs[0].installDir, exePath: jobs[0].exePath });
+}
+
+// Backs the uploader list up, or adds one back. Importing merges as pasting a
+// config does: nothing is removed, and installed games are never touched.
+async function sourcesCommand(command, file, backend, done) {
+  const sources = sourcesFromSettings(backend.settings.load(), await backend.getDefaultSources());
+  if (command === 'export-sources') {
+    const list = sources.map(s => ({ uploader: s.uploader, label: s.label || null, enabled: s.enabled !== false }));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ sources: list }, null, 2));
+    return done(0, { ok: true, file, count: list.length });
+  }
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { return done(1, { ok: false, error: 'unreadable', detail: e.message }); }
+  const r = config.readConfig(text);
+  if (!r.ok) return done(1, { ok: false, error: 'bad_config', detail: r.error });
+  const m = config.mergeConfig({ sources, repos: [], hidden: backend.settings.load().excludeItems || [] }, { ...r.config, repos: [] });
+  backend.settings.save({ sources: m.sources, excludeItems: m.excludeItems });
+  return done(0, { ok: true, added: m.added.packs });
 }
 
 module.exports = { parseCli, runCli, COMMANDS };

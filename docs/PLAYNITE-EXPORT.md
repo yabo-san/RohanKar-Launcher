@@ -34,7 +34,7 @@ thousands of catalog games bury the ones you chose.
 
 ```jsonc
 {
-  "schemaVersion": 1,                 // bumped only for a breaking change
+  "schemaVersion": 2,                 // bumped only for a breaking change
   "generatedAt": "2026-09-29T02:30:00.000Z",
   "launcherVersion": "1.6.0-fork.3",
   "games": [ /* one record per library entry, plus one per catalog entry not in the library (installed: false) */ ]
@@ -49,17 +49,30 @@ thousands of catalog games bury the ones you chose.
 | `platform` | string | `PC`, `Nintendo`, `PlayStation`, `Xbox` or `Other`. archive.org and manual entries are `PC`; a port takes its catalog's shelf. |
 | `installed` | bool | Has an install folder. |
 | `installDir` | string\|null | Install folder. |
-| `exe` | string\|null | Executable to run, when one was picked. |
+| `exe` | string\|null | Executable to run. For an installed game it is always set: when the folder holds several, the launcher picks the likeliest (and the user can change it); only a folder with no executable at all leaves it null. |
 | `args` | string | Arguments for `exe`. Empty for now. |
 | `workingDir` | string\|null | Folder to run `exe` in (its folder, else `installDir`). |
 | `version` | string\|null | Installed version, when the source has one. Null for now. |
 | `updateAvailable` | bool | A newer upload of the same title exists than the one installed. |
 | `coverPath` | string\|null | Cover image on disk, in the cover order (overrides.json artUrl, else the archive.org image, else catalog/art.json). Null when none is downloaded yet. |
 | `heroPath` | string\|null | Hero banner on disk, in the same order (overrides.json hero, else the archive.org image, else catalog/art.json). Null when none is downloaded yet. |
-| `tags` | string[] | The entry's collections. |
+| `tags` | string[] | The entry's collections. An installed archive.org game also gets `source:<label>` (the pack it came from) and, when no loaded pack has it, `removed-upstream`, `source-disabled` (its uploader is off or removed) or `provenance-unknown`. |
 | `lastPlayed` | string\|null | ISO time of the last launch from the launcher. |
 | `playtimeSeconds` | number | Playtime the launcher recorded. |
 | `favorite` | bool | Optional. Favourited in the launcher. |
+
+Schema 2 adds, per game. These describe where a title stands between what is installed, what a local store holds, and what the catalogue still lists. Every installed or locally stored game is exported whatever its source state.
+
+| field | type | meaning |
+|---|---|---|
+| `sourceLabel` | string\|null | The pack's label (`rohanjackson071`), kept from install so a removed source still has a name. |
+| `itemId` | string\|null | The archive.org identifier it was installed from. Null for a legacy GameVault install (see `legacyId`), a port or a manual entry. |
+| `legacyId` | string\|null | The old numeric id from an upstream `(182)Title` folder, which is the GameId Playnite already has. Null otherwise. |
+| `state` | string | `installed`, `in-local-store` (not installed, but a local store has the download), `downloadable` (a live catalogue item, not installed) or `local-only` (installed or stored, with no live item). |
+| `upstreamState` | string | `available` (a loaded pack still has it), `removed` (its pack loaded without it) or `unknown` (nothing loaded to say). |
+| `sourceState` | string | `active`, `disabled` (its uploader is switched off), `removed` (its uploader is no longer in the packs) or `unknown`. |
+| `localStorePath` | string\|null | The folder in a local store that holds this item's download, when one does. |
+| `alternatives` | array | The same game from other uploads that are available now: `[{ "sourceLabel", "itemId" }]`. The launcher never switches to one on its own. |
 
 Readers ignore fields they do not know; new optional fields do not bump
 `schemaVersion`.

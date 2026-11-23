@@ -81,7 +81,8 @@ test('items: sources down is a 502 with the per-source errors', async (t) => {
   assert.equal((await call('GET', '/items/anything')).status, 502);
   fake.routes['/metadata/x'] = (req, res) => { res.writeHead(200); res.end('junk'); };
   assert.equal((await call('GET', '/items/x/files')).status, 502);
-  assert.equal((await call('POST', '/library/scan', { dir: backend.dataDir })).status, 502);
+  // The scan still adopts what it can offline: folders the upstream launcher made
+  assert.equal((await call('POST', '/library/scan', { dir: backend.dataDir })).status, 200);
 });
 
 test('catalogs: list, get, refresh, items, review, seen on the curated shelf', async (t) => {
