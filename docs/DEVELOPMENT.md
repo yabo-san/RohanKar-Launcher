@@ -91,7 +91,7 @@ are done by hand:
 
 1. **Merge the release PR.** release-please keeps a `chore(main): release …` PR
    open on `main`. Merging it tags the version, builds the Windows installer
-   and the Linux AppImage onto a draft release, runs the packaged smoke test
+   and the Linux Flatpak onto a draft release, runs the packaged smoke test
    against each, and publishes it as the latest GitHub release. It then opens a PR against
    `gh-pages` that moves `beta/latest.yml` to the new version; merge that beta
    PR. A build that fails the smoke test stays a draft and no beta PR opens.

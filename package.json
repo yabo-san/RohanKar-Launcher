@@ -52,7 +52,7 @@
     "linux": {
       "target": [
         {
-          "target": "AppImage",
+          "target": "flatpak",
           "arch": [
             "x64"
           ]
@@ -67,6 +67,21 @@
         }
       ],
       "artifactName": "y4bo-x86_64.${ext}"
+    },
+    "flatpak": {
+      "runtimeVersion": "24.08",
+      "baseVersion": "24.08",
+      "finishArgs": [
+        "--socket=x11",
+        "--socket=wayland",
+        "--share=ipc",
+        "--share=network",
+        "--device=all",
+        "--socket=pulseaudio",
+        "--filesystem=home",
+        "--talk-name=org.freedesktop.Notifications",
+        "--talk-name=org.freedesktop.Flatpak"
+      ]
     },
     "detectUpdateChannel": false,
     "publish": {

@@ -229,7 +229,7 @@ test('start on Linux: a .7z unpacks with the 7-Zip found, its programs made runn
   const failed = (await none.installs.start({ itemId: 'seven' })).jobs[0];
   await none.installs.wait(failed.id);
   assert.deepEqual([none.installs.get(failed.id).status, none.installs.get(failed.id).error],
-    ['error', "Couldn't unpack seven.7z: 7-Zip isn't available. Install 7-Zip (7zz) or use the AppImage, which brings its own."]);
+    ['error', "Couldn't unpack seven.7z: 7-Zip isn't available. Install 7-Zip (7zz) or use the Flatpak, which brings its own."]);
 });
 
 test('start: a running job is reused; cancel stops it', async (t) => {
