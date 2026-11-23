@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0-fork.26](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.25...v1.6.0-fork.26) (2026-11-18)
+
+
+### Features
+
+* gamepad navigation on the new UI ([#184](https://github.com/yabo-san/RohanKar-Launcher/issues/184)) ([80d47e5](https://github.com/yabo-san/RohanKar-Launcher/commit/80d47e59a8ead94598b19b3b1d0ab2944073c2eb))
+* **installs:** unpack .7z and .rar on Linux, and find Linux programs ([#182](https://github.com/yabo-san/RohanKar-Launcher/issues/182)) ([327c028](https://github.com/yabo-san/RohanKar-Launcher/commit/327c0280462c72385d27ac25446d52c386d0e2a5))
+* **launch:** run games on Linux: Linux builds directly, Windows ones through Proton ([#183](https://github.com/yabo-san/RohanKar-Launcher/issues/183)) ([8954e74](https://github.com/yabo-san/RohanKar-Launcher/commit/8954e74320dee728195dbf0716459e2aba714bb5))
+* **ports:** pick each release's build for this system, as Quiver does ([#180](https://github.com/yabo-san/RohanKar-Launcher/issues/180)) ([6bf292f](https://github.com/yabo-san/RohanKar-Launcher/commit/6bf292f93ff1feb5e7a0e224aeef4af19e44b349))
+
+
+### Bug Fixes
+
+* **library:** keep pulled uploads, update reuploads in place, save titles at install ([#178](https://github.com/yabo-san/RohanKar-Launcher/issues/178)) ([66e73cb](https://github.com/yabo-san/RohanKar-Launcher/commit/66e73cb7f9c2b87eb2d589211db8b95596d25b39))
+
 ## [1.6.0-fork.25](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.24...v1.6.0-fork.25) (2026-11-11)
 
 
