@@ -1,12 +1,9 @@
 # y4bo
 
-An easy way to download games from the Internet Archive. It also downloads and installs
-release builds from GitHub and GitLab.
+Download games from the Internet Archive, and release builds from GitHub and GitLab. Paste a
+link into the search box and it's in your library.
 
-It doesn't curate ports. With the state of AI game porting, I'm not going to judge which
-ports are good or bad. The shelf has a few personal picks (GoldenEye 007 via Project Midas, Perfect Dark,
-Star Fox 64: Recompiled, and Doom, Quake and Diablo engines you bring your own game files to), and everything else is yours to add: any archive.org uploader
-or upload, any GitHub or GitLab repo.
+It doesn't curate ports. The shelf has a few personal picks; everything else is yours to add.
 
 I made this to test a CI/CD pipeline (see the commit history), not to show what a
 proper frontend looks like. **The frontend is vibecoded.**
@@ -15,15 +12,11 @@ proper frontend looks like. **The frontend is vibecoded.**
 
 Download `y4bo-Setup-x.x.x.exe` from the [latest release](https://github.com/yabo-san/RohanKar-Launcher/releases/latest).
 SmartScreen will warn (unsigned): **More info, then Run anyway**.
-Verify a download: `gh attestation verify y4bo-Setup-x.x.x.exe --repo yabo-san/RohanKar-Launcher`
 
-On Linux or a Steam Deck, download `y4bo-x86_64.AppImage` instead, allow it to run (Properties,
-Permissions), and open it. Windows games run through Proton, which Steam installs (Library,
-Tools, search for Proton).
+Linux and Steam Deck: `y4bo-x86_64.flatpak`, same page. Untested, it hasn't been tried on a Steam Deck.
 
 New builds aren't installed by the app; get them from the same releases page.
 For Playnite, the [RohanKar extension](https://github.com/yabo-san/playnite-extensions/releases?q=rohankar-playnite) puts your library there.
-Want your own built-in list? Fork it: [docs/BUILD-YOUR-OWN.md](docs/BUILD-YOUR-OWN.md).
 
 ## Credits
 

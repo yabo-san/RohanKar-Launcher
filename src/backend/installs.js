@@ -147,7 +147,7 @@ function createInstalls({ settings, library, archive, gamesDir, pins = NO_PINS, 
     }
     // On Linux a .7z or .rar copied in as it is would look installed and never run
     if (platform === 'linux' && /\.(7z|rar)$/.test(lower)) {
-      return { ok: false, error: `Couldn't unpack ${path.basename(filePath)}: 7-Zip isn't available. Install 7-Zip (7zz) or use the AppImage, which brings its own.` };
+      return { ok: false, error: `Couldn't unpack ${path.basename(filePath)}: 7-Zip isn't available. Install 7-Zip (7zz) or use the Flatpak, which brings its own.` };
     }
     // Not an archive: kept as it is, the launcher is just its download client
     try {

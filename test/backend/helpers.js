@@ -152,6 +152,8 @@ async function testBackend(t, { state, curated = false, ...opts } = {}) {
     platform: 'win32',
     // Not Steam's Game Mode, whatever session the tests run in
     gameMode: false,
+    // Not inside the Flatpak, whatever the tests run in
+    flatpak: false,
     // No curated shelf unless a test asks for one, so counts stay the fixtures'
     curatedPortsUrl: curated ? `${fake.base}/curated-ports.json` : null,
     sleep: async () => {},

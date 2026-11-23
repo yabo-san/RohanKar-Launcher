@@ -128,4 +128,17 @@ function launchCommand(exePath, { prefix, home, env = process.env, protons = nul
   return { error: 'This is a Windows game, and there is no Proton to run it. Install Proton in Steam (Library, Tools, search for Proton), or add the game to Steam.' };
 }
 
-module.exports = { needsProton, steamRoots, libraryFolders, listProtons, automaticProton, onPath, cleanEnv, launchCommand };
+// Running inside the Flatpak: Flatpak sets FLATPAK_ID in every app it runs
+const inFlatpak = (env = process.env) => !!env.FLATPAK_ID;
+
+// A launch command run on the system outside the Flatpak's sandbox, where
+// Steam's Proton and the game's own libraries are. flatpak-spawn --host
+// starts it with the session's own environment, so only what the launch
+// adds (the prefix, Steam's folder) is passed on.
+function onHost(c, { env = process.env } = {}) {
+  const base = cleanEnv(env);
+  const added = Object.entries(c.env || {}).filter(([k, v]) => base[k] !== v).map(([k, v]) => `--env=${k}=${v}`);
+  return { ...c, cmd: 'flatpak-spawn', args: ['--host', `--directory=${c.cwd}`, ...added, c.cmd, ...c.args], env: base };
+}
+
+module.exports = { needsProton, steamRoots, libraryFolders, listProtons, automaticProton, onPath, cleanEnv, launchCommand, inFlatpak, onHost };
