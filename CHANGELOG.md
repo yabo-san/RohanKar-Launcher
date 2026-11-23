@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0-fork.27](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.26...v1.6.0-fork.27) (2026-11-23)
+
+
+### Features
+
+* **linux:** ship a Flatpak instead of the AppImage ([#186](https://github.com/yabo-san/RohanKar-Launcher/issues/186)) ([85d3251](https://github.com/yabo-san/RohanKar-Launcher/commit/85d3251cf57c80e84ff04ca7a98f7cdb6b5100c9))
+
 ## [1.6.0-fork.26](https://github.com/yabo-san/RohanKar-Launcher/compare/v1.6.0-fork.25...v1.6.0-fork.26) (2026-11-18)
 
 
