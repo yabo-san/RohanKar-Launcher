@@ -207,8 +207,9 @@ jobs:
             playwright-report/
             test-results/
 
-  # The same smoke test against the unpacked Linux build (Steam Deck and other
-  # Linux PCs), under a virtual display. Not a required check.
+  # The Linux Flatpak (Steam Deck and other Linux PCs) is built, and the same
+  # smoke test runs against the app inside it, unpacked, under a virtual
+  # display. Not a required check.
   electron-linux:
     name: build-linux
     needs: changes
@@ -231,8 +232,15 @@ jobs:
       - name: Fetch 7-Zip for Linux
         run: node scripts/fetch-7zip.js
 
-      - name: Build unpacked app
-        run: npx electron-builder --linux --dir --publish never
+      # Flatpak's tools, and Flathub for the runtime the app is built on
+      - name: Install Flatpak tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Build the Flatpak
+        run: npx electron-builder --linux --publish never
 
       - name: Smoke test the built app
         env:

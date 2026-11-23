@@ -3,7 +3,7 @@ name: Release
 # Every push to main updates a release PR with the next version and changelog,
 # worked out from conventional commit messages (feat:, fix:, feat!: ...).
 # Merging that PR tags the version and opens a draft release; the Windows
-# installer and the Linux AppImage are then built, smoke tested and attached to
+# installer and the Linux Flatpak are then built, smoke tested and attached to
 # it, and the release is published as the latest release once both are there.
 # Nobody sees a release without its builds, and a build that fails the smoke
 # test leaves it a draft.
@@ -108,9 +108,8 @@ jobs:
           name: latest-yml
           path: dist/latest.yml
 
-  # The Linux AppImage (Steam Deck and other Linux PCs). ubuntu-22.04 for an
-  # older glibc, so the AppImage runs on older distros too. latest-linux.yml is
-  # attached but no update channel points at it: the app doesn't update itself.
+  # The Linux Flatpak (Steam Deck and other Linux PCs). The app doesn't update
+  # itself; a new release is a new Flatpak to install.
   build-linux:
     needs: release-please
     if: needs.release-please.outputs.release_created == 'true'
@@ -142,14 +141,20 @@ jobs:
       - name: Fetch 7-Zip for Linux
         run: node scripts/fetch-7zip.js
 
-      - name: Build Linux AppImage
+      # Flatpak's tools, and Flathub for the runtime the app is built on
+      - name: Install Flatpak tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Build the Flatpak
         run: npx electron-builder --linux --publish never
 
-      # The AppImage itself, unpacked on the fly (runners have no FUSE)
+      # The app the Flatpak holds, as electron-builder unpacked it
       - name: Smoke test the built app
         env:
-          E2E_APP: ${{ github.workspace }}/dist/y4bo-x86_64.AppImage
-          APPIMAGE_EXTRACT_AND_RUN: '1'
+          E2E_APP: ${{ github.workspace }}/dist/linux-unpacked/y4bo-launcher
         run: xvfb-run -a npx playwright test
 
       - name: Upload smoke test report
@@ -164,18 +169,15 @@ jobs:
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: |
-            dist/y4bo-x86_64.AppImage
-            dist/latest-linux.yml
+          subject-path: dist/y4bo-x86_64.flatpak
 
-      - name: Attach AppImage to draft release
+      - name: Attach the Flatpak to the draft release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           gh release upload "$TAG" \
-            dist/y4bo-x86_64.AppImage \
-            dist/latest-linux.yml \
+            dist/y4bo-x86_64.flatpak \
             --clobber
 
   # A full release marked latest, so it tops the Releases page and

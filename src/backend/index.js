@@ -90,6 +90,8 @@ function createBackend({
   gameMode = ports.steamGameMode(),
   // Where Steam and Proton are looked for on Linux
   homeDir = require('os').homedir(),
+  // The Linux app is a Flatpak: games start outside its sandbox
+  flatpak = proton.inFlatpak(),
   sleep,
   log = (msg) => console.log(msg),
 }) {
@@ -164,8 +166,9 @@ function createBackend({
   async function launchLinux(identifier, exePath) {
     disk.makeRunnable(exePath, { platform, log });
     const prefix = path.join(dataDir, 'proton', disk.sanitizeFolderName(identifier));
-    const c = proton.launchCommand(exePath, { prefix, home: homeDir });
+    let c = proton.launchCommand(exePath, { prefix, home: homeDir });
     if (c.error) return c.error;
+    if (flatpak) c = proton.onHost(c);
     if (c.runner !== 'native') fs.mkdirSync(prefix, { recursive: true });
     log(`[launch] ${c.runner}${c.proton ? ` (${c.proton})` : ''}: ${exePath}`);
     return os.run(c);

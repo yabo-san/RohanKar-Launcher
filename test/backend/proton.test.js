@@ -76,6 +76,22 @@ test('launchCommand: a Linux build directly; a Windows one through umu, Proton o
   assert.match(proton.launchCommand('/g/a.exe', { prefix, home, env, protons: [], umu: null, wine: null }).error, /no Proton to run it/);
 });
 
+test('onHost: inside the Flatpak, a launch runs on the system through flatpak-spawn, with only what it adds', () => {
+  assert.equal(proton.inFlatpak({ FLATPAK_ID: 'com.rohankar.launcher' }), true);
+  assert.equal(proton.inFlatpak({}), false);
+  const env = { PATH: '/app/bin:/usr/bin', HOME: '/home/deck' };
+  const p9 = { name: 'Proton 9.0', path: '/steam/common/Proton 9.0' };
+  const c = proton.launchCommand('/games/halo/halo.exe', { prefix: '/data/proton/halo', home: '/home/deck', env, protons: [p9], umu: null });
+  const host = proton.onHost(c, { env });
+  assert.equal(host.cmd, 'flatpak-spawn');
+  assert.deepEqual(host.args, ['--host', '--directory=/games/halo',
+    '--env=STEAM_COMPAT_DATA_PATH=/data/proton/halo', '--env=STEAM_COMPAT_CLIENT_INSTALL_PATH=/home/deck/.steam/steam',
+    '/steam/common/Proton 9.0/proton', 'run', '/games/halo/halo.exe']);
+  assert.equal(host.runner, 'proton', 'still says what runs it');
+  const native = proton.onHost(proton.launchCommand('/games/pd/pd.x86_64', { prefix: '/p', home: '/home/deck', env }), { env });
+  assert.deepEqual(native.args, ['--host', '--directory=/games/pd', '/games/pd/pd.x86_64'], 'the sandbox\'s PATH stays in the sandbox');
+});
+
 test('onPath: a program on PATH, or null', (t) => {
   const bin = tmpDir(t);
   script(path.join(bin, 'umu-run'), '');
@@ -121,6 +137,24 @@ test('Play on Linux: a Windows game runs through Steam\'s Proton in its own pref
   assert.equal((await call('POST', '/library/pd/launch', {})).body.ok, true);
   assert.match(await waitFor(nativeOut), /args=\n/);
   assert.ok(!fs.existsSync(path.join(backend.dataDir, 'proton', 'pd')), 'no prefix for a Linux build');
+});
+
+test('Play in the Flatpak: the game starts outside the sandbox, through flatpak-spawn --host', { skip: process.platform === 'win32' }, async (t) => {
+  const home = tmpDir(t);
+  const bin = path.join(home, 'bin');
+  const out = path.join(home, 'spawn-ran.txt');
+  script(path.join(bin, 'flatpak-spawn'), RECORDER(out));
+  script(path.join(home, '.steam/steam/steamapps/common/Proton 9.0/proton'), '#!/bin/sh\n');
+  const { backend } = await testApi(t, { platform: 'linux', homeDir: home, flatpak: true });
+  const saved = process.env.PATH;
+  process.env.PATH = bin;
+  t.after(() => { process.env.PATH = saved; });
+  const dir = path.join(backend.dataDir, 'halo');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'halo.exe'), 'MZ');
+  assert.equal((await backend.launch('halo', path.join(dir, 'halo.exe'))).ok, true);
+  const ran = await waitFor(out);
+  assert.match(ran, /args=--host --directory=\S*halo --env=STEAM_COMPAT_DATA_PATH=\S*proton\/halo --env=STEAM_COMPAT_CLIENT_INSTALL_PATH=\S*\.steam\/steam \S*Proton 9\.0\/proton run \S*halo\.exe/);
 });
 
 test('Play on Linux with no Proton or Wine says how to get Proton', { skip: process.platform === 'win32' }, async (t) => {

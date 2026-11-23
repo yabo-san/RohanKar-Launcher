@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Fetches 7-Zip's own Linux build for the AppImage: the static 7zzs and its
+ * Fetches 7-Zip's own Linux build for the Flatpak: the static 7zzs and its
  * licence, into vendor/7zip/ (package.json's linux extraResources ships it as
  * resources/7zip/). Pinned by version and sha256; a mismatch stops the build.
  * From 7-Zip's GitHub releases. Run before `electron-builder --linux`.
