@@ -179,6 +179,10 @@ const api = (() => {
 
     // Your config: what the user added, to copy; pasting merges it in
     getConfig: async () => { const r = await call('GET', '/config'); return r.ok ? r.body : null; },
+    // The uploader list in settings.json's shape: { sources: [{ uploader, label, enabled }] }
+    getSourcesBackup: async () => { const r = await call('GET', '/config/sources'); return r.ok ? r.body : null; },
+    // An item's files into <first local store>/<identifier>/: { ok, dir, existing } or { ok: false, error }
+    backupToStore: async ({ identifier }) => { const r = await call('POST', `/library/${enc(identifier)}/backup`); return r.ok ? { ok: true, ...r.body } : failure(r); },
     pasteConfig: async (text) => { const r = await call('PUT', '/config', { text }); return r.ok ? { ok: true, ...r.body } : failure(r); },
 
     // The port shelves (the curated catalog, Your ports) and what changed in them
