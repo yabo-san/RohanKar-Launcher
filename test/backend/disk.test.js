@@ -62,15 +62,15 @@ test('readReadme: readme.* first, bare README next, latin1', (t) => {
   if (process.getuid?.() !== 0) assert.equal(locked.ok, false);
 });
 
-test('unblockDirectory: only on Windows; removes Zone.Identifier streams', (t) => {
+test('unblockDirectory: only on Windows; removes Zone.Identifier streams', async (t) => {
   const root = tree(tmpDir(t), { 'a.exe': '', 'sub/b.dll': '' });
-  assert.equal(disk.unblockDirectory(root, { platform: 'linux' }), 0);
+  assert.equal(await disk.unblockDirectory(root, { platform: 'linux' }), 0);
   // On a non-NTFS disk the stream is just a sibling file with that name
   fs.writeFileSync(path.join(root, 'a.exe:Zone.Identifier'), '');
   const logs = [];
-  assert.equal(disk.unblockDirectory(root, { platform: 'win32', log: m => logs.push(m) }), 1);
+  assert.equal(await disk.unblockDirectory(root, { platform: 'win32', log: m => logs.push(m) }), 1);
   assert.match(logs[0], /Removed Zone.Identifier from 1 files/);
-  assert.equal(disk.unblockDirectory(null, { platform: 'win32' }), 0);
+  assert.equal(await disk.unblockDirectory(null, { platform: 'win32' }), 0);
 });
 
 test('matchInstallFolders: by identifier, sanitized identifier, then title', (t) => {
@@ -164,14 +164,14 @@ test('findExes on Linux: its own programs first (AppImage, .x86_64, ELF binaries
   assert.equal(disk.isLinuxProgram(path.join(root, 'missing')), false);
 });
 
-test('makeRunnable: on Linux, programs that lost their run permission get it back', { skip: process.platform === 'win32' }, (t) => {
+test('makeRunnable: on Linux, programs that lost their run permission get it back', { skip: process.platform === 'win32' }, async (t) => {
   const root = tmpDir(t);
   const dir = tree(path.join(root, 'g'), { 'pd.x86_64': 'x', 'start.sh': '#!/bin/sh', 'data/level.dat': 'd', 'already.AppImage': '' });
   fs.writeFileSync(path.join(dir, 'bin-elf'), ELF);
   fs.chmodSync(path.join(dir, 'already.AppImage'), 0o755);
   for (const f of ['pd.x86_64', 'start.sh', 'bin-elf']) fs.chmodSync(path.join(dir, f), 0o644);
   const logs = [];
-  assert.equal(disk.makeRunnable(dir, { platform: 'linux', log: (m) => logs.push(m) }), 3);
+  assert.equal(await disk.makeRunnable(dir, { platform: 'linux', log: (m) => logs.push(m) }), 3);
   const mode = (f) => fs.statSync(path.join(dir, f)).mode & 0o777;
   assert.deepEqual(['pd.x86_64', 'start.sh', 'bin-elf'].map(mode), [0o755, 0o755, 0o755]);
   assert.equal(mode('data/level.dat'), 0o644, 'data stays data');
@@ -180,8 +180,8 @@ test('makeRunnable: on Linux, programs that lost their run permission get it bac
   const single = path.join(root, 'Game.AppImage');
   fs.writeFileSync(single, '');
   fs.chmodSync(single, 0o644);
-  assert.equal(disk.makeRunnable(single, { platform: 'linux' }), 1);
-  assert.equal(disk.makeRunnable(dir, { platform: 'win32' }), 0);
-  assert.equal(disk.makeRunnable(null, { platform: 'linux' }), 0);
-  assert.equal(disk.makeRunnable(path.join(root, 'missing'), { platform: 'linux' }), 0);
+  assert.equal(await disk.makeRunnable(single, { platform: 'linux' }), 1);
+  assert.equal(await disk.makeRunnable(dir, { platform: 'win32' }), 0);
+  assert.equal(await disk.makeRunnable(null, { platform: 'linux' }), 0);
+  assert.equal(await disk.makeRunnable(path.join(root, 'missing'), { platform: 'linux' }), 0);
 });

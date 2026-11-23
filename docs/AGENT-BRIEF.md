@@ -44,6 +44,9 @@ The finished work orders are in git history. Where anything disagrees with this 
 - What a user added lives on their machine. Never copy it into the repo.
 - Uninstall moves the folder to the Recycle Bin; it never deletes outright.
 - The downloaded archive is deleted once an install succeeds.
+- An install never leaves a half-unpacked game marked installed: downloads are written as `.part`, archives unpack
+  into a hidden `.y4bo-unpack-*` folder and are moved into place whole. A failed or cancelled install removes what it
+  made; one cut short by the app closing is cleaned up at the next start (`installs-pending.json`) and offered again.
 - An install saves the game's title and upload date in its row, so an upload pulled from
   archive.org keeps its name (in the app and the Playnite export) and stays as an installed copy.
   A pulled copy joins the card of a loaded upload with the same title, else gets its own card.

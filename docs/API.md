@@ -381,8 +381,15 @@ curl -X POST -d '{"id":"rk-e2e-halo-ce"}' http://127.0.0.1:7777/v1/installs
 
 ### `GET /installs`, `GET /installs/:id`
 
-A job: `status` is `downloading`, `extracting`, `verifying` (ports), `done`, `error` or `cancelled`; `step` (ports); `percent`,
-`error`, and when done `installDir` and `exePath` (null when there are several to choose from).
+A job: `status` is `downloading`, `extracting`, `verifying` (ports), `done`, `error` or `cancelled`; `step` (ports); `percent`
+(of the download while downloading, of the unpack while extracting), `error`, and when done `installDir` and `exePath`
+(null when there are several to choose from).
+
+An install the app was closed in the middle of is listed after the next start as an `error` with `interrupted: true`,
+its `title` and `kind` (`game` or `port`). Its partial files (the `.part` download, a finished download never
+unpacked, the hidden `.y4bo-unpack-*` folder) are already removed by then; the install folder is never touched,
+because an archive only reaches it once it is fully unpacked. Unfinished installs are tracked in
+`installs-pending.json` in the data folder.
 
 ```sh
 curl http://127.0.0.1:7777/v1/installs/b7e1…
@@ -391,7 +398,8 @@ curl http://127.0.0.1:7777/v1/installs/b7e1…
 
 ### `DELETE /installs/:id`
 
-Cancels a job still downloading; returns the job.
+Cancels a job still downloading or unpacking (what it made so far is removed); returns the job. On an
+interrupted job from the last run it dismisses it.
 
 ```sh
 curl -X DELETE http://127.0.0.1:7777/v1/installs/b7e1…

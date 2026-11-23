@@ -61,22 +61,29 @@ const api = (() => {
     listeners[type].push(cb);
   }
 
-  // Installs report progress over /events; finished jobs resolve waiters
-  const jobWaiters = new Map();   // job id → { onProgress, resolve }
+  // Installs report progress over /events (and a slower poll, in install());
+  // finished jobs resolve waiters
+  const jobWaiters = new Map();   // job id → { onProgress, onExtracting, resolve }
+  const POLL_MS = 4000;
+  const POLL_GIVE_UP = 4;          // unanswered polls in a row: about 16 seconds
+  function settleJob(id, job) {
+    const w = jobWaiters.get(id);
+    if (!w) return;
+    jobWaiters.delete(id);
+    w.resolve(job);
+  }
+  function handleJob(job) {
+    const w = jobWaiters.get(job.id);
+    if (!w) return;
+    if (job.status === 'downloading') w.onProgress(job.percent, job);
+    if (job.status === 'extracting' || job.status === 'verifying') w.onExtracting(job);
+    if (['done', 'error', 'cancelled'].includes(job.status)) settleJob(job.id, job);
+  }
   let watchingInstalls = false;
   function watchInstalls() {
     if (watchingInstalls) return;
     watchingInstalls = true;
-    on('install', (job) => {
-      const w = jobWaiters.get(job.id);
-      if (!w) return;
-      if (job.status === 'downloading') w.onProgress(job.percent, job);
-      if (job.status === 'extracting' || job.status === 'verifying') w.onExtracting(job);
-      if (['done', 'error', 'cancelled'].includes(job.status)) {
-        jobWaiters.delete(job.id);
-        w.resolve(job);
-      }
-    });
+    on('install', handleJob);
   }
 
   return {
@@ -204,15 +211,32 @@ const api = (() => {
       const job = r.body.installs[0];
       onStart(job);
       const finished = new Promise(resolve => jobWaiters.set(job.id, { onProgress, onExtracting, resolve }));
+      // Events can be missed (the event stream reconnecting, a sleeping
+      // laptop): the job is also asked for every few seconds, and a backend
+      // that stops answering ends the wait with an error instead of a button
+      // stuck on Unpacking forever
+      let misses = 0;
+      const poll = setInterval(async () => {
+        const w = jobWaiters.get(job.id);
+        if (!w) return clearInterval(poll);
+        const now = await call('GET', `/installs/${job.id}`);
+        if (!now.ok) {
+          if (now.status === 0 && ++misses >= POLL_GIVE_UP) settleJob(job.id, { ...job, status: 'error', error: "Lost contact with y4bo's background process. Restart y4bo and install again." });
+          else if (now.status === 404) settleJob(job.id, { ...job, status: 'error', error: 'This install is no longer running. Install again.' });
+          return;
+        }
+        misses = 0;
+        handleJob(now.body);
+      }, POLL_MS);
       // The job may have finished before the listener was in place
       const now = await call('GET', `/installs/${job.id}`);
-      if (now.ok && ['done', 'error', 'cancelled'].includes(now.body.status)) {
-        jobWaiters.delete(job.id);
-        return now.body;
-      }
-      return finished;
+      if (now.ok && ['done', 'error', 'cancelled'].includes(now.body.status)) settleJob(job.id, now.body);
+      return finished.finally(() => clearInterval(poll));
     },
     cancelInstall: ({ jobId }) => call('DELETE', `/installs/${jobId}`),
+    // Every install the backend knows of this run, including ones a previous
+    // run never finished (interrupted: true)
+    listInstalls: async () => { const r = await call('GET', '/installs'); return r.ok ? r.body.installs : []; },
   };
 })();
 
