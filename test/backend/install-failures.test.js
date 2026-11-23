@@ -110,7 +110,7 @@ test('a cancelled download removes its .part file', async (t) => {
 
 test('a damaged zip fails with words a person understands; nothing is half-installed', async (t) => {
   const good = makeZip({ 'Game/game.exe': 'MZ', 'Game/data.pak': 'x'.repeat(1000) });
-  const { dir, installs, library } = await setup(t, { zips: { 'bad/bad.zip': good.subarray(0, good.length - 30) } });
+  const { dir, installs, library } = await setup(t, { zips: { 'bad/bad.zip': good.subarray(0, good.length - 30) } }, { sevenZip: null });
   const job = await run(installs, 'bad');
   assert.equal(job.status, 'error');
   assert.match(job.error, /^bad\.zip looks damaged or incomplete\. Install again to download it fresh\./);
@@ -119,9 +119,10 @@ test('a damaged zip fails with words a person understands; nothing is half-insta
   assert.equal(library.get('bad')?.install_dir ?? null, null);
 });
 
-test('a zip unpacks with progress, and only a whole unpack reaches the game folder', async (t) => {
+test('a zip unpacks with progress without 7-Zip, and only a whole unpack reaches the game folder', async (t) => {
   const files = Object.fromEntries(Array.from({ length: 20 }, (_, i) => [`Game/f${i}.dat`, String(i)]));
-  const { dir, installs, events } = await setup(t, { zips: { 'many/many.zip': makeZip({ ...files, 'Game/game.exe': 'MZ' }) } });
+  // The built-in unzip, whatever 7-Zip the machine has (CI's runners have p7zip on PATH)
+  const { dir, installs, events } = await setup(t, { zips: { 'many/many.zip': makeZip({ ...files, 'Game/game.exe': 'MZ' }) } }, { sevenZip: null });
   const job = await run(installs, 'many');
   assert.equal(job.status, 'done');
   const unpacking = events.filter(e => e.status === 'extracting').map(e => e.percent);
